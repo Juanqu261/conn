@@ -2,11 +2,11 @@
 
 ## Responsibility
 
-Provide Conn's single executable (decisions 0010 and 0011). `main.go` constructs adapters and hands them to `internal/cli`; it holds no command or product behavior.
+Provide Conn's single executable. `main.go` constructs adapters and hands them to `internal/cli`; it holds no command or product behavior.
 
 ## Modes
 
-- `conn server`: backend HTTP service from `internal/httpapi`. Only `GET /healthz` exists so far.
+- `conn server`: backend HTTP service from `internal/httpapi`. It requires `CONN_DATABASE_URL` and serves `GET /healthz` and `GET /readyz`. It never changes the database schema.
 - `conn mcp`: Kiro MCP adapter from `internal/mcp` over stdio. Before the session starts, `os.Stdout` is redirected to standard error so stray output cannot corrupt the protocol stream.
 
 ## Test
