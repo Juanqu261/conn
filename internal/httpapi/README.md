@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Serve Conn's backend over Go `net/http` (decision 0012).
+Serve Conn's backend over Go `net/http`.
 
 ## Current state
 

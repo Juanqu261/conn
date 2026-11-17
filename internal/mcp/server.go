@@ -1,5 +1,4 @@
 // Package mcp adapts Conn to Kiro through the official MCP Go SDK
-// (decision 0013). SDK types stay inside this package.
 package mcp
 
 import (

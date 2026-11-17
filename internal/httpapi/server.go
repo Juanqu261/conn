@@ -1,5 +1,4 @@
 // Package httpapi holds Conn's backend HTTP service built on net/http
-// (decision 0012).
 package httpapi
 
 import (

@@ -1,6 +1,6 @@
 // Package cli holds Conn's Cobra commands. Commands parse input, call an
 // injected operation, and render the result. They contain no domain,
-// database, or HTTP behavior (decision 0028).
+// database, or HTTP behavior.
 package cli
 
 import (
