@@ -37,7 +37,10 @@ describe("shared contract fixtures", () => {
     expect(at).toBeTypeOf("string");
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.violations.map((violation) => violation.instancePath)).toContain(at);
+      expect(result.violations.length).toBeGreaterThan(0);
+      for (const violation of result.violations) {
+        expect(violation.instancePath, violation.message).toBe(at);
+      }
     }
   });
 });

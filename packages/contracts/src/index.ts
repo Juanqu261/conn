@@ -45,10 +45,15 @@ export function createRegistry(schemas: readonly AnySchema[]): ContractRegistry 
       }
       return {
         valid: false,
-        violations: (validator.errors ?? []).map((error) => ({
-          instancePath: error.instancePath,
-          message: error.message ?? error.keyword,
-        })),
+        // Ajv adds a summary error for a failed if/then branch beside the
+        // errors that caused it. Drop it so only the causes remain, matching
+        // the Go adapter.
+        violations: (validator.errors ?? [])
+          .filter((error) => error.keyword !== "if")
+          .map((error) => ({
+            instancePath: error.instancePath,
+            message: error.message ?? error.keyword,
+          })),
       };
     },
   };
