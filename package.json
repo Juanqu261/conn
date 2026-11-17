@@ -1,0 +1,34 @@
+{
+  "name": "conn",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Coordination protocol and evidence layer for human-agent software teams",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": "26.13.1",
+    "pnpm": "12.21.0"
+  },
+  "scripts": {
+    "build": "pnpm run build:go && pnpm run build:node",
+    "build:go": "go build ./...",
+    "build:node": "pnpm --recursive --if-present run build",
+    "check": "pnpm run check:node && pnpm run check:go",
+    "check:go": "node ./scripts/check-go-format.mjs && go vet ./... && go test ./...",
+    "check:node": "biome check . && pnpm run typecheck && pnpm run test:node",
+    "format": "pnpm run format:node && pnpm run format:go",
+    "format:go": "go fmt ./...",
+    "format:node": "biome check --write .",
+    "test": "pnpm run test:node && pnpm run test:go",
+    "test:go": "go test ./...",
+    "test:node": "vitest run --passWithNoTests",
+    "typecheck": "pnpm --recursive --if-present run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

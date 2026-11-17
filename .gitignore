@@ -1,0 +1,23 @@
+# Node.js
+node_modules/
+**/dist/
+coverage/
+*.tsbuildinfo
+
+# Go
+*.exe
+*.test
+*.out
+/conn
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.local
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
