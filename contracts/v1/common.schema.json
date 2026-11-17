@@ -10,9 +10,9 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "timestamp": {
-      "description": "RFC 3339 timestamp in UTC with a Z offset. Calendar validity is checked by the parser that consumes it.",
+      "description": "RFC 3339 timestamp in UTC with a Z offset and at most microsecond precision, matching PostgreSQL storage. Calendar validity is checked by the parser that consumes it.",
       "type": "string",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,6})?Z$"
     },
     "revision": {
       "description": "Aggregate revision number. Revisions begin at 1.",
@@ -36,21 +36,36 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
-      "pattern": "\\S"
+      "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]",
+      "description": "Plain-text title containing at least one non-whitespace character."
     },
     "statement": {
       "description": "Concise plain-text statement.",
       "type": "string",
       "minLength": 1,
       "maxLength": 1000,
-      "pattern": "\\S"
+      "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
     },
     "markdown": {
       "description": "Untrusted Markdown. Renderers must sanitize it.",
       "type": "string",
       "minLength": 1,
       "maxLength": 32768,
-      "pattern": "\\S"
+      "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
+    },
+    "rationale": {
+      "description": "Human-authored explanation for a decision.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
+    },
+    "httpUri": {
+      "description": "Absolute http or https URI. Non-ASCII characters must be percent-encoded.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https?://[!-~]+$"
     }
   }
 }

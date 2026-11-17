@@ -16,27 +16,46 @@
     "decided_at"
   ],
   "properties": {
-    "decision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "blueprint_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
-    "cell_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "outcome": { "enum": ["accept", "reject"] },
-    "rationale": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 4000,
-      "pattern": "\\S"
+    "decision_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
     },
-    "decided_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+    "project_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "blueprint_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "blueprint_revision": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/revision"
+    },
+    "cell_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "human_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "outcome": {
+      "enum": ["accept", "reject"]
+    },
+    "rationale": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/rationale"
+    },
+    "decided_at": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/timestamp"
+    }
   },
   "if": {
-    "properties": { "outcome": { "const": "reject" } },
+    "properties": {
+      "outcome": {
+        "const": "reject"
+      }
+    },
     "required": ["outcome"]
   },
   "then": {
-    "properties": { "rationale": true },
+    "properties": {
+      "rationale": true
+    },
     "required": ["rationale"]
   }
 }

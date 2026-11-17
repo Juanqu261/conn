@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:event-envelope",
   "title": "EventEnvelope",
-  "description": "Append-only record of one committed authoritative mutation within a Project. The payload carries only non-secret coordination facts.",
+  "description": "Append-only record of one committed authoritative mutation within a Project. Each event type fixes its entity type and payload shape. Payloads carry only identity, revision, and cell references, never secrets or raw external data.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,15 +33,151 @@
       ]
     },
     "entity_type": {
-      "enum": ["project", "project_membership", "objective", "blueprint", "charter_decision"]
+      "description": "Membership events use entity type project with the member identity in the payload.",
+      "enum": ["project", "objective", "blueprint", "charter_decision"]
     },
     "entity_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "actor_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "occurred_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
-    "payload": {
-      "description": "Event-specific data. Typed payload schemas per event type are pending review.",
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "event_type": { "const": "project.created" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "project" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "project.member_added" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "project" },
+          "payload": { "$ref": "#/$defs/memberAddedPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "objective.revision_created" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "objective" },
+          "payload": { "$ref": "#/$defs/revisionPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "blueprint.revision_proposed" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "blueprint" },
+          "payload": { "$ref": "#/$defs/blueprintProposedPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "blueprint.revision_activated" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "blueprint" },
+          "payload": { "$ref": "#/$defs/revisionPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "blueprint.revision_rejected" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "blueprint" },
+          "payload": { "$ref": "#/$defs/blueprintRejectedPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "enum": ["charter.accepted", "charter.rejected"] } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "charter_decision" },
+          "payload": { "$ref": "#/$defs/charterDecisionPayload" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "emptyPayload": {
       "type": "object",
-      "maxProperties": 32
+      "additionalProperties": false
+    },
+    "memberAddedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human_id", "role"],
+      "properties": {
+        "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "role": { "enum": ["owner", "member"] }
+      }
+    },
+    "revisionPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision"],
+      "properties": {
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "blueprintProposedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "objective_id", "objective_revision"],
+      "properties": {
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "blueprintRejectedPayload": {
+      "description": "Names the cell whose charter rejection made the revision inactive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "cell_id"],
+      "properties": {
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "cell_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      }
+    },
+    "charterDecisionPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blueprint_id", "blueprint_revision", "cell_id"],
+      "properties": {
+        "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "blueprint_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "cell_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      }
     }
   }
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:objective-revision-input",
+  "title": "Objective revision input",
+  "description": "Human-authored content of one Objective revision. The Project comes from the request path; the server assigns the revision number and creation time. Expected-revision checks belong to the request, not this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["objective_id", "title", "overview_markdown", "accountable_human_id"],
+  "properties": {
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+    "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "overview_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "accountable_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "source_refs": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:objective#/$defs/sourceRef" }
+    },
+    "key_points": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:objective#/$defs/keyPoint" }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:blueprint-revision-view",
+  "title": "BlueprintRevision view",
+  "description": "Read model pairing an immutable BlueprintRevision snapshot with its current lifecycle status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["blueprint_revision", "status"],
+  "properties": {
+    "blueprint_revision": { "$ref": "urn:conn:schema:v1:blueprint-revision" },
+    "status": { "enum": ["proposed", "active", "rejected"] }
+  }
+}

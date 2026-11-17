@@ -56,12 +56,14 @@ func TestSharedFixtures(t *testing.T) {
 			if !errors.As(err, &validationErr) {
 				t.Fatalf("expected a validation error, got %v", err)
 			}
+			if len(validationErr.Violations) == 0 {
+				t.Fatal("validation error has no violations")
+			}
 			for _, violation := range validationErr.Violations {
-				if violation.InstancePath == *tc.At {
-					return
+				if violation.InstancePath != *tc.At {
+					t.Errorf("unexpected violation at %q: %s", violation.InstancePath, violation.Message)
 				}
 			}
-			t.Fatalf("no violation at %q: %+v", *tc.At, validationErr.Violations)
 		})
 	}
 }

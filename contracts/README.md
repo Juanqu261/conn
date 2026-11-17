@@ -12,28 +12,57 @@ JSON and parsed YAML repository artifacts must validate against the same schemas
 
 ## Layout
 
+Authoritative records:
+
 ```text
-contracts/v1/common.schema.json              shared value definitions ($defs only)
-contracts/v1/project.schema.json             urn:conn:schema:v1:project
-contracts/v1/project-membership.schema.json  urn:conn:schema:v1:project-membership
-contracts/v1/objective.schema.json           urn:conn:schema:v1:objective
-contracts/v1/blueprint-revision.schema.json  urn:conn:schema:v1:blueprint-revision
-contracts/v1/charter-decision.schema.json    urn:conn:schema:v1:charter-decision
-contracts/v1/event-envelope.schema.json      urn:conn:schema:v1:event-envelope
-contracts/v1/fixtures/cases.json             shared accepted and rejected fixtures
-contracts/embed.go                           embeds v1 for Go components
+contracts/v1/project.schema.json                  urn:conn:schema:v1:project
+contracts/v1/project-membership.schema.json       urn:conn:schema:v1:project-membership
+contracts/v1/objective.schema.json                urn:conn:schema:v1:objective
+contracts/v1/blueprint-revision.schema.json       urn:conn:schema:v1:blueprint-revision
+contracts/v1/charter-decision.schema.json         urn:conn:schema:v1:charter-decision
+contracts/v1/event-envelope.schema.json           urn:conn:schema:v1:event-envelope
+```
+
+Human-authored inputs, which omit every server-assigned field:
+
+```text
+contracts/v1/project-create.schema.json           urn:conn:schema:v1:project-create
+contracts/v1/objective-revision-input.schema.json urn:conn:schema:v1:objective-revision-input
+contracts/v1/blueprint-proposal.schema.json       urn:conn:schema:v1:blueprint-proposal
+```
+
+Read models and shared definitions:
+
+```text
+contracts/v1/blueprint-revision-view.schema.json  urn:conn:schema:v1:blueprint-revision-view
+contracts/v1/common.schema.json                   urn:conn:schema:v1:common ($defs only)
+contracts/v1/fixtures/cases.json                  shared accepted and rejected fixtures
+contracts/embed.go                                embeds v1 for Go components
 ```
 
 Schemas reference each other only by `urn:conn:schema:v1:*` identifiers. Both validators register every file in `v1/` and refuse any other reference.
 
+## Record rules
+
+- Inputs carry client-generated UUIDv7 identities for safe retries. The server adds the Project from the request path, the actor from the session, revision numbers, and timestamps. It then validates the complete record against the record schema before storing it.
+- A BlueprintRevision document never changes after proposal. Its lifecycle status is served beside it through `blueprint-revision-view`.
+- Each event type fixes its `entity_type` and a closed payload shape. Payloads carry only identity, revision, and cell references. Membership events use entity type `project`, with the member in the payload.
+- Size limits start tight because raising a limit later is compatible and lowering one is not.
 ## Conventions
 
 - Identities are canonical lowercase UUIDv7 strings.
-- Timestamps are RFC 3339 UTC strings ending in `Z`. The pattern checks shape; the consuming parser checks calendar validity.
+- Timestamps are RFC 3339 UTC strings ending in `Z` with at most microsecond precision, which PostgreSQL stores without loss. The pattern checks shape; the consuming parser checks calendar validity.
 - Revisions are integers starting at 1. Event sequences are bounded to the JavaScript safe-integer range.
 - Keys are lowercase slugs of at most 64 characters.
-- Text fields must contain a non-whitespace character and have explicit maximum lengths.
+- Text fields must contain a non-whitespace character and have explicit maximum lengths counted in Unicode code points.
+- Source URIs are absolute `http` or `https` URIs with non-ASCII characters percent-encoded.
 - Schemas do not use the `format` keyword, because Ajv and the Go validator treat formats differently by default.
+
+## Cross-language rules
+
+- Keep schema and fixture files ASCII. Write other characters as `\u` escapes.
+- Do not use `\s`, `\d`, `\w`, or `\b` in patterns. Go's RE2 engine matches only ASCII for these classes while Ajv matches Unicode. Write explicit character classes instead.
+- Every schema change adds or adjusts a fixture in `fixtures/cases.json` that both validators run.
 
 ## Validation
 
@@ -58,7 +87,6 @@ Model generation is deferred until the first artifact schemas and compatibility 
 
 - Compatibility policy and checks
 - Normalized Conn validation error contract
-- Typed event payload schemas per event type
 - Model generation
 - Contract, decision, and evidence schemas beyond the first slice
 
