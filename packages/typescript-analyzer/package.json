@@ -1,0 +1,19 @@
+{
+  "name": "@conn/typescript-analyzer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript repository analysis boundary for Conn",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  }
+}
