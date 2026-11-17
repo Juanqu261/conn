@@ -11,17 +11,42 @@ import (
 	"time"
 )
 
-const shutdownTimeout = 10 * time.Second
+const (
+	shutdownTimeout  = 10 * time.Second
+	readinessTimeout = 3 * time.Second
+)
 
-// NewHandler returns the backend routes. Only the liveness probe exists until
-// the /v1 API and the schema-compatibility readiness check are implemented.
-func NewHandler() http.Handler {
+// ReadinessCheck reports whether the server can safely serve requests, for
+// example whether its database schema matches this build.
+type ReadinessCheck func(ctx context.Context) error
+
+// NewHandler returns the backend routes.
+//
+// GET /healthz reports that the process is running. GET /readyz reports
+// whether ready succeeds; failure details are logged, never returned.
+func NewHandler(ready ReadinessCheck, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}` + "\n"))
+		writeStatus(w, http.StatusOK, "ok")
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
+		defer cancel()
+		if err := ready(ctx); err != nil {
+			log.Warn("not ready", "error", err)
+			writeStatus(w, http.StatusServiceUnavailable, "not_ready")
+			return
+		}
+		writeStatus(w, http.StatusOK, "ready")
 	})
 	return mux
+}
+
+func writeStatus(w http.ResponseWriter, code int, status string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(code)
+	_, _ = fmt.Fprintf(w, "{\"status\":%q}\n", status)
 }
 
 // Serve listens on address and serves handler until ctx is cancelled, then

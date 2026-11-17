@@ -20,15 +20,19 @@ type Streams struct {
 	Err io.Writer
 }
 
-// ServerConfig configures `conn server`.
+// ServerConfig configures `conn server`
 type ServerConfig struct {
 	ListenAddress string
+	DatabaseURL   string
 }
 
 // Dependencies are the operations commands invoke. The process entry point
 // constructs them so this package never depends on adapter packages.
 type Dependencies struct {
 	Version string
+
+	// LookupEnv reads configuration from the environment.
+	LookupEnv func(key string) (string, bool)
 
 	// Serve runs the backend HTTP service until ctx is cancelled.
 	Serve func(ctx context.Context, cfg ServerConfig, log *slog.Logger) error
@@ -79,8 +83,14 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run the Conn backend HTTP service",
-		Args:  cobra.NoArgs,
+		Long: "Run the Conn backend HTTP service.\n\n" +
+			"Environment:\n" +
+			"  CONN_DATABASE_URL  PostgreSQL connection URL (required)\n\n" +
+			"The server never changes the database schema. GET /readyz reports\n" +
+			"not ready until the schema matches this build.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg.DatabaseURL, _ = deps.LookupEnv("CONN_DATABASE_URL")
 			return deps.Serve(cmd.Context(), cfg, logger)
 		},
 	}
