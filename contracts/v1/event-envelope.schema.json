@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:event-envelope",
+  "title": "EventEnvelope",
+  "description": "Append-only record of one committed authoritative mutation within a Project. The payload carries only non-secret coordination facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project_id",
+    "event_sequence",
+    "event_id",
+    "event_type",
+    "entity_type",
+    "entity_id",
+    "actor_human_id",
+    "occurred_at",
+    "payload"
+  ],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "event_sequence": { "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence" },
+    "event_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "event_type": {
+      "enum": [
+        "project.created",
+        "project.member_added",
+        "objective.revision_created",
+        "blueprint.revision_proposed",
+        "blueprint.revision_activated",
+        "blueprint.revision_rejected",
+        "charter.accepted",
+        "charter.rejected"
+      ]
+    },
+    "entity_type": {
+      "enum": ["project", "project_membership", "objective", "blueprint", "charter_decision"]
+    },
+    "entity_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "actor_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "occurred_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+    "payload": {
+      "description": "Event-specific data. Typed payload schemas per event type are pending review.",
+      "type": "object",
+      "maxProperties": 32
+    }
+  }
+}

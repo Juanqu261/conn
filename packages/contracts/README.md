@@ -15,9 +15,11 @@ Ajv provides runtime schema validation. The adapter uses the Draft 2020-12 entry
 - Validation does not perform authorization or lifecycle checks.
 - Model generation is intentionally deferred.
 
+## Usage
+
+`createRegistry(schemas)` compiles schemas that reference each other by `$id`. `validate(id, document)` returns either `{ valid: true }` or leaf violations as JSON Pointer and message pairs. `test/shared-fixtures.test.ts` runs the shared fixture table in `contracts/v1/fixtures`.
+
 ## Deferred
 
-- Schema registry and reference loading
-- Normalized Conn validation errors
+- Normalized Conn validation error contract
 - Generated TypeScript models
-- First domain schema and shared fixtures

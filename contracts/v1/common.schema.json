@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:common",
+  "title": "Conn v1 shared definitions",
+  "description": "Reusable value definitions referenced by Conn v1 protocol records. This document is not a record schema.",
+  "$defs": {
+    "uuidv7": {
+      "description": "Canonical lowercase UUID version 7 with the RFC 9562 variant.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "description": "RFC 3339 timestamp in UTC with a Z offset. Calendar validity is checked by the parser that consumes it.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+    },
+    "revision": {
+      "description": "Aggregate revision number. Revisions begin at 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "eventSequence": {
+      "description": "Project-scoped event cursor. The maximum is the largest integer represented exactly by JavaScript clients.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "key": {
+      "description": "Lowercase slug used for stable human-readable references within one record.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "\\S"
+    },
+    "statement": {
+      "description": "Concise plain-text statement.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "\\S"
+    },
+    "markdown": {
+      "description": "Untrusted Markdown. Renderers must sanitize it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768,
+      "pattern": "\\S"
+    }
+  }
+}

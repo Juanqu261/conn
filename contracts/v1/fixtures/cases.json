@@ -1,0 +1,483 @@
+{
+  "description": "Shared structural fixtures for Conn v1 schemas. Go and Node.js validators must agree on every case. Each rejected case violates exactly one rule, and `at` is the JSON Pointer of the instance location that must report it.",
+  "cases": [
+    {
+      "name": "project accepts a complete record",
+      "schema": "urn:conn:schema:v1:project",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "name": "Checkout reliability",
+        "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:00:00Z"
+      }
+    },
+    {
+      "name": "project rejects unknown properties",
+      "schema": "urn:conn:schema:v1:project",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "name": "Checkout reliability",
+        "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:00:00Z",
+        "visibility": "public"
+      }
+    },
+    {
+      "name": "project rejects uppercase UUIDs",
+      "schema": "urn:conn:schema:v1:project",
+      "valid": false,
+      "at": "/project_id",
+      "document": {
+        "project_id": "019A8F00-0001-7000-8000-000000000001",
+        "name": "Checkout reliability",
+        "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:00:00Z"
+      }
+    },
+    {
+      "name": "project rejects non-version-7 UUIDs",
+      "schema": "urn:conn:schema:v1:project",
+      "valid": false,
+      "at": "/project_id",
+      "document": {
+        "project_id": "019a8f00-0001-4000-8000-000000000001",
+        "name": "Checkout reliability",
+        "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:00:00Z"
+      }
+    },
+    {
+      "name": "project rejects non-UTC timestamps",
+      "schema": "urn:conn:schema:v1:project",
+      "valid": false,
+      "at": "/created_at",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "name": "Checkout reliability",
+        "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T11:00:00+02:00"
+      }
+    },
+    {
+      "name": "membership accepts the member role",
+      "schema": "urn:conn:schema:v1:project-membership",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "role": "member",
+        "added_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "added_at": "2026-11-20T09:05:00Z"
+      }
+    },
+    {
+      "name": "membership rejects roles outside owner and member",
+      "schema": "urn:conn:schema:v1:project-membership",
+      "valid": false,
+      "at": "/role",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "role": "admin",
+        "added_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "added_at": "2026-11-20T09:05:00Z"
+      }
+    },
+    {
+      "name": "objective accepts a narrative-only revision",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Customers must be able to retry a failed checkout without being charged twice.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "objective accepts a hybrid revision with keyed points",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 2,
+        "key": "safe-checkout-retries",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "# Goal\n\nCustomers must be able to retry a failed checkout without being charged twice.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "source_refs": [
+          {
+            "uri": "https://github.com/example/shop/issues/42",
+            "title": "Duplicate charges"
+          }
+        ],
+        "key_points": [
+          {
+            "key": "no-double-charge",
+            "kind": "invariant",
+            "statement": "A payment intent is captured at most once."
+          },
+          {
+            "key": "retry-succeeds",
+            "kind": "acceptance_criterion",
+            "statement": "A retried checkout completes with the original order."
+          }
+        ],
+        "created_at": "2026-11-21T09:10:00.123Z"
+      }
+    },
+    {
+      "name": "objective rejects unknown key-point kinds",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": false,
+      "at": "/key_points/0/kind",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Customers must be able to retry a failed checkout.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "key_points": [
+          {
+            "key": "fast",
+            "kind": "goal",
+            "statement": "Checkout is fast."
+          }
+        ],
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "objective rejects a missing overview",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": false,
+      "at": "",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "title": "Make checkout retries safe",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "objective rejects a whitespace-only overview",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": false,
+      "at": "/overview_markdown",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "title": "Make checkout retries safe",
+        "overview_markdown": " \n\t",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "objective rejects revision zero",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": false,
+      "at": "/revision",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 0,
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Customers must be able to retry a failed checkout.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "objective rejects keys that are not lowercase slugs",
+      "schema": "urn:conn:schema:v1:objective",
+      "valid": false,
+      "at": "/key_points/0/key",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Customers must be able to retry a failed checkout.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "key_points": [
+          {
+            "key": "No Double Charge",
+            "kind": "invariant",
+            "statement": "Capture once."
+          }
+        ],
+        "created_at": "2026-11-20T09:10:00Z"
+      }
+    },
+    {
+      "name": "blueprint accepts three narrative and hybrid charters",
+      "schema": "urn:conn:schema:v1:blueprint-revision",
+      "valid": true,
+      "document": {
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 2,
+        "status": "proposed",
+        "proposed_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-21T10:00:00Z",
+        "cell_charters": [
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000001",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "title": "Payment idempotency",
+            "overview_markdown": "Own idempotency keys for payment capture.",
+            "objective_point_refs": ["no-double-charge"],
+            "boundary_points": [
+              {
+                "key": "idempotency-keys",
+                "kind": "responsibility",
+                "statement": "Issue and store idempotency keys per checkout attempt."
+              },
+              {
+                "key": "capture-test",
+                "kind": "evidence_obligation",
+                "statement": "Show a test proving a duplicate capture is ignored."
+              }
+            ]
+          },
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000002",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "title": "Checkout API",
+            "overview_markdown": "Expose retry-safe checkout endpoints.",
+            "objective_point_refs": ["retry-succeeds"],
+            "boundary_points": [
+              {
+                "key": "no-payment-storage",
+                "kind": "exclusion",
+                "statement": "Do not persist payment state outside the payment cell."
+              }
+            ],
+            "dependencies": [
+              {
+                "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                "summary": "Requires the idempotency key interface."
+              }
+            ]
+          },
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000003",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000c",
+            "title": "Checkout client retry",
+            "overview_markdown": "Retry failed checkouts from the web client with the original key."
+          }
+        ]
+      }
+    },
+    {
+      "name": "blueprint rejects unknown boundary-point kinds",
+      "schema": "urn:conn:schema:v1:blueprint-revision",
+      "valid": false,
+      "at": "/cell_charters/0/boundary_points/0/kind",
+      "document": {
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "status": "proposed",
+        "proposed_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-21T10:00:00Z",
+        "cell_charters": [
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000001",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "title": "Payment idempotency",
+            "overview_markdown": "Own idempotency keys for payment capture.",
+            "boundary_points": [
+              {
+                "key": "owns-db",
+                "kind": "ownership",
+                "statement": "Owns it."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "blueprint rejects an empty charter set",
+      "schema": "urn:conn:schema:v1:blueprint-revision",
+      "valid": false,
+      "at": "/cell_charters",
+      "document": {
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "status": "proposed",
+        "proposed_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-21T10:00:00Z",
+        "cell_charters": []
+      }
+    },
+    {
+      "name": "blueprint rejects a charter without an accountable human",
+      "schema": "urn:conn:schema:v1:blueprint-revision",
+      "valid": false,
+      "at": "/cell_charters/0",
+      "document": {
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "status": "proposed",
+        "proposed_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-21T10:00:00Z",
+        "cell_charters": [
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000001",
+            "title": "Payment idempotency",
+            "overview_markdown": "Own idempotency keys for payment capture."
+          }
+        ]
+      }
+    },
+    {
+      "name": "blueprint rejects statuses outside proposed, active, and rejected",
+      "schema": "urn:conn:schema:v1:blueprint-revision",
+      "valid": false,
+      "at": "/status",
+      "document": {
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "revision": 1,
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "status": "draft",
+        "proposed_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-21T10:00:00Z",
+        "cell_charters": [
+          {
+            "cell_id": "019a8f00-0004-7000-8000-000000000001",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "title": "Payment idempotency",
+            "overview_markdown": "Own idempotency keys for payment capture."
+          }
+        ]
+      }
+    },
+    {
+      "name": "charter decision accepts acceptance without rationale",
+      "schema": "urn:conn:schema:v1:charter-decision",
+      "valid": true,
+      "document": {
+        "decision_id": "019a8f00-0005-7000-8000-000000000001",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "blueprint_revision": 1,
+        "cell_id": "019a8f00-0004-7000-8000-000000000002",
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "outcome": "accept",
+        "decided_at": "2026-11-21T11:00:00Z"
+      }
+    },
+    {
+      "name": "charter decision accepts rejection with rationale",
+      "schema": "urn:conn:schema:v1:charter-decision",
+      "valid": true,
+      "document": {
+        "decision_id": "019a8f00-0005-7000-8000-000000000002",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "blueprint_revision": 1,
+        "cell_id": "019a8f00-0004-7000-8000-000000000003",
+        "human_id": "019a8f00-0000-7000-8000-00000000000c",
+        "outcome": "reject",
+        "rationale": "Client retry needs the idempotency key exposed by the API cell first.",
+        "decided_at": "2026-11-21T11:05:00Z"
+      }
+    },
+    {
+      "name": "charter decision rejects rejection without rationale",
+      "schema": "urn:conn:schema:v1:charter-decision",
+      "valid": false,
+      "at": "",
+      "document": {
+        "decision_id": "019a8f00-0005-7000-8000-000000000002",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "blueprint_revision": 1,
+        "cell_id": "019a8f00-0004-7000-8000-000000000003",
+        "human_id": "019a8f00-0000-7000-8000-00000000000c",
+        "outcome": "reject",
+        "decided_at": "2026-11-21T11:05:00Z"
+      }
+    },
+    {
+      "name": "event envelope accepts a committed charter acceptance",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 7,
+        "event_id": "019a8f00-0006-7000-8000-000000000001",
+        "event_type": "charter.accepted",
+        "entity_type": "charter_decision",
+        "entity_id": "019a8f00-0005-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "occurred_at": "2026-11-21T11:00:00Z",
+        "payload": {
+          "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+          "blueprint_revision": 1,
+          "cell_id": "019a8f00-0004-7000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "name": "event envelope rejects sequence zero",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": false,
+      "at": "/event_sequence",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 0,
+        "event_id": "019a8f00-0006-7000-8000-000000000001",
+        "event_type": "charter.accepted",
+        "entity_type": "charter_decision",
+        "entity_id": "019a8f00-0005-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "occurred_at": "2026-11-21T11:00:00Z",
+        "payload": {}
+      }
+    },
+    {
+      "name": "event envelope rejects unknown event types",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": false,
+      "at": "/event_type",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 8,
+        "event_id": "019a8f00-0006-7000-8000-000000000002",
+        "event_type": "charter.reassigned",
+        "entity_type": "charter_decision",
+        "entity_id": "019a8f00-0005-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "occurred_at": "2026-11-21T11:00:00Z",
+        "payload": {}
+      }
+    }
+  ]
+}

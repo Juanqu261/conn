@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:objective",
+  "title": "Objective revision",
+  "description": "One immutable revision of a narrative Objective with optional keyed points. Key uniqueness is enforced by application validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "objective_id",
+    "project_id",
+    "revision",
+    "title",
+    "overview_markdown",
+    "accountable_human_id",
+    "created_at"
+  ],
+  "properties": {
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+    "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "overview_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "accountable_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "source_refs": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/sourceRef" }
+    },
+    "key_points": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/keyPoint" }
+    },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  },
+  "$defs": {
+    "sourceRef": {
+      "description": "Optional external context. It never replaces the captured overview.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^https?://[^\\s]+$"
+        },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+      }
+    },
+    "keyPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "kind", "statement"],
+      "properties": {
+        "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+        "kind": {
+          "enum": ["outcome", "acceptance_criterion", "invariant", "constraint", "question"]
+        },
+        "statement": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+      }
+    }
+  }
+}
