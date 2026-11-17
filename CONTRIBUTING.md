@@ -9,8 +9,6 @@ Conn is in its planning and mechanical-scaffold phase. Product behavior and fram
 - Node.js 26.13.1 LTS
 - pnpm 12.21.0
 
-The exact versions are recorded in `docs/decisions/0006-pin-production-toolchain-versions.md`.
-
 ## Setup
 
 ```text
@@ -33,17 +31,6 @@ pnpm build
 ## Testing policy
 
 Keep tests limited to public contracts and fundamental invariants. Do not add repetitive generated tests, tests of trivial implementation details, or coverage-percentage gates. Every new test should name the contract, invariant, security boundary, integration path, migration guarantee, or reproduced defect it protects.
-
-Read `docs/decisions/0003-minimal-fundamental-testing.md` before adding tests.
-
-## Architecture decisions
-
-When work requires a new framework, schema technology, persistence library, process boundary, deployment platform, or other architectural choice:
-
-1. Compare practical options.
-2. Ask the project owner to approve one.
-3. Record the accepted decision under `docs/decisions/`.
-4. Only then add code that depends on it.
 
 ## Kiro MVP
 

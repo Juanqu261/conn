@@ -81,13 +81,13 @@ Rules enforced by application validation rather than schema:
 
 ## Model strategy
 
-Model generation is deferred until the first artifact schemas and compatibility rules stabilize. Untyped parsed values must remain within validation boundaries and must not spread into domain logic.
+Go components use the handwritten types in `internal/protocol`, held to these schemas by a conformance test over the shared fixtures (decision 0033). TypeScript models stay deferred until a TypeScript component consumes protocol records. Untyped parsed values must remain within validation boundaries and must not spread into domain logic.
 
 ## Deferred
 
 - Compatibility policy and checks
 - Normalized Conn validation error contract
-- Model generation
+- TypeScript protocol models
 - Contract, decision, and evidence schemas beyond the first slice
 
-See decisions 0007, 0008, and 0009 under `docs/decisions/`.
+See decisions 0007, 0008, 0009, and 0033 under `docs/decisions/`.
