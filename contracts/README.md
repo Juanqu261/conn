@@ -94,7 +94,7 @@ Rules enforced by application validation rather than schema:
 
 ## Model strategy
 
-Go components use the handwritten types in `internal/protocol`, held to these schemas by a conformance test over the shared fixtures (decision 0033). TypeScript models stay deferred until a TypeScript component consumes protocol records. Untyped parsed values must remain within validation boundaries and must not spread into domain logic.
+Go components use handwritten types in `internal/protocol`, held to these schemas by one conformance test over the shared fixtures. TypeScript models stay deferred until a TypeScript component consumes protocol records. Untyped parsed values must remain within validation boundaries and must not spread into domain logic.
 
 ## Deferred
 
@@ -103,4 +103,4 @@ Go components use the handwritten types in `internal/protocol`, held to these sc
 - TypeScript protocol models
 - Contract, decision, and evidence schemas beyond the first slice
 
-See decisions 0007, 0008, 0009, and 0033 under `docs/decisions/`.
+See the [accepted decisions](../docs/decisions/README.md).
