@@ -16,6 +16,7 @@ const (
 	CharterRejectionSchema       = "urn:conn:schema:v1:charter-rejection"
 	ProjectMemberAddSchema       = "urn:conn:schema:v1:project-member-add"
 	ProjectStatusSchema          = "urn:conn:schema:v1:project-status"
+	CharterViewSchema            = "urn:conn:schema:v1:charter-view"
 	EventEnvelopeSchema          = "urn:conn:schema:v1:event-envelope"
 )
 
@@ -230,3 +231,23 @@ const (
 	CellAccepted CellDecision = "accept"
 	CellRejected CellDecision = "reject"
 )
+
+// CharterView is the reading human's own charters in one BlueprintRevision
+// in force. The human comes from the session, never from input.
+type CharterView struct {
+	HumanID           uuid.UUID       `json:"human_id"`
+	BlueprintID       uuid.UUID       `json:"blueprint_id"`
+	Revision          int             `json:"revision"`
+	Status            BlueprintStatus `json:"status"`
+	ObjectiveID       uuid.UUID       `json:"objective_id"`
+	ObjectiveRevision int             `json:"objective_revision"`
+	Charters          []OwnCharter    `json:"charters"`
+}
+
+func (CharterView) SchemaID() string { return CharterViewSchema }
+
+// OwnCharter is one of the reading human's charters and its decision.
+type OwnCharter struct {
+	Charter  CellCharter  `json:"charter"`
+	Decision CellDecision `json:"decision"`
+}

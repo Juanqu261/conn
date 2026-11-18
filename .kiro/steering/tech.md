@@ -12,7 +12,31 @@
 - Use pnpm workspaces and root package scripts without a separate task runner.
 - Use JSON Schema Draft 2020-12 as the canonical, language-neutral protocol contract format.
 - Validate schemas with Ajv 8.20.0 in Node.js and `santhosh-tekuri/jsonschema/v6` 6.0.3 in Go.
-- Defer model generation until the first artifact schemas and compatibility rules stabilize.
+- Use handwritten Go protocol types in `internal/protocol`, held to the JSON Schemas by one conformance test over the shared fixtures; defer TypeScript model generation until a TypeScript component consumes protocol records.
+- Use one local `conn` Go executable; Kiro launches `conn mcp` over stdio, and Conn reaches the authoritative backend over HTTPS.
+- Use the same Go binary with a separate `conn server` mode for the MVP.
+- Implement the `/v1` backend JSON API with Go `net/http`.
+- Use the official MCP Go SDK behind the MCP adapter boundary.
+- Authenticate pilot humans with GitHub OAuth device flow.
+- Access PostgreSQL with pgx, handwritten parameterized SQL, and Goose SQL migrations.
+- Require backend connectivity initially; defer the local SQLite outbox.
+- Build objective, blueprint revision, and three accepted cell charters as the first vertical slice.
+- Pull team updates by event cursor during Conn operations; do not run a background polling timer initially.
+- Store local Conn session credentials in the operating-system credential store through `zalando/go-keyring` 0.2.8; allow `CONN_TOKEN` only as an explicit non-persistent override.
+- Never use an automatic plaintext credential fallback.
+- Use 256-bit opaque Conn session tokens with server-side SHA-256 hashes, 30-day absolute expiry, and immediate revocation; do not add refresh tokens during the MVP.
+- Use UUIDv7 for entity identities, integer aggregate revisions for optimistic concurrency, and per-project `bigint` event cursors.
+- Use PostgreSQL 18.7 through Docker Compose for local development; run `conn server` natively and never delete the named database volume through normal commands.
+- Version objectives independently; each immutable BlueprintRevision contains the complete set of CellCharter snapshots, while CharterAcceptance remains a separate append-only record.
+- Require every assigned human to accept their own charter before a BlueprintRevision becomes active; agents and other humans cannot accept on their behalf.
+- Build the first human workflow through authenticated CLI commands with JSON inputs; keep initial Kiro MCP tools read-only and defer the web application until protocol validation.
+- Use explicit Projects as authorization and event-cursor boundaries with only `owner` and `member` roles in the MVP; owners add already authenticated humans by immutable Conn human UUID.
+- Use Cobra only for CLI parsing and presentation; keep domain, database, and HTTP behavior outside command objects.
+- Keep Conn's own Goose migrations inside backend development and deployment automation; expose no public CLI or MCP database-migration operation and never execute migrations in customer repositories.
+- Model each Objective revision as a required Markdown overview plus an optional small set of keyed outcomes, acceptance criteria, invariants, constraints, or questions; do not force every statement into structured fields.
+- Model each CellCharter snapshot as a required Markdown overview plus optional keyed responsibilities, exclusions, deliverables, and evidence obligations; keep cross-cell dependencies as explicit cell references.
+- Run GitHub device authorization directly in `conn login`, exchange the temporary GitHub token once with the backend, and persist only the resulting Conn session token.
+- Do not add a persistent local sidecar until background behavior justifies it.
 - Use Biome for JavaScript, TypeScript, and JSON formatting and linting.
 - Use Vitest for fundamental Node.js and TypeScript behavior tests.
 - Start with `gofmt`, `go vet`, and `go test` for Go.
@@ -23,4 +47,4 @@ Keep the automated suite as small as practical. Test public contracts and fundam
 
 The detailed policy is `docs/decisions/0003-minimal-fundamental-testing.md`.
 
-Root task orchestration uses pnpm workspace scripts. Frameworks, model generation, persistence libraries, deployment, and exact component process boundaries remain undecided. Ask before selecting them and record each accepted choice.
+Root task orchestration uses pnpm workspace scripts. Frameworks, persistence libraries, deployment, and exact component process boundaries remain undecided. Ask before selecting them and record each accepted choice.

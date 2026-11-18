@@ -1389,6 +1389,51 @@
       }
     },
     {
+      "name": "charter view accepts one accepted charter in an active revision",
+      "schema": "urn:conn:schema:v1:charter-view",
+      "valid": true,
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "revision": 1,
+        "status": "active",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "charters": [
+          {
+            "charter": {
+              "cell_id": "019a8f00-0004-7000-8000-000000000002",
+              "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+              "title": "Order service",
+              "overview_markdown": "Own order state.",
+              "dependencies": [
+                {
+                  "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                  "summary": "Charges through the gateway."
+                }
+              ]
+            },
+            "decision": "accept"
+          }
+        ]
+      }
+    },
+    {
+      "name": "charter view rejects a view with no charters",
+      "schema": "urn:conn:schema:v1:charter-view",
+      "valid": false,
+      "at": "/charters",
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "revision": 1,
+        "status": "active",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "charters": []
+      }
+    },
+    {
       "name": "project status rejects a superseded revision in force",
       "schema": "urn:conn:schema:v1:project-status",
       "valid": false,

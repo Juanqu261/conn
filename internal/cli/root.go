@@ -31,6 +31,16 @@ type ServerConfig struct {
 	GitHubClientID string
 }
 
+// ProjectEnv selects the default project for `conn mcp`.
+const ProjectEnv = "CONN_PROJECT"
+
+// MCPConfig configures `conn mcp`.
+type MCPConfig struct {
+	ServerURL string
+	// DefaultProject is CONN_PROJECT; tool input may override it.
+	DefaultProject string
+}
+
 // Dependencies are the operations commands invoke. The process entry point
 // constructs them, so commands never build adapters themselves.
 type Dependencies struct {
@@ -45,7 +55,7 @@ type Dependencies struct {
 
 	// ServeMCP runs the Kiro MCP adapter over standard input and output
 	// until the client disconnects or ctx is cancelled.
-	ServeMCP func(ctx context.Context, log *slog.Logger) error
+	ServeMCP func(ctx context.Context, cfg MCPConfig, log *slog.Logger) error
 
 	// Account returns local account operations against serverURL.
 	Account func(serverURL string) (*account.Service, error)
@@ -146,14 +156,23 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 }
 
 func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Run the Kiro MCP adapter over standard input and output",
 		Long: "Run the Kiro MCP adapter over standard input and output.\n\n" +
+			"It exposes read-only tools: read_objective, read_blueprint, read_my_charter,\n" +
+			"and check_updates. They act as the human signed in with conn login, or\n" +
+			"CONN_TOKEN when set.\n\n" +
+			"Environment:\n" +
+			"  CONN_SERVER_URL  Conn server URL\n" +
+			"  CONN_PROJECT     default project ID for tool calls\n\n" +
 			"Standard output carries only MCP messages; diagnostics go to standard error.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return deps.ServeMCP(cmd.Context(), logger)
-		},
 	}
+	server := serverFlag(cmd, deps)
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		project, _ := deps.LookupEnv(ProjectEnv)
+		return deps.ServeMCP(cmd.Context(), MCPConfig{ServerURL: server(), DefaultProject: project}, logger)
+	}
+	return cmd
 }

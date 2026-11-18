@@ -29,6 +29,7 @@ func TestConformance(t *testing.T) {
 		protocol.CharterRejectionSchema:       roundTrip[protocol.CharterRejection],
 		protocol.ProjectMemberAddSchema:       roundTrip[protocol.ProjectMemberAdd],
 		protocol.ProjectStatusSchema:          roundTrip[protocol.ProjectStatus],
+		protocol.CharterViewSchema:            roundTrip[protocol.CharterView],
 		protocol.EventEnvelopeSchema:          roundTrip[protocol.EventEnvelope],
 		protocol.HumanSchema:                  roundTrip[protocol.Human],
 		protocol.SessionGrantSchema:           roundTrip[protocol.SessionGrant],

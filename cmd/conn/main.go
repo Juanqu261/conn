@@ -44,29 +44,41 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 		DevSettings: devSettings,
 		LookupEnv:   os.LookupEnv,
 		Serve:       serve,
-		ServeMCP: func(ctx context.Context, log *slog.Logger) error {
+		ServeMCP: func(ctx context.Context, cfg cli.MCPConfig, log *slog.Logger) error {
+			service, err := accountService(cfg.ServerURL)
+			if err != nil {
+				return err
+			}
 			// Standard output belongs to MCP alone. Hand the real stream to the
 			// transport and point os.Stdout at standard error, so an accidental
 			// print elsewhere in the process cannot corrupt the protocol.
 			protocolOut := os.Stdout
 			os.Stdout = os.Stderr
-			return mcp.Serve(ctx, os.Stdin, protocolOut, version, log)
+			return mcp.Serve(ctx, os.Stdin, protocolOut, mcp.Config{
+				Version:        version,
+				Client:         service.Client,
+				DefaultProject: cfg.DefaultProject,
+				Log:            log,
+			})
 		},
-		Account: func(serverURL string) (*account.Service, error) {
-			httpClient := httpclient.NewHTTPClient()
-			server, err := httpclient.New(serverURL, httpClient)
-			if err != nil {
-				return nil, err
-			}
-			return &account.Service{
-				Server:    server,
-				Store:     credentials.NewKeyring(server.URL()),
-				LookupEnv: os.LookupEnv,
-				GitHub:    github.Production,
-				HTTP:      httpClient,
-			}, nil
-		},
+		Account: accountService,
 	}
+}
+
+// accountService returns local account operations against serverURL.
+func accountService(serverURL string) (*account.Service, error) {
+	httpClient := httpclient.NewHTTPClient()
+	server, err := httpclient.New(serverURL, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	return &account.Service{
+		Server:    server,
+		Store:     credentials.NewKeyring(server.URL()),
+		LookupEnv: os.LookupEnv,
+		GitHub:    github.Production,
+		HTTP:      httpClient,
+	}, nil
 }
 
 func loadDevSettings() *devenv.Result {

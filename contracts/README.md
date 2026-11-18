@@ -47,6 +47,7 @@ Read models and shared definitions:
 ```text
 contracts/v1/blueprint-revision-view.schema.json  urn:conn:schema:v1:blueprint-revision-view
 contracts/v1/project-status.schema.json           urn:conn:schema:v1:project-status
+contracts/v1/charter-view.schema.json             urn:conn:schema:v1:charter-view
 contracts/v1/common.schema.json                   urn:conn:schema:v1:common ($defs only)
 contracts/v1/fixtures/cases.json                  shared accepted and rejected fixtures
 contracts/embed.go                                embeds v1 for Go components
