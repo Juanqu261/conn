@@ -19,13 +19,10 @@ import (
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
-// TestProjectsAndObjectives protects project authorization and atomic
-// state-and-event writes (requirements 2, 3, 8, and 9.1): non-members
-// cannot tell a hidden Project from a missing one, members read but cannot
-// perform owner-only operations, Objective revisions are immutable and
-// guarded by expected revisions, retries create no duplicate events, and a
-// failed transaction leaves neither state nor event behind.
-func TestProjectsAndObjectives(t *testing.T) {
+// newProjects migrates an empty database and returns the project use cases
+// over it, with a function that registers authenticated humans.
+func newProjects(t *testing.T) (context.Context, postgres.ProjectStore, *application.Projects, func(int64, string) uuid.UUID) {
+	t.Helper()
 	ctx := context.Background()
 	pool := postgrestest.NewDatabase(t)
 	db := stdlib.OpenDBFromPool(pool)
@@ -33,7 +30,6 @@ func TestProjectsAndObjectives(t *testing.T) {
 	if _, err := migrations.Up(ctx, db, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatal(err)
 	}
-
 	auth := postgres.AuthStore{Pool: pool}
 	newHuman := func(githubID int64, login string) uuid.UUID {
 		human, err := auth.UpsertHuman(ctx, uuid.NewV7(), githubID, login, time.Now().UTC())
@@ -42,10 +38,19 @@ func TestProjectsAndObjectives(t *testing.T) {
 		}
 		return human.HumanID
 	}
-	owner, member, outsider := newHuman(1, "alice"), newHuman(2, "bob"), newHuman(3, "carol")
-
 	store := postgres.ProjectStore{Pool: pool}
-	projects := &application.Projects{Store: store}
+	return ctx, store, &application.Projects{Store: store}, newHuman
+}
+
+// TestProjectsAndObjectives protects project authorization and atomic
+// state-and-event writes (requirements 2, 3, 8, and 9.1): non-members
+// cannot tell a hidden Project from a missing one, members read but cannot
+// perform owner-only operations, Objective revisions are immutable and
+// guarded by expected revisions, retries create no duplicate events, and a
+// failed transaction leaves neither state nor event behind.
+func TestProjectsAndObjectives(t *testing.T) {
+	ctx, store, projects, newHuman := newProjects(t)
+	owner, member, outsider := newHuman(1, "alice"), newHuman(2, "bob"), newHuman(3, "carol")
 	projectID, objectiveID := uuid.NewV7(), uuid.NewV7()
 
 	objectiveV1 := protocol.ObjectiveRevisionInput{

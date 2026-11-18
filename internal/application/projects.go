@@ -78,6 +78,29 @@ type Tx interface {
 	InsertObjectiveRevision(ctx context.Context, objective protocol.Objective) (bool, error)
 	ObjectiveRevision(ctx context.Context, projectID, objectiveID uuid.UUID, revision int) (protocol.Objective, error)
 
+	// InsertBlueprintRevision stores revision as proposed, with one cell
+	// projection per charter, and makes it current. A pending proposal of
+	// the same Blueprint becomes superseded. Revision 1 creates the
+	// Blueprint; revision n requires current revision n-1 in the same
+	// Project. It reports false, changing nothing, otherwise.
+	InsertBlueprintRevision(ctx context.Context, revision protocol.BlueprintRevision) (bool, error)
+	BlueprintRevision(ctx context.Context, projectID, blueprintID uuid.UUID, revision int) (protocol.BlueprintRevisionView, error)
+	// LockBlueprintRevision returns the revision's status and serializes
+	// charter decisions on it until the transaction ends.
+	LockBlueprintRevision(ctx context.Context, projectID, blueprintID uuid.UUID, revision int) (protocol.BlueprintStatus, error)
+	// CellAccountable returns the human accountable for a cell's charter in
+	// one BlueprintRevision.
+	CellAccountable(ctx context.Context, blueprintID uuid.UUID, revision int, cellID uuid.UUID) (uuid.UUID, error)
+	CharterDecision(ctx context.Context, blueprintID uuid.UUID, revision int, cellID uuid.UUID) (protocol.CharterDecision, error)
+	InsertCharterDecision(ctx context.Context, decision protocol.CharterDecision) error
+	// UnacceptedCells counts the revision's cells without an acceptance.
+	UnacceptedCells(ctx context.Context, blueprintID uuid.UUID, revision int) (int, error)
+	// ActivateBlueprintRevision moves a proposed revision to active and the
+	// Blueprint's previously active revision, if any, to superseded.
+	ActivateBlueprintRevision(ctx context.Context, blueprintID uuid.UUID, revision int) error
+	// RejectBlueprintRevision moves a proposed revision to rejected.
+	RejectBlueprintRevision(ctx context.Context, blueprintID uuid.UUID, revision int) error
+
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
 	AppendEvent(ctx context.Context, event protocol.EventEnvelope) (int64, error)
@@ -242,7 +265,11 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 			return err
 		}
 		if !inserted {
-			if result.Data, err = replayObjective(ctx, tx, objective); err != nil {
+			load := func(revision int) (protocol.Objective, error) {
+				return tx.ObjectiveRevision(ctx, projectID, objective.ObjectiveID, revision)
+			}
+			same := func(existing protocol.Objective) bool { return sameObjectiveContent(existing, objective) }
+			if result.Data, err = replay(objective.Revision, load, same); err != nil {
 				return err
 			}
 			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
@@ -256,30 +283,32 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 	return result, err
 }
 
-// replayObjective explains why objective could not be inserted. It returns
-// the stored revision when the request already succeeded.
-func replayObjective(ctx context.Context, tx Tx, objective protocol.Objective) (protocol.Objective, error) {
-	creating := objective.Revision == 1
-	existing, err := tx.ObjectiveRevision(ctx, objective.ProjectID, objective.ObjectiveID, objective.Revision)
+// replay explains why inserting a revision changed nothing. load reads a
+// stored revision of the same aggregate within the Project. When the same
+// request already succeeded, replay returns the stored revision.
+func replay[T any](revision int, load func(revision int) (T, error), same func(T) bool) (T, error) {
+	var zero T
+	creating := revision == 1
+	existing, err := load(revision)
 	switch {
-	case err == nil && sameObjectiveContent(existing, objective):
+	case err == nil && same(existing):
 		return existing, nil
 	case err == nil && creating:
-		return protocol.Objective{}, ErrConflict
+		return zero, ErrConflict
 	case err == nil:
-		return protocol.Objective{}, ErrStaleRevision
+		return zero, ErrStaleRevision
 	case !errors.Is(err, ErrNotFound):
-		return protocol.Objective{}, err
+		return zero, err
 	case creating:
-		// The ID belongs to an Objective in another Project.
-		return protocol.Objective{}, ErrConflict
+		// The ID belongs to an aggregate in another Project.
+		return zero, ErrConflict
 	}
-	// The expected revision is ahead of the current one, or the Objective
-	// does not exist in this Project.
-	if _, err := tx.ObjectiveRevision(ctx, objective.ProjectID, objective.ObjectiveID, 1); err != nil {
-		return protocol.Objective{}, err
+	// The aggregate does not exist in this Project, or the expected revision
+	// is ahead of the current one.
+	if _, err := load(1); err != nil {
+		return zero, err
 	}
-	return protocol.Objective{}, ErrStaleRevision
+	return zero, ErrStaleRevision
 }
 
 // ObjectiveRevision returns one immutable Objective revision to a member.
