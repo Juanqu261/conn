@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Combine GitHub device authorization, the backend client, and the credential store for `conn login`, `logout`, `whoami`, and `doctor`. Commands in `internal/cli` only render results.
+Combine GitHub device authorization, the backend client, and the credential store for `conn login`, `logout`, `whoami`, and `doctor`. `Client` gives the project commands a backend client authenticated with the resolved credential. Commands in `internal/cli` only render results.
 
 ## Behavior
 

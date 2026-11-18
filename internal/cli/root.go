@@ -52,29 +52,50 @@ type Dependencies struct {
 }
 
 // Execute runs one command line and returns the process exit code.
-// Diagnostics always go to streams.Err.
+// Results go to streams.Out; diagnostics always go to streams.Err.
 func Execute(ctx context.Context, args []string, streams Streams, deps Dependencies) int {
 	root := newRoot(streams, deps)
+	started := false
+	markStarted(root, &started)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
 	switch {
 	case err == nil:
-		return 0
+		return ExitOK
 	case errors.Is(err, errReported):
-		return 1
-	case errors.Is(err, context.Canceled):
+		return ExitFailure
+	}
+	code := exitCode(err, started)
+	if code == ExitInterrupted {
 		fmt.Fprintln(streams.Err, "conn: interrupted")
-		return 130
-	default:
-		fmt.Fprintf(streams.Err, "conn: %v\n", err)
-		return 1
+	} else {
+		fmt.Fprintf(streams.Err, "conn: %v\n", explain(err))
+	}
+	return code
+}
+
+// markStarted wraps every command's RunE to record that the command's own
+// logic began. Errors raised before that come from Cobra's parsing of
+// commands, arguments, and flags, and are usage errors.
+func markStarted(cmd *cobra.Command, started *bool) {
+	if run := cmd.RunE; run != nil {
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			*started = true
+			return run(c, args)
+		}
+	}
+	for _, child := range cmd.Commands() {
+		markStarted(child, started)
 	}
 }
 
 func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "conn",
-		Short:         "Coordinate human-agent work cells around a shared blueprint",
+		Use:   "conn",
+		Short: "Coordinate human-agent work cells around a shared blueprint",
+		Long: "Coordinate human-agent work cells around a shared blueprint.\n\n" +
+			"Structured commands accept --json and then print {\"data\": ..., \"as_of_event\": n}\n" +
+			"on standard output. Diagnostics always go to standard error.\n\n" + exitCodeHelp,
 		Version:       deps.Version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -89,6 +110,12 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newLoginCommand(deps, streams),
 		newLogoutCommand(deps, streams),
 		newWhoAmICommand(deps, streams),
+		newProjectCommand(deps, streams),
+		newObjectiveCommand(deps, streams),
+		newBlueprintCommand(deps, streams),
+		newCharterCommand(deps, streams),
+		newStatusCommand(deps, streams),
+		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),

@@ -113,6 +113,16 @@ func (s *Service) Logout(ctx context.Context) (LogoutResult, error) {
 	return LogoutResult{RevokeErr: revokeErr}, nil
 }
 
+// Client returns a backend client authenticated with the resolved
+// credential: CONN_TOKEN, then the credential store.
+func (s *Service) Client() (*httpclient.Client, error) {
+	token, _, err := credentials.Resolve(s.lookupEnv, s.Store)
+	if err != nil {
+		return nil, err
+	}
+	return s.Server.WithToken(token), nil
+}
+
 // WhoAmI returns the human behind the resolved credential.
 func (s *Service) WhoAmI(ctx context.Context) (protocol.Human, credentials.Source, error) {
 	token, source, err := credentials.Resolve(s.lookupEnv, s.Store)

@@ -24,7 +24,9 @@ import (
 const (
 	// DefaultServerURL is the local development server.
 	DefaultServerURL = "http://127.0.0.1:8080"
-	maxResponseBytes = 1 << 20
+	// maxResponseBytes fits the largest BlueprintRevision view, which the
+	// server accepts as a request of up to 1 MiB, with room for its envelope.
+	maxResponseBytes = 2 << 20
 )
 
 // APIError is an error response from the Conn server.
@@ -32,9 +34,16 @@ type APIError struct {
 	Status  int
 	Code    string
 	Message string
+	// Pointer locates the offending request field of an invalid_input error.
+	Pointer string
 }
 
-func (e *APIError) Error() string { return e.Message }
+func (e *APIError) Error() string {
+	if e.Pointer != "" {
+		return e.Message + " (at " + e.Pointer + ")"
+	}
+	return e.Message
+}
 
 // IsCode reports whether err is an APIError with code.
 func IsCode(err error, code string) bool {
@@ -150,13 +159,26 @@ func get[T protocol.Document](ctx context.Context, c *Client, path string) (T, e
 	return decodeData[T](body)
 }
 
-// do performs one request and returns the body of a 2xx response.
+// do performs one bodiless request and returns the body of a 2xx response.
 func (c *Client) do(ctx context.Context, method, path string, credential secret.String) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, method, c.base.String()+path, nil)
+	return c.send(ctx, method, path, credential, nil)
+}
+
+// send performs one request with an optional JSON body and returns the
+// body of a 2xx response.
+func (c *Client) send(ctx context.Context, method, path string, credential secret.String, body []byte) ([]byte, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base.String()+path, reader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if !credential.IsZero() {
 		req.Header.Set("Authorization", "Bearer "+credential.Reveal())
 	}
@@ -168,17 +190,17 @@ func (c *Client) do(ctx context.Context, method, path string, credential secret.
 		return nil, fmt.Errorf("%w at %s", ErrUnreachable, c.base)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w at %s", ErrUnreachable, c.base)
 	}
-	if len(body) > maxResponseBytes {
+	if len(respBody) > maxResponseBytes {
 		return nil, errors.New("the Conn server response is too large")
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return body, nil
+		return respBody, nil
 	}
-	return nil, decodeError(resp.StatusCode, body)
+	return nil, decodeError(resp.StatusCode, respBody)
 }
 
 func decodeData[T protocol.Document](body []byte) (T, error) {
@@ -198,7 +220,7 @@ func decodeData[T protocol.Document](body []byte) (T, error) {
 
 func decodeError(status int, body []byte) error {
 	if doc, err := protocol.Decode[protocol.Error](bytes.TrimSpace(body)); err == nil {
-		return &APIError{Status: status, Code: doc.Error.Code, Message: doc.Error.Message}
+		return &APIError{Status: status, Code: doc.Error.Code, Message: doc.Error.Message, Pointer: doc.Error.Pointer}
 	}
 	return &APIError{Status: status, Code: fmt.Sprintf("http_%d", status), Message: fmt.Sprintf("The Conn server returned HTTP %d.", status)}
 }
