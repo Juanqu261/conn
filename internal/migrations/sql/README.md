@@ -11,7 +11,7 @@ Goose SQL migrations for Conn's own backend database. They are embedded into the
 
 ## Schema guarantees
 
-`00001_initial_schema.sql` enforces these rules in the database as well as in the application:
+The migrations enforce these rules in the database as well as in the application:
 
 - Entity identities are UUIDv7.
 - Each project has exactly one owner, the owner holds the `owner` membership, and only an owner adds members.
@@ -19,7 +19,8 @@ Goose SQL migrations for Conn's own backend database. They are embedded into the
 - Accountable humans, proposers, and charter deciders are project members.
 - A charter decision is made only by that cell's accountable human, at most once per revision, and a rejection has a rationale.
 - Objective revisions, cells, charter decisions, memberships, and events are append-only.
-- A blueprint snapshot never changes, never contains `status`, and its status moves only from `proposed` to `active` or `rejected`.
+- A blueprint snapshot never changes and never contains `status`. Only a project owner proposes one.
+- A blueprint has at most one `active` and one `proposed` revision. Status moves only from `proposed` to `active`, `rejected`, or `superseded`, and from `active` to `superseded`.
 - Event sequences are gap-free within a project, and each event type fixes its entity type.
 - Sessions expire at most 30 days after creation.
 
