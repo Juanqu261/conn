@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-create",
+  "title": "Project creation input",
+  "description": "Human-authored input for creating a Project. The client generates project_id for safe retries; the server assigns the owner from the session and the creation time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "name"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:charter-decision",
+  "title": "CharterDecision",
+  "description": "Append-only acceptance or rejection of one CellCharter snapshot by its accountable human. Rejection requires a rationale.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "project_id",
+    "blueprint_id",
+    "blueprint_revision",
+    "cell_id",
+    "human_id",
+    "outcome",
+    "decided_at"
+  ],
+  "properties": {
+    "decision_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "project_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "blueprint_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "blueprint_revision": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/revision"
+    },
+    "cell_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "human_id": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
+    "outcome": {
+      "enum": ["accept", "reject"]
+    },
+    "rationale": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/rationale"
+    },
+    "decided_at": {
+      "$ref": "urn:conn:schema:v1:common#/$defs/timestamp"
+    }
+  },
+  "if": {
+    "properties": {
+      "outcome": {
+        "const": "reject"
+      }
+    },
+    "required": ["outcome"]
+  },
+  "then": {
+    "properties": {
+      "rationale": true
+    },
+    "required": ["rationale"]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:human",
+  "title": "Human",
+  "description": "A GitHub-authenticated person. The GitHub user ID is immutable; the login is display text that follows GitHub renames.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["human_id", "github_user_id", "github_login"],
+  "properties": {
+    "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "github_user_id": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "github_login": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 39,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$"
+    }
+  }
+}

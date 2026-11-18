@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project",
+  "title": "Project",
+  "description": "Authorization and event-cursor boundary for one team effort. Membership is recorded separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "name", "owner_human_id", "created_at"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "owner_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}

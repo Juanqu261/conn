@@ -1,0 +1,36 @@
+# Local development database for Conn.
+#
+# Development only. The port binds to loopback and the credentials below are
+# not secrets. Never reuse them outside a developer machine.
+#
+# Use the root scripts: pnpm db:start, db:status, db:stop, db:migrate.
+# None of them remove the named volume. Deleting it destroys local data and
+# is a deliberate manual step:
+#   docker compose down --volumes
+name: conn
+
+services:
+  postgres:
+    image: postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc
+    environment:
+      POSTGRES_USER: conn
+      POSTGRES_PASSWORD: conn-development-only
+      POSTGRES_DB: conn
+    ports:
+      # A non-default host port avoids silently connecting to another local
+      # PostgreSQL server. Override with CONN_DEV_DB_PORT.
+      - "127.0.0.1:${CONN_DEV_DB_PORT:-55432}:5432"
+    volumes:
+      # PostgreSQL 18 images keep version-specific data under this directory.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=conn --dbname=conn"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+    name: conn-dev-postgres-data
