@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/cli"
 	"github.com/Juanqu261/conn/internal/credentials"
+	"github.com/Juanqu261/conn/internal/devenv"
 	"github.com/Juanqu261/conn/internal/httpapi"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/mcp"
@@ -25,21 +27,23 @@ import (
 var version = "dev"
 
 func main() {
+	devSettings := loadDevSettings()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	code := cli.Execute(ctx, os.Args[1:], cli.Streams{
 		In:  os.Stdin,
 		Out: os.Stdout,
 		Err: os.Stderr,
-	}, dependencies())
+	}, dependencies(devSettings))
 	stop()
 	os.Exit(code)
 }
 
-func dependencies() cli.Dependencies {
+func dependencies(devSettings *devenv.Result) cli.Dependencies {
 	return cli.Dependencies{
-		Version:   version,
-		LookupEnv: os.LookupEnv,
-		Serve:     serve,
+		Version:     version,
+		DevSettings: devSettings,
+		LookupEnv:   os.LookupEnv,
+		Serve:       serve,
 		ServeMCP: func(ctx context.Context, log *slog.Logger) error {
 			// Standard output belongs to MCP alone. Hand the real stream to the
 			// transport and point os.Stdout at standard error, so an accidental
@@ -63,6 +67,23 @@ func dependencies() cli.Dependencies {
 			}, nil
 		},
 	}
+}
+
+func loadDevSettings() *devenv.Result {
+	if version != "dev" {
+		return nil
+	}
+	result, err := devenv.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "conn: warning: %v\n", err)
+		return nil
+	}
+	if result != nil {
+		for _, warning := range result.Warnings {
+			fmt.Fprintf(os.Stderr, "conn: warning: %s\n", warning)
+		}
+	}
+	return result
 }
 
 func serve(ctx context.Context, cfg cli.ServerConfig, log *slog.Logger) error {

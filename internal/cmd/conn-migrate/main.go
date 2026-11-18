@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/Juanqu261/conn/internal/devenv"
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
 )
@@ -57,7 +58,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		return errUsage
 	}
 
-	databaseURL, err := targetURL(*dev)
+	databaseURL, err := targetURL(*dev, stderr)
 	if err != nil {
 		return err
 	}
@@ -96,12 +97,21 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 
 // targetURL requires exactly one explicit target so a missing variable never
 // falls back to some other database.
-func targetURL(dev bool) (string, error) {
+func targetURL(dev bool, stderr io.Writer) (string, error) {
 	fromEnv := os.Getenv(databaseURLEnv)
 	switch {
 	case dev && fromEnv != "":
 		return "", fmt.Errorf("--dev and %s are both set; choose one target", databaseURLEnv)
 	case dev:
+		result, err := devenv.Load()
+		if err != nil {
+			return "", err
+		}
+		if result != nil {
+			for _, warning := range result.Warnings {
+				fmt.Fprintf(stderr, "conn-migrate: warning: %s\n", warning)
+			}
+		}
 		return postgres.DevelopmentURL(), nil
 	case fromEnv != "":
 		return fromEnv, nil

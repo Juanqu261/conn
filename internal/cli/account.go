@@ -140,6 +140,10 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 			return err
 		}
 		checks := service.Doctor(cmd.Context())
+		if settings := deps.DevSettings; settings != nil {
+			detail := fmt.Sprintf("%s: %d loaded, %d already set in the environment", settings.Path, len(settings.Loaded), len(settings.Overridden))
+			checks = append([]account.Check{{Name: "Dev settings", OK: len(settings.Warnings) == 0, Detail: detail}}, checks...)
+		}
 		if !renderChecks(streams.Out, checks) {
 			return errReported
 		}

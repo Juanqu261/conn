@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/devenv"
 )
 
 // Streams are the process standard streams.
@@ -33,7 +34,8 @@ type ServerConfig struct {
 // Dependencies are the operations commands invoke. The process entry point
 // constructs them, so commands never build adapters themselves.
 type Dependencies struct {
-	Version string
+	Version     string
+	DevSettings *devenv.Result
 
 	// LookupEnv reads configuration from the environment.
 	LookupEnv func(key string) (string, bool)
