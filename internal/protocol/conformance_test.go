@@ -27,6 +27,10 @@ func TestConformance(t *testing.T) {
 		protocol.BlueprintProposalSchema:      roundTrip[protocol.BlueprintProposal],
 		protocol.CharterDecisionSchema:        roundTrip[protocol.CharterDecision],
 		protocol.EventEnvelopeSchema:          roundTrip[protocol.EventEnvelope],
+		protocol.HumanSchema:                  roundTrip[protocol.Human],
+		protocol.SessionGrantSchema:           roundTrip[protocol.SessionGrant],
+		protocol.GitHubLoginSchema:            roundTrip[protocol.GitHubLogin],
+		protocol.ErrorSchema:                  roundTrip[protocol.Error],
 	}
 
 	for _, tc := range loadFixtures(t) {

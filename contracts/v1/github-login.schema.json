@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:github-login",
+  "title": "GitHub login configuration",
+  "description": "Public configuration the CLI needs to start GitHub device authorization, served by the backend so humans configure only the server URL.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["client_id"],
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    }
+  }
+}

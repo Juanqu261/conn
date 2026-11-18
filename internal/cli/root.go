@@ -11,6 +11,8 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Juanqu261/conn/internal/account"
 )
 
 // Streams are the process standard streams.
@@ -20,14 +22,16 @@ type Streams struct {
 	Err io.Writer
 }
 
-// ServerConfig configures `conn server`
+// ServerConfig configures `conn server`. The database URL contains a
+// credential, so it comes from the environment and never from a flag.
 type ServerConfig struct {
-	ListenAddress string
-	DatabaseURL   string
+	ListenAddress  string
+	DatabaseURL    string
+	GitHubClientID string
 }
 
 // Dependencies are the operations commands invoke. The process entry point
-// constructs them so this package never depends on adapter packages.
+// constructs them, so commands never build adapters themselves.
 type Dependencies struct {
 	Version string
 
@@ -40,6 +44,9 @@ type Dependencies struct {
 	// ServeMCP runs the Kiro MCP adapter over standard input and output
 	// until the client disconnects or ctx is cancelled.
 	ServeMCP func(ctx context.Context, log *slog.Logger) error
+
+	// Account returns local account operations against serverURL.
+	Account func(serverURL string) (*account.Service, error)
 }
 
 // Execute runs one command line and returns the process exit code.
@@ -47,14 +54,19 @@ type Dependencies struct {
 func Execute(ctx context.Context, args []string, streams Streams, deps Dependencies) int {
 	root := newRoot(streams, deps)
 	root.SetArgs(args)
-	if err := root.ExecuteContext(ctx); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return 0
-		}
+	err := root.ExecuteContext(ctx)
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errReported):
+		return 1
+	case errors.Is(err, context.Canceled):
+		fmt.Fprintln(streams.Err, "conn: interrupted")
+		return 130
+	default:
 		fmt.Fprintf(streams.Err, "conn: %v\n", err)
 		return 1
 	}
-	return 0
 }
 
 func newRoot(streams Streams, deps Dependencies) *cobra.Command {
@@ -72,6 +84,10 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 
 	logger := slog.New(slog.NewTextHandler(streams.Err, nil))
 	root.AddCommand(
+		newLoginCommand(deps, streams),
+		newLogoutCommand(deps, streams),
+		newWhoAmICommand(deps, streams),
+		newDoctorCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
 	)
@@ -85,12 +101,14 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 		Short: "Run the Conn backend HTTP service",
 		Long: "Run the Conn backend HTTP service.\n\n" +
 			"Environment:\n" +
-			"  CONN_DATABASE_URL  PostgreSQL connection URL (required)\n\n" +
+			"  CONN_DATABASE_URL      PostgreSQL connection URL (required)\n" +
+			"  CONN_GITHUB_CLIENT_ID  public GitHub OAuth client ID that enables conn login\n\n" +
 			"The server never changes the database schema. GET /readyz reports\n" +
 			"not ready until the schema matches this build.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg.DatabaseURL, _ = deps.LookupEnv("CONN_DATABASE_URL")
+			cfg.GitHubClientID, _ = deps.LookupEnv("CONN_GITHUB_CLIENT_ID")
 			return deps.Serve(cmd.Context(), cfg, logger)
 		},
 	}

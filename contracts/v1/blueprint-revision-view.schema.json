@@ -2,12 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:blueprint-revision-view",
   "title": "BlueprintRevision view",
-  "description": "Read model pairing an immutable BlueprintRevision snapshot with its current lifecycle status.",
+  "description": "Read model pairing an immutable BlueprintRevision snapshot with its current lifecycle status. A blueprint has at most one active and one proposed revision; a newer active or proposed revision marks the older one superseded.",
   "type": "object",
   "additionalProperties": false,
   "required": ["blueprint_revision", "status"],
   "properties": {
-    "blueprint_revision": { "$ref": "urn:conn:schema:v1:blueprint-revision" },
-    "status": { "enum": ["proposed", "active", "rejected"] }
+    "blueprint_revision": {
+      "$ref": "urn:conn:schema:v1:blueprint-revision"
+    },
+    "status": {
+      "enum": ["proposed", "active", "rejected", "superseded"]
+    }
   }
 }

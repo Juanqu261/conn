@@ -84,12 +84,15 @@ const (
 )
 
 // BlueprintStatus is the lifecycle state served beside a BlueprintRevision.
+// A blueprint has at most one active and one proposed revision. A newer
+// active or proposed revision marks the older one superseded.
 type BlueprintStatus string
 
 const (
-	BlueprintProposed BlueprintStatus = "proposed"
-	BlueprintActive   BlueprintStatus = "active"
-	BlueprintRejected BlueprintStatus = "rejected"
+	BlueprintProposed   BlueprintStatus = "proposed"
+	BlueprintActive     BlueprintStatus = "active"
+	BlueprintRejected   BlueprintStatus = "rejected"
+	BlueprintSuperseded BlueprintStatus = "superseded"
 )
 
 // CharterOutcome is a human's decision on their own CellCharter.

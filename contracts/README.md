@@ -31,6 +31,15 @@ contracts/v1/objective-revision-input.schema.json urn:conn:schema:v1:objective-r
 contracts/v1/blueprint-proposal.schema.json       urn:conn:schema:v1:blueprint-proposal
 ```
 
+Identity and responses:
+
+```text
+contracts/v1/human.schema.json                    urn:conn:schema:v1:human
+contracts/v1/session-grant.schema.json            urn:conn:schema:v1:session-grant
+contracts/v1/github-login.schema.json             urn:conn:schema:v1:github-login
+contracts/v1/error.schema.json                    urn:conn:schema:v1:error
+```
+
 Read models and shared definitions:
 
 ```text

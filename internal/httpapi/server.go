@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/Juanqu261/conn/internal/application"
 )
 
 const (
@@ -20,11 +22,22 @@ const (
 // example whether its database schema matches this build.
 type ReadinessCheck func(ctx context.Context) error
 
+// Config holds the backend's dependencies.
+type Config struct {
+	Ready ReadinessCheck
+	Auth  *application.Auth
+	// GitHubClientID is the public OAuth client ID served to the CLI. Login
+	// is unavailable while it is empty.
+	GitHubClientID string
+	Log            *slog.Logger
+}
+
 // NewHandler returns the backend routes.
 //
 // GET /healthz reports that the process is running. GET /readyz reports
-// whether ready succeeds; failure details are logged, never returned.
-func NewHandler(ready ReadinessCheck, log *slog.Logger) http.Handler {
+// whether cfg.Ready succeeds; failure details are logged, never returned.
+func NewHandler(cfg Config) http.Handler {
+	log := cfg.Log
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeStatus(w, http.StatusOK, "ok")
@@ -32,16 +45,19 @@ func NewHandler(ready ReadinessCheck, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
 		defer cancel()
-		if err := ready(ctx); err != nil {
+		if err := cfg.Ready(ctx); err != nil {
 			log.Warn("not ready", "error", err)
 			writeStatus(w, http.StatusServiceUnavailable, "not_ready")
 			return
 		}
 		writeStatus(w, http.StatusOK, "ready")
 	})
+	registerAuthRoutes(mux, cfg)
+	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
+		writeError(w, log, http.StatusNotFound, "not_found", "No such Conn API route.")
+	})
 	return mux
 }
-
 func writeStatus(w http.ResponseWriter, code int, status string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

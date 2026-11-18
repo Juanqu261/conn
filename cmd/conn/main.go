@@ -10,8 +10,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/application"
+	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/cli"
+	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/httpapi"
+	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/mcp"
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
@@ -43,12 +48,29 @@ func dependencies() cli.Dependencies {
 			os.Stdout = os.Stderr
 			return mcp.Serve(ctx, os.Stdin, protocolOut, version, log)
 		},
+		Account: func(serverURL string) (*account.Service, error) {
+			httpClient := httpclient.NewHTTPClient()
+			server, err := httpclient.New(serverURL, httpClient)
+			if err != nil {
+				return nil, err
+			}
+			return &account.Service{
+				Server:    server,
+				Store:     credentials.NewKeyring(server.URL()),
+				LookupEnv: os.LookupEnv,
+				GitHub:    github.Production,
+				HTTP:      httpClient,
+			}, nil
+		},
 	}
 }
 
 func serve(ctx context.Context, cfg cli.ServerConfig, log *slog.Logger) error {
 	if cfg.DatabaseURL == "" {
 		return errors.New("CONN_DATABASE_URL is required")
+	}
+	if cfg.GitHubClientID == "" {
+		log.Warn("CONN_GITHUB_CLIENT_ID is not set; conn login is unavailable")
 	}
 	pool, err := postgres.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -60,9 +82,17 @@ func serve(ctx context.Context, cfg cli.ServerConfig, log *slog.Logger) error {
 	// through readiness until deployment automation migrates the database.
 	ready := func(ctx context.Context) error { return migrations.Check(ctx, pool) }
 	if err := ready(ctx); err != nil {
-		log.Warn("server is not ready", "error", err)
+		log.Warn("server is not ready; apply Conn migrations (pnpm db:migrate in development)", "error", err)
 	} else {
 		log.Info("database schema is compatible")
 	}
-	return httpapi.Serve(ctx, cfg.ListenAddress, httpapi.NewHandler(ready, log), log)
+
+	githubAPI := &github.API{HTTP: httpclient.NewHTTPClient(), Endpoints: github.Production}
+	handler := httpapi.NewHandler(httpapi.Config{
+		Ready:          ready,
+		Auth:           &application.Auth{Store: postgres.AuthStore{Pool: pool}, VerifyToken: githubAPI.Verify},
+		GitHubClientID: cfg.GitHubClientID,
+		Log:            log,
+	})
+	return httpapi.Serve(ctx, cfg.ListenAddress, handler, log)
 }

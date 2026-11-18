@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:error",
+  "title": "Error response",
+  "description": "Every unsuccessful /v1 response. The code is stable and machine-readable; the message is safe for humans and never contains internal details or secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+        "message": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+      }
+    }
+  }
+}

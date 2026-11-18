@@ -25,15 +25,10 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/Juanqu261/conn/internal/migrations"
+	"github.com/Juanqu261/conn/internal/postgres"
 )
 
-const (
-	databaseURLEnv = "CONN_DATABASE_URL"
-	devPortEnv     = "CONN_DEV_DB_PORT"
-	// Matches compose.yaml. These development credentials are not secrets.
-	devURLFormat = "postgres://conn:conn-development-only@127.0.0.1:%s/conn?sslmode=disable"
-	devPort      = "55432"
-)
+const databaseURLEnv = "CONN_DATABASE_URL"
 
 var errUsage = errors.New("usage: conn-migrate [--dev] up")
 
@@ -107,11 +102,7 @@ func targetURL(dev bool) (string, error) {
 	case dev && fromEnv != "":
 		return "", fmt.Errorf("--dev and %s are both set; choose one target", databaseURLEnv)
 	case dev:
-		port := os.Getenv(devPortEnv)
-		if port == "" {
-			port = devPort
-		}
-		return fmt.Sprintf(devURLFormat, port), nil
+		return postgres.DevelopmentURL(), nil
 	case fromEnv != "":
 		return fromEnv, nil
 	default:

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:session-grant",
+  "title": "Session grant",
+  "description": "The only response that carries a raw Conn session token (decision 0021). It is returned once, after GitHub identity exchange; the server keeps only the token's SHA-256 hash.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["token", "expires_at", "human"],
+  "properties": {
+    "token": {
+      "description": "conn_sess_ followed by 32 random bytes as unpadded base64url.",
+      "type": "string",
+      "pattern": "^conn_sess_[A-Za-z0-9_-]{43}$"
+    },
+    "expires_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+    "human": { "$ref": "urn:conn:schema:v1:human" }
+  }
+}
