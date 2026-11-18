@@ -112,6 +112,7 @@ func serve(ctx context.Context, cfg cli.ServerConfig, log *slog.Logger) error {
 	handler := httpapi.NewHandler(httpapi.Config{
 		Ready:          ready,
 		Auth:           &application.Auth{Store: postgres.AuthStore{Pool: pool}, VerifyToken: githubAPI.Verify},
+		Projects:       &application.Projects{Store: postgres.ProjectStore{Pool: pool}},
 		GitHubClientID: cfg.GitHubClientID,
 		Log:            log,
 	})

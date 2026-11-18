@@ -101,6 +101,12 @@ type Tx interface {
 	// RejectBlueprintRevision moves a proposed revision to rejected.
 	RejectBlueprintRevision(ctx context.Context, blueprintID uuid.UUID, revision int) error
 
+	// ObjectiveSummaries lists the Project's Objectives in creation order.
+	ObjectiveSummaries(ctx context.Context, projectID uuid.UUID) ([]protocol.ObjectiveSummary, error)
+	// BlueprintSummaries lists the Project's Blueprints in creation order,
+	// each with its revisions in force and their cell decisions.
+	BlueprintSummaries(ctx context.Context, projectID uuid.UUID) ([]protocol.BlueprintSummary, error)
+
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
 	AppendEvent(ctx context.Context, event protocol.EventEnvelope) (int64, error)
@@ -322,6 +328,32 @@ func (p *Projects) ObjectiveRevision(ctx context.Context, actor, projectID, obje
 		if result.Data, err = tx.ObjectiveRevision(ctx, projectID, objectiveID, revision); err != nil {
 			return err
 		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+// Status returns a member's view of the Project: its Objectives, and each
+// Blueprint's revisions in force with their ratification progress.
+func (p *Projects) Status(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.ProjectStatus], error) {
+	var result Result[protocol.ProjectStatus]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		role, err := tx.Role(ctx, projectID, actor)
+		if err != nil {
+			return err
+		}
+		status := protocol.ProjectStatus{Role: role}
+		if status.Project, err = tx.Project(ctx, projectID); err != nil {
+			return err
+		}
+		if status.Objectives, err = tx.ObjectiveSummaries(ctx, projectID); err != nil {
+			return err
+		}
+		if status.Blueprints, err = tx.BlueprintSummaries(ctx, projectID); err != nil {
+			return err
+		}
+		result.Data = status
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		return err
 	})

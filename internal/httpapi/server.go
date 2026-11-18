@@ -24,8 +24,9 @@ type ReadinessCheck func(ctx context.Context) error
 
 // Config holds the backend's dependencies.
 type Config struct {
-	Ready ReadinessCheck
-	Auth  *application.Auth
+	Ready    ReadinessCheck
+	Auth     *application.Auth
+	Projects *application.Projects
 	// GitHubClientID is the public OAuth client ID served to the CLI. Login
 	// is unavailable while it is empty.
 	GitHubClientID string
@@ -53,10 +54,11 @@ func NewHandler(cfg Config) http.Handler {
 		writeStatus(w, http.StatusOK, "ready")
 	})
 	registerAuthRoutes(mux, cfg)
+	registerProjectRoutes(mux, cfg)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, log, http.StatusNotFound, "not_found", "No such Conn API route.")
 	})
-	return mux
+	return withAccessLog(log, mux)
 }
 func writeStatus(w http.ResponseWriter, code int, status string) {
 	w.Header().Set("Content-Type", "application/json")

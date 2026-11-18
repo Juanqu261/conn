@@ -27,8 +27,10 @@ Human-authored inputs, which omit every server-assigned field:
 
 ```text
 contracts/v1/project-create.schema.json           urn:conn:schema:v1:project-create
+contracts/v1/project-member-add.schema.json       urn:conn:schema:v1:project-member-add
 contracts/v1/objective-revision-input.schema.json urn:conn:schema:v1:objective-revision-input
 contracts/v1/blueprint-proposal.schema.json       urn:conn:schema:v1:blueprint-proposal
+contracts/v1/charter-rejection.schema.json        urn:conn:schema:v1:charter-rejection
 ```
 
 Identity and responses:
@@ -44,6 +46,7 @@ Read models and shared definitions:
 
 ```text
 contracts/v1/blueprint-revision-view.schema.json  urn:conn:schema:v1:blueprint-revision-view
+contracts/v1/project-status.schema.json           urn:conn:schema:v1:project-status
 contracts/v1/common.schema.json                   urn:conn:schema:v1:common ($defs only)
 contracts/v1/fixtures/cases.json                  shared accepted and rejected fixtures
 contracts/embed.go                                embeds v1 for Go components

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-status",
+  "title": "Project status",
+  "description": "Read model of a Project's coordination state for one member. Lists every Objective and Blueprint. For each Blueprint it lists the revisions in force: the active revision, if any, and the latest revision when it differs. Cell decisions show ratification progress; read the full snapshot through blueprint-revision-view.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "role", "objectives", "blueprints"],
+  "properties": {
+    "project": { "$ref": "urn:conn:schema:v1:project" },
+    "role": {
+      "description": "The reading member's role.",
+      "enum": ["owner", "member"]
+    },
+    "objectives": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/objectiveSummary" }
+    },
+    "blueprints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blueprintSummary" }
+    }
+  },
+  "$defs": {
+    "objectiveSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective_id", "current_revision"],
+      "properties": {
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "current_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "blueprintSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blueprint_id", "current_revision", "revisions"],
+      "properties": {
+        "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "current_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "revisions": {
+          "description": "Revisions in force, in ascending revision order.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/revisionSummary" }
+        }
+      }
+    },
+    "revisionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "status", "objective_id", "objective_revision", "cells"],
+      "properties": {
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "status": {
+          "description": "A superseded revision is never in force.",
+          "enum": ["proposed", "active", "rejected"]
+        },
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/cellSummary" }
+        }
+      }
+    },
+    "cellSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cell_id", "accountable_human_id", "title", "decision"],
+      "properties": {
+        "cell_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "accountable_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "decision": { "enum": ["pending", "accept", "reject"] }
+      }
+    }
+  }
+}

@@ -13,6 +13,9 @@ const (
 	BlueprintRevisionViewSchema  = "urn:conn:schema:v1:blueprint-revision-view"
 	BlueprintProposalSchema      = "urn:conn:schema:v1:blueprint-proposal"
 	CharterDecisionSchema        = "urn:conn:schema:v1:charter-decision"
+	CharterRejectionSchema       = "urn:conn:schema:v1:charter-rejection"
+	ProjectMemberAddSchema       = "urn:conn:schema:v1:project-member-add"
+	ProjectStatusSchema          = "urn:conn:schema:v1:project-status"
 	EventEnvelopeSchema          = "urn:conn:schema:v1:event-envelope"
 )
 
@@ -162,3 +165,68 @@ type CharterDecision struct {
 }
 
 func (CharterDecision) SchemaID() string { return CharterDecisionSchema }
+
+// CharterRejection is the human-authored rationale for rejecting one's own
+// CellCharter.
+type CharterRejection struct {
+	Rationale string `json:"rationale"`
+}
+
+func (CharterRejection) SchemaID() string { return CharterRejectionSchema }
+
+// ProjectMemberAdd names an authenticated human the owner adds as a member.
+type ProjectMemberAdd struct {
+	HumanID uuid.UUID `json:"human_id"`
+}
+
+func (ProjectMemberAdd) SchemaID() string { return ProjectMemberAddSchema }
+
+// ProjectStatus is one member's view of a Project's coordination state.
+type ProjectStatus struct {
+	Project    Project            `json:"project"`
+	Role       Role               `json:"role"`
+	Objectives []ObjectiveSummary `json:"objectives"`
+	Blueprints []BlueprintSummary `json:"blueprints"`
+}
+
+func (ProjectStatus) SchemaID() string { return ProjectStatusSchema }
+
+// ObjectiveSummary identifies an Objective's latest revision.
+type ObjectiveSummary struct {
+	ObjectiveID     uuid.UUID `json:"objective_id"`
+	CurrentRevision int       `json:"current_revision"`
+}
+
+// BlueprintSummary lists a Blueprint's revisions in force: the active one,
+// if any, and the latest one when it differs, in ascending order.
+type BlueprintSummary struct {
+	BlueprintID     uuid.UUID         `json:"blueprint_id"`
+	CurrentRevision int               `json:"current_revision"`
+	Revisions       []RevisionSummary `json:"revisions"`
+}
+
+// RevisionSummary shows one BlueprintRevision's ratification progress.
+type RevisionSummary struct {
+	Revision          int             `json:"revision"`
+	Status            BlueprintStatus `json:"status"`
+	ObjectiveID       uuid.UUID       `json:"objective_id"`
+	ObjectiveRevision int             `json:"objective_revision"`
+	Cells             []CellSummary   `json:"cells"`
+}
+
+// CellSummary shows one charter's accountable human and decision.
+type CellSummary struct {
+	CellID             uuid.UUID    `json:"cell_id"`
+	AccountableHumanID uuid.UUID    `json:"accountable_human_id"`
+	Title              string       `json:"title"`
+	Decision           CellDecision `json:"decision"`
+}
+
+// CellDecision is a charter's decision state within one revision.
+type CellDecision string
+
+const (
+	CellPending  CellDecision = "pending"
+	CellAccepted CellDecision = "accept"
+	CellRejected CellDecision = "reject"
+)
