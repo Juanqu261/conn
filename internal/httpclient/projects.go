@@ -20,6 +20,16 @@ type Result[T any] struct {
 	AsOfEvent int64
 }
 
+// Projects lists the projects visible to the authenticated human.
+func (c *Client) Projects(ctx context.Context) (protocol.ProjectList, error) {
+	return get[protocol.ProjectList](ctx, c, "/v1/projects")
+}
+
+// ProjectMembers lists every member of a Project visible to the caller.
+func (c *Client) ProjectMembers(ctx context.Context, projectID uuid.UUID) (Result[protocol.ProjectMemberList], error) {
+	return read[protocol.ProjectMemberList](ctx, c, projectPath(projectID)+"/members")
+}
+
 // CreateProject creates a Project owned by the session's human.
 func (c *Client) CreateProject(ctx context.Context, input protocol.ProjectCreate) (Result[protocol.Project], error) {
 	return post[protocol.Project](ctx, c, "/v1/projects", input)

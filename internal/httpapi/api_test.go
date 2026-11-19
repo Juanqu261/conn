@@ -139,12 +139,34 @@ func TestAPI(t *testing.T) {
 		{name: "the owner creates the project", method: "POST", path: "/v1/projects", token: alice,
 			body: fmt.Sprintf(`{"project_id": %q, "name": "Checkout reliability"}`, project), wantStatus: 201, wantEvent: 1,
 			check: field("owner_human_id", aliceID)},
+		{name: "the owner lists visible projects", method: "GET", path: "/v1/projects", token: alice,
+			wantStatus: 200, check: func(t *testing.T, data json.RawMessage) {
+				projects, err := protocol.Decode[protocol.ProjectList](data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(projects.Projects) != 1 || projects.Projects[0].Project.ProjectID != project || projects.Projects[0].Role != protocol.RoleOwner {
+					t.Fatalf("projects = %#v, want owner project %s", projects, project)
+				}
+			}},
 		{name: "a non-member gets not found", method: "GET", path: projectPath, token: bob,
+			wantStatus: 404, wantCode: "not_found"},
+		{name: "a non-member cannot list members", method: "GET", path: projectPath + "/members", token: dave,
 			wantStatus: 404, wantCode: "not_found"},
 		{name: "a malformed ID gets the same answer", method: "GET", path: "/v1/projects/not-a-uuid", token: bob,
 			wantStatus: 404, wantCode: "not_found"},
 		{name: "the owner adds a member", method: "POST", path: projectPath + "/members", token: alice,
 			body: fmt.Sprintf(`{"human_id": %q}`, bobID), wantStatus: 201, wantEvent: 2, check: field("role", "member")},
+		{name: "a project member lists named teammates", method: "GET", path: projectPath + "/members", token: bob,
+			wantStatus: 200, wantEvent: 2, check: func(t *testing.T, data json.RawMessage) {
+				members, err := protocol.Decode[protocol.ProjectMemberList](data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if members.ProjectID != project || len(members.Members) != 2 || members.Members[1].Human.HumanID.String() != bobID || members.Members[1].Membership.Role != protocol.RoleMember {
+					t.Fatalf("members = %#v, want owner and member %s", members, bobID)
+				}
+			}},
 		{name: "a member cannot add members", method: "POST", path: projectPath + "/members", token: bob,
 			body: fmt.Sprintf(`{"human_id": %q}`, daveID), wantStatus: 403, wantCode: "forbidden"},
 		{name: "application rules name the field", method: "POST", path: projectPath + "/objectives", token: alice,

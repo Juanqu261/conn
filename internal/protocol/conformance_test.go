@@ -18,8 +18,10 @@ import (
 func TestConformance(t *testing.T) {
 	roundTrips := map[string]func([]byte) ([]byte, error){
 		protocol.ProjectSchema:                roundTrip[protocol.Project],
+		protocol.ProjectListSchema:            roundTrip[protocol.ProjectList],
 		protocol.ProjectCreateSchema:          roundTrip[protocol.ProjectCreate],
 		protocol.ProjectMembershipSchema:      roundTrip[protocol.ProjectMembership],
+		protocol.ProjectMemberListSchema:      roundTrip[protocol.ProjectMemberList],
 		protocol.ObjectiveSchema:              roundTrip[protocol.Objective],
 		protocol.ObjectiveRevisionInputSchema: roundTrip[protocol.ObjectiveRevisionInput],
 		protocol.BlueprintRevisionSchema:      roundTrip[protocol.BlueprintRevision],

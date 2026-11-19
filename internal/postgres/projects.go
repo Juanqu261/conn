@@ -94,6 +94,33 @@ func (t projectTx) Project(ctx context.Context, projectID uuid.UUID) (protocol.P
 	return project, notFound(err)
 }
 
+func (t projectTx) ProjectsForHuman(ctx context.Context, humanID uuid.UUID) ([]protocol.ProjectListEntry, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT p.project_id, p.name, p.owner_human_id, p.created_at, m.role
+		FROM project_memberships m
+		JOIN projects p ON p.project_id = m.project_id
+		WHERE m.human_id = $1
+		ORDER BY p.created_at, p.project_id`, humanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := []protocol.ProjectListEntry{}
+	for rows.Next() {
+		var entry protocol.ProjectListEntry
+		var createdAt time.Time
+		var role string
+		if err := rows.Scan(&entry.Project.ProjectID, &entry.Project.Name, &entry.Project.OwnerHumanID, &createdAt, &role); err != nil {
+			return nil, err
+		}
+		entry.Project.CreatedAt = protocol.NewTimestamp(createdAt)
+		entry.Role = protocol.Role(role)
+		projects = append(projects, entry)
+	}
+	return projects, rows.Err()
+}
+
 func (t projectTx) InsertMembership(ctx context.Context, m protocol.ProjectMembership) (bool, error) {
 	tag, err := t.tx.Exec(ctx, `
 		INSERT INTO project_memberships (project_id, human_id, role, added_by_human_id, added_at)
@@ -115,6 +142,37 @@ func (t projectTx) Membership(ctx context.Context, projectID, humanID uuid.UUID)
 	m.Role = protocol.Role(role)
 	m.AddedAt = protocol.NewTimestamp(addedAt)
 	return m, notFound(err)
+}
+
+func (t projectTx) ProjectMembers(ctx context.Context, projectID uuid.UUID) ([]protocol.ProjectMember, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT h.human_id, h.github_user_id, h.github_login,
+			m.project_id, m.human_id, m.role, m.added_by_human_id, m.added_at
+		FROM project_memberships m
+		JOIN humans h ON h.human_id = m.human_id
+		WHERE m.project_id = $1
+		ORDER BY m.added_at, m.human_id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := []protocol.ProjectMember{}
+	for rows.Next() {
+		var member protocol.ProjectMember
+		var role string
+		var addedAt time.Time
+		if err := rows.Scan(
+			&member.Human.HumanID, &member.Human.GitHubUserID, &member.Human.GitHubLogin,
+			&member.Membership.ProjectID, &member.Membership.HumanID, &role, &member.Membership.AddedByHumanID, &addedAt,
+		); err != nil {
+			return nil, err
+		}
+		member.Membership.Role = protocol.Role(role)
+		member.Membership.AddedAt = protocol.NewTimestamp(addedAt)
+		members = append(members, member)
+	}
+	return members, rows.Err()
 }
 
 func (t projectTx) InsertObjectiveRevision(ctx context.Context, o protocol.Objective) (bool, error) {

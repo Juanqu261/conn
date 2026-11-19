@@ -5,8 +5,10 @@ import "uuid"
 // Schema identifiers for the v1 documents mirrored by this package.
 const (
 	ProjectSchema                = "urn:conn:schema:v1:project"
+	ProjectListSchema            = "urn:conn:schema:v1:project-list"
 	ProjectCreateSchema          = "urn:conn:schema:v1:project-create"
 	ProjectMembershipSchema      = "urn:conn:schema:v1:project-membership"
+	ProjectMemberListSchema      = "urn:conn:schema:v1:project-member-list"
 	ObjectiveSchema              = "urn:conn:schema:v1:objective"
 	ObjectiveRevisionInputSchema = "urn:conn:schema:v1:objective-revision-input"
 	BlueprintRevisionSchema      = "urn:conn:schema:v1:blueprint-revision"
@@ -30,6 +32,19 @@ type Project struct {
 
 func (Project) SchemaID() string { return ProjectSchema }
 
+// ProjectList is the projects visible to the authenticated human.
+type ProjectList struct {
+	Projects []ProjectListEntry `json:"projects"`
+}
+
+func (ProjectList) SchemaID() string { return ProjectListSchema }
+
+// ProjectListEntry pairs one visible Project with the caller's role in it.
+type ProjectListEntry struct {
+	Project Project `json:"project"`
+	Role    Role    `json:"role"`
+}
+
 // ProjectCreate is the human-authored input for creating a Project.
 type ProjectCreate struct {
 	ProjectID uuid.UUID `json:"project_id"`
@@ -48,6 +63,20 @@ type ProjectMembership struct {
 }
 
 func (ProjectMembership) SchemaID() string { return ProjectMembershipSchema }
+
+// ProjectMemberList is the people and roles visible to a Project member.
+type ProjectMemberList struct {
+	ProjectID uuid.UUID       `json:"project_id"`
+	Members   []ProjectMember `json:"members"`
+}
+
+func (ProjectMemberList) SchemaID() string { return ProjectMemberListSchema }
+
+// ProjectMember pairs a Project membership with its human-facing identity.
+type ProjectMember struct {
+	Human      Human             `json:"human"`
+	Membership ProjectMembership `json:"membership"`
+}
 
 // Objective is one immutable revision of a narrative Objective.
 type Objective struct {

@@ -59,6 +59,9 @@ type Dependencies struct {
 
 	// Account returns local account operations against serverURL.
 	Account func(serverURL string) (*account.Service, error)
+
+	// RunApp starts the interactive terminal application against serverURL.
+	RunApp func(ctx context.Context, in io.Reader, out, err io.Writer, serverURL string) error
 }
 
 // Execute runs one command line and returns the process exit code.
@@ -127,10 +130,30 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newStatusCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
+		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
 	)
 	return root
+}
+
+func newAppCommand(deps Dependencies, streams Streams) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "app",
+		Short: "Open the interactive Conn terminal application",
+		Long: "Open Conn's keyboard-first terminal application. It reads your projects, plan, team,\n" +
+			"updates, and account from the Conn server. Use the regular conn commands for scripts.\n\n" +
+			"The app requires an interactive input and output terminal.",
+		Args: cobra.NoArgs,
+	}
+	server := serverFlag(cmd, deps)
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if deps.RunApp == nil {
+			return errors.New("the interactive Conn application is not configured")
+		}
+		return deps.RunApp(cmd.Context(), streams.In, streams.Out, streams.Err, server())
+	}
+	return cmd
 }
 
 func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {

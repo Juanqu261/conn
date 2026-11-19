@@ -66,11 +66,15 @@ type Tx interface {
 	// counter. It reports false, changing nothing, when the ID is taken.
 	InsertProject(ctx context.Context, project protocol.Project) (bool, error)
 	Project(ctx context.Context, projectID uuid.UUID) (protocol.Project, error)
+	// ProjectsForHuman lists the Projects that contain humanID, in creation order.
+	ProjectsForHuman(ctx context.Context, humanID uuid.UUID) ([]protocol.ProjectListEntry, error)
 
 	// InsertMembership reports false, changing nothing, when the human is
 	// already a member.
 	InsertMembership(ctx context.Context, membership protocol.ProjectMembership) (bool, error)
 	Membership(ctx context.Context, projectID, humanID uuid.UUID) (protocol.ProjectMembership, error)
+	// ProjectMembers lists every Project membership with its human identity.
+	ProjectMembers(ctx context.Context, projectID uuid.UUID) ([]protocol.ProjectMember, error)
 
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in
@@ -174,6 +178,38 @@ func (p *Projects) Project(ctx context.Context, actor, projectID uuid.UUID) (Res
 		if result.Data, err = tx.Project(ctx, projectID); err != nil {
 			return err
 		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+// ProjectsForHuman lists the Projects that the authenticated human may access.
+func (p *Projects) ProjectsForHuman(ctx context.Context, actor uuid.UUID) (protocol.ProjectList, error) {
+	var result protocol.ProjectList
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		projects, err := tx.ProjectsForHuman(ctx, actor)
+		if err != nil {
+			return err
+		}
+		result.Projects = projects
+		return nil
+	})
+	return result, err
+}
+
+// ProjectMembers returns every Project member to a current member.
+func (p *Projects) ProjectMembers(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.ProjectMemberList], error) {
+	var result Result[protocol.ProjectMemberList]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		members, err := tx.ProjectMembers(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		result.Data = protocol.ProjectMemberList{ProjectID: projectID, Members: members}
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		return err
 	})

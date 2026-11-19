@@ -20,6 +20,15 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		mux.HandleFunc(pattern, authenticated(cfg.Auth, log, h))
 	}
 
+	handle("GET /v1/projects", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		list, err := projects.ProjectsForHuman(r.Context(), s.Human.HumanID)
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		writeData(w, log, http.StatusOK, list)
+	})
+
 	handle("POST /v1/projects", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		input, ok := readDocument[protocol.ProjectCreate](w, r, log)
 		if !ok {
@@ -35,6 +44,15 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 			return
 		}
 		result, err := projects.Project(r.Context(), s.Human.HumanID, projectID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/members", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		result, err := projects.ProjectMembers(r.Context(), s.Human.HumanID, projectID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 

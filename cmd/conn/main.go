@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ import (
 	"github.com/Juanqu261/conn/internal/mcp"
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
+	"github.com/Juanqu261/conn/internal/tui"
 )
 
 var version = "dev"
@@ -62,6 +64,13 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 			})
 		},
 		Account: accountService,
+		RunApp: func(ctx context.Context, in io.Reader, out, _ io.Writer, serverURL string) error {
+			service, err := accountService(serverURL)
+			if err != nil {
+				return err
+			}
+			return tui.Run(ctx, tui.Config{In: in, Out: out, Client: service.Client})
+		},
 	}
 }
 

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-member-list",
+  "title": "Project member list",
+  "description": "People and roles in one Project, visible to its members.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "members"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "members": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/member" }
+    }
+  },
+  "$defs": {
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human", "membership"],
+      "properties": {
+        "human": { "$ref": "urn:conn:schema:v1:human" },
+        "membership": { "$ref": "urn:conn:schema:v1:project-membership" }
+      }
+    }
+  }
+}
