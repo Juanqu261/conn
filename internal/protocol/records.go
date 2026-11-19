@@ -5,14 +5,20 @@ import "uuid"
 // Schema identifiers for the v1 documents mirrored by this package.
 const (
 	ProjectSchema                = "urn:conn:schema:v1:project"
+	ProjectListSchema            = "urn:conn:schema:v1:project-list"
 	ProjectCreateSchema          = "urn:conn:schema:v1:project-create"
 	ProjectMembershipSchema      = "urn:conn:schema:v1:project-membership"
+	ProjectMemberListSchema      = "urn:conn:schema:v1:project-member-list"
 	ObjectiveSchema              = "urn:conn:schema:v1:objective"
 	ObjectiveRevisionInputSchema = "urn:conn:schema:v1:objective-revision-input"
 	BlueprintRevisionSchema      = "urn:conn:schema:v1:blueprint-revision"
 	BlueprintRevisionViewSchema  = "urn:conn:schema:v1:blueprint-revision-view"
 	BlueprintProposalSchema      = "urn:conn:schema:v1:blueprint-proposal"
 	CharterDecisionSchema        = "urn:conn:schema:v1:charter-decision"
+	CharterRejectionSchema       = "urn:conn:schema:v1:charter-rejection"
+	ProjectMemberAddSchema       = "urn:conn:schema:v1:project-member-add"
+	ProjectStatusSchema          = "urn:conn:schema:v1:project-status"
+	CharterViewSchema            = "urn:conn:schema:v1:charter-view"
 	EventEnvelopeSchema          = "urn:conn:schema:v1:event-envelope"
 )
 
@@ -25,6 +31,19 @@ type Project struct {
 }
 
 func (Project) SchemaID() string { return ProjectSchema }
+
+// ProjectList is the projects visible to the authenticated human.
+type ProjectList struct {
+	Projects []ProjectListEntry `json:"projects"`
+}
+
+func (ProjectList) SchemaID() string { return ProjectListSchema }
+
+// ProjectListEntry pairs one visible Project with the caller's role in it.
+type ProjectListEntry struct {
+	Project Project `json:"project"`
+	Role    Role    `json:"role"`
+}
 
 // ProjectCreate is the human-authored input for creating a Project.
 type ProjectCreate struct {
@@ -44,6 +63,20 @@ type ProjectMembership struct {
 }
 
 func (ProjectMembership) SchemaID() string { return ProjectMembershipSchema }
+
+// ProjectMemberList is the people and roles visible to a Project member.
+type ProjectMemberList struct {
+	ProjectID uuid.UUID       `json:"project_id"`
+	Members   []ProjectMember `json:"members"`
+}
+
+func (ProjectMemberList) SchemaID() string { return ProjectMemberListSchema }
+
+// ProjectMember pairs a Project membership with its human-facing identity.
+type ProjectMember struct {
+	Human      Human             `json:"human"`
+	Membership ProjectMembership `json:"membership"`
+}
 
 // Objective is one immutable revision of a narrative Objective.
 type Objective struct {
@@ -162,3 +195,88 @@ type CharterDecision struct {
 }
 
 func (CharterDecision) SchemaID() string { return CharterDecisionSchema }
+
+// CharterRejection is the human-authored rationale for rejecting one's own
+// CellCharter.
+type CharterRejection struct {
+	Rationale string `json:"rationale"`
+}
+
+func (CharterRejection) SchemaID() string { return CharterRejectionSchema }
+
+// ProjectMemberAdd names an authenticated human the owner adds as a member.
+type ProjectMemberAdd struct {
+	HumanID uuid.UUID `json:"human_id"`
+}
+
+func (ProjectMemberAdd) SchemaID() string { return ProjectMemberAddSchema }
+
+// ProjectStatus is one member's view of a Project's coordination state.
+type ProjectStatus struct {
+	Project    Project            `json:"project"`
+	Role       Role               `json:"role"`
+	Objectives []ObjectiveSummary `json:"objectives"`
+	Blueprints []BlueprintSummary `json:"blueprints"`
+}
+
+func (ProjectStatus) SchemaID() string { return ProjectStatusSchema }
+
+// ObjectiveSummary identifies an Objective's latest revision.
+type ObjectiveSummary struct {
+	ObjectiveID     uuid.UUID `json:"objective_id"`
+	CurrentRevision int       `json:"current_revision"`
+}
+
+// BlueprintSummary lists a Blueprint's revisions in force: the active one,
+// if any, and the latest one when it differs, in ascending order.
+type BlueprintSummary struct {
+	BlueprintID     uuid.UUID         `json:"blueprint_id"`
+	CurrentRevision int               `json:"current_revision"`
+	Revisions       []RevisionSummary `json:"revisions"`
+}
+
+// RevisionSummary shows one BlueprintRevision's ratification progress.
+type RevisionSummary struct {
+	Revision          int             `json:"revision"`
+	Status            BlueprintStatus `json:"status"`
+	ObjectiveID       uuid.UUID       `json:"objective_id"`
+	ObjectiveRevision int             `json:"objective_revision"`
+	Cells             []CellSummary   `json:"cells"`
+}
+
+// CellSummary shows one charter's accountable human and decision.
+type CellSummary struct {
+	CellID             uuid.UUID    `json:"cell_id"`
+	AccountableHumanID uuid.UUID    `json:"accountable_human_id"`
+	Title              string       `json:"title"`
+	Decision           CellDecision `json:"decision"`
+}
+
+// CellDecision is a charter's decision state within one revision.
+type CellDecision string
+
+const (
+	CellPending  CellDecision = "pending"
+	CellAccepted CellDecision = "accept"
+	CellRejected CellDecision = "reject"
+)
+
+// CharterView is the reading human's own charters in one BlueprintRevision
+// in force. The human comes from the session, never from input.
+type CharterView struct {
+	HumanID           uuid.UUID       `json:"human_id"`
+	BlueprintID       uuid.UUID       `json:"blueprint_id"`
+	Revision          int             `json:"revision"`
+	Status            BlueprintStatus `json:"status"`
+	ObjectiveID       uuid.UUID       `json:"objective_id"`
+	ObjectiveRevision int             `json:"objective_revision"`
+	Charters          []OwnCharter    `json:"charters"`
+}
+
+func (CharterView) SchemaID() string { return CharterViewSchema }
+
+// OwnCharter is one of the reading human's charters and its decision.
+type OwnCharter struct {
+	Charter  CellCharter  `json:"charter"`
+	Decision CellDecision `json:"decision"`
+}

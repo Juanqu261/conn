@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:charter-rejection",
+  "title": "Charter rejection input",
+  "description": "Human-authored rationale for rejecting one's own CellCharter. The blueprint, revision, and cell come from the request path; the human comes from the session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rationale"],
+  "properties": {
+    "rationale": { "$ref": "urn:conn:schema:v1:common#/$defs/rationale" }
+  }
+}

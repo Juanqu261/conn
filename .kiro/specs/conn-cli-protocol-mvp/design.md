@@ -60,11 +60,11 @@ internal/httpclient      CLI and MCP backend client
 internal/mcp             official MCP SDK adapter and read-only tools
 internal/postgres        pgx repositories, transactions, projections, and events
 internal/migrations      embedded Conn database migrations and version checks
-internal/protocol        generated or approved protocol model boundary
+internal/protocol        handwritten protocol types verified against the schemas
 internal/contracts       JSON Schema compilation and validation
 ```
 
-The exact generated-model package is blocked on the model-generation decision described below. No package may create independent hand-maintained copies of canonical protocol records.
+Protocol types live only in `internal/protocol` (decision 0033). They are handwritten Go types held to the canonical schemas by a conformance test over the shared fixtures. No other package may create its own copy of a canonical protocol record.
 
 ## Canonical contracts
 
@@ -129,7 +129,6 @@ Required content:
 - `project_id` UUIDv7;
 - positive integer `revision`;
 - exact `objective_id` and `objective_revision`;
-- `status` with `proposed`, `active`, or `rejected`;
 - `proposed_by_human_id`;
 - `created_at`;
 - complete `cell_charters` array.
@@ -183,6 +182,8 @@ Decision 0009 intentionally deferred model generation. The implementation sequen
 4. Ask the project owner to approve a generation strategy.
 5. Record that decision before creating protocol models.
 
+Decision 0033 resolved this gate: protocol types are handwritten Go types in `internal/protocol`, held to the schemas by one conformance test over the shared fixtures. TypeScript models remain deferred.
+
 Untyped maps or generic JSON values must not spread beyond schema-validation and persistence-envelope boundaries.
 
 ## Authentication flow
@@ -229,9 +230,11 @@ conn project create --file <project.json>
 conn project member add --project <uuid> --human <uuid>
 
 conn objective create --project <uuid> --file <objective.json>
+conn objective revise --project <uuid> --objective <uuid> --expected-revision <n> --file <objective.json>
 conn objective show --project <uuid> --objective <uuid> --revision <n>
 
 conn blueprint propose --project <uuid> --file <blueprint.json>
+conn blueprint revise --project <uuid> --blueprint <uuid> --expected-revision <n> --file <blueprint.json>
 conn blueprint show --project <uuid> --blueprint <uuid> --revision <n>
 
 conn charter accept --project <uuid> --blueprint <uuid> --revision <n> --cell <uuid>
@@ -246,13 +249,16 @@ conn server
 
 Secrets are never accepted as command-line flags. File inputs are bounded, parsed once, validated locally, and sent to the backend. The backend repeats validation and application policy checks.
 
+`--file -` reads the document from standard input. Structured commands accept `--json` and print the API envelope on standard output. Exit codes are stable: 0 success, 1 failure, 2 usage or invalid input, 3 authentication, 4 not found or not permitted, 5 conflict, 6 server unavailable, 130 interrupted. Human output replaces control characters in untrusted text and labels every non-active blueprint revision as unapproved.
+
 Cobra commands only parse input, select output mode, invoke an application or HTTP-client operation, and render the result.
 
 ## HTTP API
 
-Proposed first-slice endpoints:
+Implemented first-slice endpoints:
 
 ```text
+GET    /v1/auth/github/client
 POST   /v1/auth/github/exchange
 DELETE /v1/session
 GET    /v1/humans/me
@@ -262,9 +268,11 @@ GET    /v1/projects/{project_id}
 POST   /v1/projects/{project_id}/members
 
 POST   /v1/projects/{project_id}/objectives
+POST   /v1/projects/{project_id}/objectives/{objective_id}/revisions?expected_revision=<n>
 GET    /v1/projects/{project_id}/objectives/{objective_id}/revisions/{revision}
 
 POST   /v1/projects/{project_id}/blueprints
+POST   /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions?expected_revision=<n>
 GET    /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}
 POST   /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/accept
 POST   /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/reject
@@ -276,9 +284,51 @@ GET    /healthz
 GET    /readyz
 ```
 
-Protected routes authenticate the Conn bearer token and then authorize project membership. A non-member response does not distinguish missing from forbidden project resources.
+Protected routes authenticate the Conn bearer token. The application then authorizes project membership and role inside the same transaction as the operation, so authorization cannot drift from the state it guards. A non-member response does not distinguish missing from forbidden project resources, and a malformed path ID answers the same `404 not_found`.
 
 Mutation requests carry an expected revision where they modify versioned state. Stale revisions return `409 Conflict`. Client-generated UUIDv7 entity IDs make safe retries possible; idempotency behavior must compare the existing entity and reject conflicting reuse.
+
+Request bodies:
+
+| Route                                      | Body schema                |
+| ------------------------------------------ | -------------------------- |
+| `POST /v1/projects`                        | `project-create`           |
+| `POST .../members`                         | `project-member-add`       |
+| `POST .../objectives` and its `/revisions` | `objective-revision-input` |
+| `POST .../blueprints` and its `/revisions` | `blueprint-proposal`       |
+| `POST .../cells/{cell_id}/reject`          | `charter-rejection`        |
+| `POST .../cells/{cell_id}/accept`          | none                       |
+
+Successful `POST` routes return `201`, including idempotent repeats, which return the stored record.
+
+Objective and Blueprint creation and revision use separate routes:
+
+- `POST .../objectives` and `POST .../blueprints` create revision 1. Repeating the same input returns the stored revision; reusing the ID for different content returns `409 id_conflict`.
+- `POST .../objectives/{objective_id}/revisions` and `POST .../blueprints/{blueprint_id}/revisions` append the next revision from the same input document. The required `expected_revision` query parameter is the latest revision the author saw and must be at least 1. The body's ID must equal the path value. A stale expectation returns `409 stale_revision`. The expected revision stays outside the document, as the input schemas specify.
+
+`GET .../status` returns `project-status`: the Project, the reader's role, each Objective's current revision, and each Blueprint's revisions in force (the active revision and the latest one when it differs) with per-cell decisions. `GET .../events` returns an array of `event-envelope` documents; `after` defaults to 0 and `limit` to 100, at most 500.
+
+### Error mapping
+
+| Application outcome                                        | HTTP status | Code              |
+| ---------------------------------------------------------- | ----------- | ----------------- |
+| Missing session                                            | 401         | `unauthenticated` |
+| Missing resource, or the actor is not a project member     | 404         | `not_found`       |
+| Member attempts an owner-only or another human's operation | 403         | `forbidden`       |
+| Client-generated ID reused for different content           | 409         | `id_conflict`     |
+| Expected revision is not current                           | 409         | `stale_revision`  |
+| Charter already has a different decision                   | 409         | `charter_decided` |
+| Schema or application validation failure                   | 422         | `invalid_input`   |
+
+Transport failures before the application runs:
+
+| Request problem                     | HTTP status | Code                     |
+| ----------------------------------- | ----------- | ------------------------ |
+| Body is not `application/json`      | 415         | `unsupported_media_type` |
+| Body exceeds 1 MiB                  | 413         | `request_too_large`      |
+| Body is not one valid JSON document | 400         | `invalid_json`           |
+
+`invalid_input` errors carry an optional `pointer` with the JSON Pointer of the offending input field, omitted when the problem is a request parameter or the document root.
 
 ### Response shape
 
@@ -302,7 +352,7 @@ Errors use a stable code and safe message without internal details or secrets:
 }
 ```
 
-Exact error codes become contract fixtures before handler implementation.
+Exact error codes are listed in the error mapping tables above.
 
 ## MCP tools
 
@@ -317,22 +367,27 @@ Use the official Go MCP SDK over stdio. Initial tools are read-only:
 
 MCP handlers call the same backend HTTP client used by CLI read commands. They do not access PostgreSQL directly.
 
+The project comes from `project_id` tool input, else the `CONN_PROJECT` variable in the Kiro MCP configuration. Tool results use the API envelope, with a one-line summary that says plainly when a revision is unapproved. `read_my_charter` returns the `charter-view` read model, composed from `GET /v1/humans/me`, project status, and the revision snapshot, so no new backend route is needed. Tool input schemas reject unknown properties, so `human_id` cannot be passed.
+
 ## Application lifecycle
 
 ### Objective
 
-- Creation produces revision 1.
-- Later changes append revisions and require the previous expected revision.
+- Creation produces revision 1 through the create route.
+- Later changes append revisions through the revisions route and require the previous expected revision.
 - Revisions are immutable.
 
 ### Blueprint
 
-- Proposal produces an immutable `proposed` revision.
+- Only the project owner proposes (decision 0027). Proposal produces an immutable `proposed` revision. Status is served beside the snapshot, never inside it.
 - It references an exact Objective revision and includes all charter snapshots.
 - Each accountable human may accept or reject only their own charter.
 - The final required acceptance changes the BlueprintRevision projection to `active` in the same transaction as acceptance and event append.
 - Rejection changes the projection to `rejected` and retains the decision.
 - Charter changes produce another BlueprintRevision.
+- A blueprint has at most one `active` revision and one `proposed` revision. The active revision stays in force while a replacement is reviewed, so work is never left without a ratified partition.
+- Proposing a new revision marks a pending proposal `superseded`. Activating a revision marks the previous active one `superseded`. Both happen in the same transaction as the triggering change.
+- Status moves only from `proposed` to `active`, `rejected`, or `superseded`, and from `active` to `superseded`.
 
 ## PostgreSQL design
 

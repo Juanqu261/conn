@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-list",
+  "title": "Project list",
+  "description": "Projects visible to the authenticated human, with that human's role in each project.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projects"],
+  "properties": {
+    "projects": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/projectEntry" }
+    }
+  },
+  "$defs": {
+    "projectEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "role"],
+      "properties": {
+        "project": { "$ref": "urn:conn:schema:v1:project" },
+        "role": { "enum": ["owner", "member"] }
+      }
+    }
+  }
+}

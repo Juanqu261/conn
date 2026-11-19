@@ -67,7 +67,9 @@ type Error struct {
 func (Error) SchemaID() string { return ErrorSchema }
 
 // ErrorDetail carries a stable code and a safe human-readable message.
+// Pointer locates the offending request field of an invalid_input error.
 type ErrorDetail struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Pointer string `json:"pointer,omitempty"`
 }

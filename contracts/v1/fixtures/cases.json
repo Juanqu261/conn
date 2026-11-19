@@ -1271,6 +1271,247 @@
           "message": "Missing."
         }
       }
+    },
+    {
+      "name": "error accepts a pointer to the offending input field",
+      "schema": "urn:conn:schema:v1:error",
+      "valid": true,
+      "document": {
+        "error": {
+          "code": "invalid_input",
+          "message": "Key-point key \"latency\" is used more than once.",
+          "pointer": "/key_points/1/key"
+        }
+      }
+    },
+    {
+      "name": "error rejects a pointer that is not a JSON Pointer",
+      "schema": "urn:conn:schema:v1:error",
+      "valid": false,
+      "at": "/error/pointer",
+      "document": {
+        "error": {
+          "code": "invalid_input",
+          "message": "Invalid key.",
+          "pointer": "key_points.1.key"
+        }
+      }
+    },
+    {
+      "name": "project member addition accepts a human ID",
+      "schema": "urn:conn:schema:v1:project-member-add",
+      "valid": true,
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b"
+      }
+    },
+    {
+      "name": "project member addition rejects a server-assigned role",
+      "schema": "urn:conn:schema:v1:project-member-add",
+      "valid": false,
+      "at": "",
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "role": "owner"
+      }
+    },
+    {
+      "name": "charter rejection accepts a rationale",
+      "schema": "urn:conn:schema:v1:charter-rejection",
+      "valid": true,
+      "document": {
+        "rationale": "Refunds belong to the order service."
+      }
+    },
+    {
+      "name": "charter rejection rejects a blank rationale",
+      "schema": "urn:conn:schema:v1:charter-rejection",
+      "valid": false,
+      "at": "/rationale",
+      "document": {
+        "rationale": "   "
+      }
+    },
+    {
+      "name": "project status accepts an active revision with a pending successor",
+      "schema": "urn:conn:schema:v1:project-status",
+      "valid": true,
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "created_at": "2026-11-20T09:00:00Z"
+        },
+        "role": "member",
+        "objectives": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "current_revision": 1
+          }
+        ],
+        "blueprints": [
+          {
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "current_revision": 2,
+            "revisions": [
+              {
+                "revision": 1,
+                "status": "active",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 1,
+                "cells": [
+                  {
+                    "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                    "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                    "title": "Payment gateway",
+                    "decision": "accept"
+                  }
+                ]
+              },
+              {
+                "revision": 2,
+                "status": "proposed",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 1,
+                "cells": [
+                  {
+                    "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                    "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                    "title": "Payment gateway",
+                    "decision": "pending"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "charter view accepts one accepted charter in an active revision",
+      "schema": "urn:conn:schema:v1:charter-view",
+      "valid": true,
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "revision": 1,
+        "status": "active",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "charters": [
+          {
+            "charter": {
+              "cell_id": "019a8f00-0004-7000-8000-000000000002",
+              "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+              "title": "Order service",
+              "overview_markdown": "Own order state.",
+              "dependencies": [
+                {
+                  "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                  "summary": "Charges through the gateway."
+                }
+              ]
+            },
+            "decision": "accept"
+          }
+        ]
+      }
+    },
+    {
+      "name": "charter view rejects a view with no charters",
+      "schema": "urn:conn:schema:v1:charter-view",
+      "valid": false,
+      "at": "/charters",
+      "document": {
+        "human_id": "019a8f00-0000-7000-8000-00000000000b",
+        "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+        "revision": 1,
+        "status": "active",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "charters": []
+      }
+    },
+    {
+      "name": "project status rejects a superseded revision in force",
+      "schema": "urn:conn:schema:v1:project-status",
+      "valid": false,
+      "at": "/blueprints/0/revisions/0/status",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "created_at": "2026-11-20T09:00:00Z"
+        },
+        "role": "owner",
+        "objectives": [],
+        "blueprints": [
+          {
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "current_revision": 1,
+            "revisions": [
+              {
+                "revision": 1,
+                "status": "superseded",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 1,
+                "cells": [
+                  {
+                    "cell_id": "019a8f00-0004-7000-8000-000000000001",
+                    "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                    "title": "Payment gateway",
+                    "decision": "pending"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "project list accepts visible projects and roles",
+      "schema": "urn:conn:schema:v1:project-list",
+      "valid": true,
+      "document": {
+        "projects": [
+          {
+            "project": {
+              "project_id": "019a8f00-0001-7000-8000-000000000001",
+              "name": "Checkout reliability",
+              "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+              "created_at": "2026-11-20T09:00:00Z"
+            },
+            "role": "owner"
+          }
+        ]
+      }
+    },
+    {
+      "name": "project member list accepts named member views",
+      "schema": "urn:conn:schema:v1:project-member-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "members": [
+          {
+            "human": {
+              "human_id": "019a8f00-0000-7000-8000-00000000000a",
+              "github_user_id": 1,
+              "github_login": "alice"
+            },
+            "membership": {
+              "project_id": "019a8f00-0001-7000-8000-000000000001",
+              "human_id": "019a8f00-0000-7000-8000-00000000000a",
+              "role": "owner",
+              "added_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+              "added_at": "2026-11-20T09:00:00Z"
+            }
+          }
+        ]
+      }
     }
   ]
 }

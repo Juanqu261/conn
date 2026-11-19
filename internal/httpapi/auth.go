@@ -29,6 +29,7 @@ func authenticated(auth *application.Auth, log *slog.Logger, next func(http.Resp
 			internalError(w, log, "authenticate", err)
 			return
 		}
+		setActor(r, session.Human.HumanID)
 		next(w, r, session)
 	}
 }

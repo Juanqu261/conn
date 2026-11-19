@@ -112,7 +112,7 @@ func newWhoAmICommand(deps Dependencies, streams Streams) *cobra.Command {
 		}
 		human, source, err := service.WhoAmI(cmd.Context())
 		if source == credentials.SourceEnv && httpclient.IsCode(err, "unauthenticated") {
-			return fmt.Errorf("the session in %s has expired or was revoked. Unset it or replace it with a current session", credentials.TokenEnv)
+			return hint(err, "the session in "+credentials.TokenEnv+" has expired or was revoked. Unset it or replace it with a current session")
 		}
 		if err != nil {
 			return explain(err)
@@ -164,11 +164,12 @@ func renderChecks(out io.Writer, checks []account.Check) bool {
 	return healthy
 }
 
-// explain adds the next step to errors a human can fix.
+// explain adds the next step to errors a human can fix. The original error
+// stays in the chain, so exit classification still sees it.
 func explain(err error) error {
 	switch {
 	case errors.Is(err, credentials.ErrNotLoggedIn):
-		return errors.New("not logged in. Run `conn login`")
+		return hint(err, "not logged in. Run `conn login`")
 	case errors.Is(err, credentials.ErrUnavailable):
 		return fmt.Errorf("%w.\nConn keeps its session only in the operating-system credential store and never in a plaintext file. "+
 			"On Linux, install and unlock a Secret Service provider such as GNOME Keyring. For headless use, set %s", err, credentials.TokenEnv)
@@ -177,7 +178,7 @@ func explain(err error) error {
 	case errors.Is(err, httpclient.ErrUnreachable):
 		return fmt.Errorf("%w. Check that the server is running, or set --server or %s", err, ServerURLEnv)
 	case httpclient.IsCode(err, "unauthenticated"):
-		return errors.New("the Conn session has expired or was revoked. Run `conn login`")
+		return hint(err, "the Conn session has expired or was revoked. Run `conn login`")
 	case httpclient.IsCode(err, "login_not_configured"):
 		return fmt.Errorf("%w Ask the server operator to set CONN_GITHUB_CLIENT_ID", err)
 	case errors.Is(err, github.ErrAccessDenied), errors.Is(err, github.ErrExpired):

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-member-add",
+  "title": "Project member addition input",
+  "description": "Owner-authored input naming an already authenticated Conn human to add as a member. The Project comes from the request path; the server assigns the role, the adder from the session, and the time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["human_id"],
+  "properties": {
+    "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+  }
+}

@@ -13,7 +13,13 @@
       "required": ["code", "message"],
       "properties": {
         "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
-        "message": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+        "message": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+        "pointer": {
+          "description": "JSON Pointer to the offending field of the request document. Present only on invalid_input errors that concern the document.",
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^/"
+        }
       }
     }
   }

@@ -31,6 +31,16 @@ type ServerConfig struct {
 	GitHubClientID string
 }
 
+// ProjectEnv selects the default project for `conn mcp`.
+const ProjectEnv = "CONN_PROJECT"
+
+// MCPConfig configures `conn mcp`.
+type MCPConfig struct {
+	ServerURL string
+	// DefaultProject is CONN_PROJECT; tool input may override it.
+	DefaultProject string
+}
+
 // Dependencies are the operations commands invoke. The process entry point
 // constructs them, so commands never build adapters themselves.
 type Dependencies struct {
@@ -45,36 +55,60 @@ type Dependencies struct {
 
 	// ServeMCP runs the Kiro MCP adapter over standard input and output
 	// until the client disconnects or ctx is cancelled.
-	ServeMCP func(ctx context.Context, log *slog.Logger) error
+	ServeMCP func(ctx context.Context, cfg MCPConfig, log *slog.Logger) error
 
 	// Account returns local account operations against serverURL.
 	Account func(serverURL string) (*account.Service, error)
+
+	// RunApp starts the interactive terminal application against serverURL.
+	RunApp func(ctx context.Context, in io.Reader, out, err io.Writer, serverURL string) error
 }
 
 // Execute runs one command line and returns the process exit code.
-// Diagnostics always go to streams.Err.
+// Results go to streams.Out; diagnostics always go to streams.Err.
 func Execute(ctx context.Context, args []string, streams Streams, deps Dependencies) int {
 	root := newRoot(streams, deps)
+	started := false
+	markStarted(root, &started)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
 	switch {
 	case err == nil:
-		return 0
+		return ExitOK
 	case errors.Is(err, errReported):
-		return 1
-	case errors.Is(err, context.Canceled):
+		return ExitFailure
+	}
+	code := exitCode(err, started)
+	if code == ExitInterrupted {
 		fmt.Fprintln(streams.Err, "conn: interrupted")
-		return 130
-	default:
-		fmt.Fprintf(streams.Err, "conn: %v\n", err)
-		return 1
+	} else {
+		fmt.Fprintf(streams.Err, "conn: %v\n", explain(err))
+	}
+	return code
+}
+
+// markStarted wraps every command's RunE to record that the command's own
+// logic began. Errors raised before that come from Cobra's parsing of
+// commands, arguments, and flags, and are usage errors.
+func markStarted(cmd *cobra.Command, started *bool) {
+	if run := cmd.RunE; run != nil {
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			*started = true
+			return run(c, args)
+		}
+	}
+	for _, child := range cmd.Commands() {
+		markStarted(child, started)
 	}
 }
 
 func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "conn",
-		Short:         "Coordinate human-agent work cells around a shared blueprint",
+		Use:   "conn",
+		Short: "Coordinate human-agent work cells around a shared blueprint",
+		Long: "Coordinate human-agent work cells around a shared blueprint.\n\n" +
+			"Structured commands accept --json and then print {\"data\": ..., \"as_of_event\": n}\n" +
+			"on standard output. Diagnostics always go to standard error.\n\n" + exitCodeHelp,
 		Version:       deps.Version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
@@ -89,11 +123,37 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newLoginCommand(deps, streams),
 		newLogoutCommand(deps, streams),
 		newWhoAmICommand(deps, streams),
+		newProjectCommand(deps, streams),
+		newObjectiveCommand(deps, streams),
+		newBlueprintCommand(deps, streams),
+		newCharterCommand(deps, streams),
+		newStatusCommand(deps, streams),
+		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
+		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
 	)
 	return root
+}
+
+func newAppCommand(deps Dependencies, streams Streams) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "app",
+		Short: "Open the interactive Conn terminal application",
+		Long: "Open Conn's keyboard-first terminal application. It reads your projects, plan, team,\n" +
+			"updates, and account from the Conn server. Use the regular conn commands for scripts.\n\n" +
+			"The app requires an interactive input and output terminal.",
+		Args: cobra.NoArgs,
+	}
+	server := serverFlag(cmd, deps)
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if deps.RunApp == nil {
+			return errors.New("the interactive Conn application is not configured")
+		}
+		return deps.RunApp(cmd.Context(), streams.In, streams.Out, streams.Err, server())
+	}
+	return cmd
 }
 
 func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
@@ -119,14 +179,23 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 }
 
 func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Run the Kiro MCP adapter over standard input and output",
 		Long: "Run the Kiro MCP adapter over standard input and output.\n\n" +
+			"It exposes read-only tools: read_objective, read_blueprint, read_my_charter,\n" +
+			"and check_updates. They act as the human signed in with conn login, or\n" +
+			"CONN_TOKEN when set.\n\n" +
+			"Environment:\n" +
+			"  CONN_SERVER_URL  Conn server URL\n" +
+			"  CONN_PROJECT     default project ID for tool calls\n\n" +
 			"Standard output carries only MCP messages; diagnostics go to standard error.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return deps.ServeMCP(cmd.Context(), logger)
-		},
 	}
+	server := serverFlag(cmd, deps)
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		project, _ := deps.LookupEnv(ProjectEnv)
+		return deps.ServeMCP(cmd.Context(), MCPConfig{ServerURL: server(), DefaultProject: project}, logger)
+	}
+	return cmd
 }

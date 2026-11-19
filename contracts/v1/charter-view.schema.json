@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:charter-view",
+  "title": "Charter view",
+  "description": "Read model of the reading human's own CellCharters in one BlueprintRevision in force, with the revision's status and each charter's decision. The human comes from the Conn session, never from input. Dependencies name cells whose charters belong to other humans; read them through blueprint-revision-view.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "human_id",
+    "blueprint_id",
+    "revision",
+    "status",
+    "objective_id",
+    "objective_revision",
+    "charters"
+  ],
+  "properties": {
+    "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "status": {
+      "description": "Only an active revision is approved.",
+      "enum": ["proposed", "active", "rejected"]
+    },
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "charters": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/ownCharter" }
+    }
+  },
+  "$defs": {
+    "ownCharter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["charter", "decision"],
+      "properties": {
+        "charter": { "$ref": "urn:conn:schema:v1:blueprint-revision#/$defs/cellCharter" },
+        "decision": { "enum": ["pending", "accept", "reject"] }
+      }
+    }
+  }
+}
