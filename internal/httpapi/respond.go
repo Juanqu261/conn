@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Juanqu261/conn/internal/application"
 	"github.com/Juanqu261/conn/internal/contracts"
@@ -87,7 +88,15 @@ func writeEnvelope(w http.ResponseWriter, status int, data []byte, asOfEvent *in
 func writeProblem(w http.ResponseWriter, log *slog.Logger, err error) {
 	var invalid *application.InvalidError
 	var schemaErr *contracts.ValidationError
+	var objectiveBlueprint *application.ObjectiveBlueprintError
 	switch {
+	case errors.As(err, &objectiveBlueprint):
+		writeError(w, log, http.StatusConflict, "objective_has_blueprint", fmt.Sprintf(
+			"Objective %s already has blueprint %s at revision %d. Propose the new plan as revision %d of that blueprint.",
+			objectiveBlueprint.ObjectiveID, objectiveBlueprint.BlueprintID, objectiveBlueprint.CurrentRevision, objectiveBlueprint.CurrentRevision+1))
+	case errors.Is(err, application.ErrObjectiveHasBlueprint):
+		writeError(w, log, http.StatusConflict, "objective_has_blueprint",
+			"This objective already has a blueprint. Read the project status and propose the new plan as that blueprint's next revision.")
 	case errors.As(err, &invalid):
 		writeInvalid(w, log, invalid.Message, invalid.Pointer)
 	case errors.As(err, &schemaErr):
@@ -125,8 +134,10 @@ func writeSchemaError(w http.ResponseWriter, log *slog.Logger, err *contracts.Va
 
 func writeInvalid(w http.ResponseWriter, log *slog.Logger, message, pointer string) {
 	writeErrorDetail(w, log, http.StatusUnprocessableEntity, protocol.ErrorDetail{
-		Code:    "invalid_input",
-		Message: truncate(message, maxMessageRunes),
+		Code: "invalid_input",
+		// Schema messages quote the rejected value. Spell out U+0000, which
+		// an error message cannot carry.
+		Message: truncate(strings.ReplaceAll(message, "\x00", `\u0000`), maxMessageRunes),
 		Pointer: pointer,
 	})
 }

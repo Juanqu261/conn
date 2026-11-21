@@ -39,12 +39,10 @@ func pickBlueprint(status protocol.ProjectStatus, raw string) (protocol.Blueprin
 			return protocol.BlueprintSummary{}, err
 		}
 	}
-	ids := make([]string, 0, len(status.Blueprints))
 	for _, b := range status.Blueprints {
 		if b.BlueprintID == id {
 			return b, nil
 		}
-		ids = append(ids, b.BlueprintID.String())
 	}
 	switch {
 	case raw != "":
@@ -54,7 +52,7 @@ func pickBlueprint(status protocol.ProjectStatus, raw string) (protocol.Blueprin
 	case len(status.Blueprints) == 0:
 		return protocol.BlueprintSummary{}, fmt.Errorf("the project has no blueprint yet")
 	}
-	return protocol.BlueprintSummary{}, fmt.Errorf("the project has %d blueprints; pass blueprint_id, one of: %s", len(ids), strings.Join(ids, ", "))
+	return protocol.BlueprintSummary{}, fmt.Errorf("the project has %d blueprints; pass blueprint_id, one of: %s", len(status.Blueprints), describeBlueprints(status.Blueprints))
 }
 
 // pickInForce selects a revision in force: the requested one, else the
@@ -81,6 +79,67 @@ func pickInForce(status protocol.ProjectStatus, in blueprintInput) (protocol.Blu
 		}
 	}
 	return blueprint, blueprint.Revisions[len(blueprint.Revisions)-1], nil
+}
+
+// pickMyInForce selects the revision in force for read_my_charter. Each
+// Objective has its own blueprint, so without blueprint_id it looks only at
+// the blueprints where the human has a charter. Without a revision it takes
+// the active revision when it includes the human, else the newest that does.
+func pickMyInForce(status protocol.ProjectStatus, in blueprintInput, me uuid.UUID) (protocol.BlueprintSummary, protocol.RevisionSummary, error) {
+	if in.BlueprintID == "" && len(status.Blueprints) > 1 {
+		var mine []protocol.BlueprintSummary
+		for _, b := range status.Blueprints {
+			for _, r := range b.Revisions {
+				if includes(r, me) {
+					mine = append(mine, b)
+					break
+				}
+			}
+		}
+		switch len(mine) {
+		case 0:
+			return protocol.BlueprintSummary{}, protocol.RevisionSummary{}, fmt.Errorf(
+				"you have no charter in any of the project's %d blueprints. Use read_blueprint with blueprint_id to see who is accountable for each cell",
+				len(status.Blueprints))
+		case 1:
+			in.BlueprintID = mine[0].BlueprintID.String()
+		default:
+			return protocol.BlueprintSummary{}, protocol.RevisionSummary{}, fmt.Errorf(
+				"you have charters in %d blueprints; pass blueprint_id, one of: %s", len(mine), describeBlueprints(mine))
+		}
+	}
+	blueprint, revision, err := pickInForce(status, in)
+	if err != nil || in.Revision != 0 || includes(revision, me) {
+		return blueprint, revision, err
+	}
+	for i := len(blueprint.Revisions) - 1; i >= 0; i-- {
+		if includes(blueprint.Revisions[i], me) {
+			return blueprint, blueprint.Revisions[i], nil
+		}
+	}
+	return blueprint, revision, nil
+}
+
+func includes(revision protocol.RevisionSummary, human uuid.UUID) bool {
+	for _, cell := range revision.Cells {
+		if cell.AccountableHumanID == human {
+			return true
+		}
+	}
+	return false
+}
+
+// describeBlueprints names each blueprint with the Objective it divides.
+func describeBlueprints(blueprints []protocol.BlueprintSummary) string {
+	names := make([]string, 0, len(blueprints))
+	for _, b := range blueprints {
+		name := b.BlueprintID.String()
+		if len(b.Revisions) > 0 {
+			name += fmt.Sprintf(" (objective %s)", b.Revisions[0].ObjectiveID)
+		}
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // newerRevision returns a revision in force newer than revision, if any.

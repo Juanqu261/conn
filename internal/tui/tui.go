@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -162,6 +163,17 @@ type actionDone struct {
 	err     error
 }
 
+// revisionBaseLoaded carries the cells of the revision a new blueprint
+// revision starts from.
+type revisionBaseLoaded struct {
+	cells []protocol.CellCharter
+	err   error
+}
+
+// submitMarkdown finishes a multi-line Markdown field, where Enter starts a
+// new line.
+const submitMarkdown = "ctrl+s"
+
 type model struct {
 	clientFactory func() (*httpclient.Client, error)
 	ctx           context.Context
@@ -177,24 +189,31 @@ type model struct {
 	projectList list.Model
 	selector    list.Model
 	input       textinput.Model
+	area        textarea.Model // Markdown fields
 	section     section
 	screen      screen
+	submitted   screen // the review a write was confirmed from, reopened if the write fails
 	choosing    bool
 	loading     bool
 	help        bool
 	err         error
 	notice      string
+	formNote    string
 	width       int
 	height      int
 
+	projectDraftID     uuid.UUID // fixed per draft, so retrying a create cannot make a second project
 	projectName        string
 	memberID           uuid.UUID
 	objective          protocol.ObjectiveRevisionInput
 	objectiveMember    protocol.ProjectMember
 	blueprintObjective protocol.ObjectiveSummary
 	blueprintID        uuid.UUID
+	blueprintExpected  int // the Objective's blueprint revision to replace, or 0 for a new blueprint
 	blueprintCells     []protocol.CellCharter
 	cell               protocol.CellCharter
+	editingCell        int // index in blueprintCells of the cell being edited, or -1 for a new cell
+	cellCursor         int
 	selectedCharter    charterItem
 	charterView        protocol.BlueprintRevisionView
 	charterOutcome     protocol.CharterOutcome
@@ -210,7 +229,21 @@ func newModel(ctx context.Context, clientFactory func() (*httpclient.Client, err
 	selector.SetShowStatusBar(false)
 	input := textinput.New()
 	input.CharLimit = 4000
-	return model{ctx: ctx, clientFactory: clientFactory, projectList: projects, selector: selector, input: input, loading: true, width: 80, height: 24}
+	area := textarea.New()
+	area.ShowLineNumbers = false
+	area.MaxHeight = 0 // CharLimit bounds the text, not a row count
+	m := model{ctx: ctx, clientFactory: clientFactory, projectList: projects, selector: selector, input: input, area: area, loading: true, width: 80, height: 24, editingCell: -1}
+	m.sizeArea()
+	return m
+}
+
+func (m model) cardWidth() int { return min(100, max(34, m.width-6)) }
+
+// sizeArea fits the Markdown field inside a card: border and padding take
+// six columns, and the header, card title, and footer take about 14 rows.
+func (m *model) sizeArea() {
+	m.area.SetWidth(m.cardWidth() - 6)
+	m.area.SetHeight(max(3, m.height-14))
 }
 
 func (m model) Init() tea.Cmd { return loadProjects(m.ctx, m.clientFactory) }
@@ -230,6 +263,9 @@ func loadProjects(ctx context.Context, factory func() (*httpclient.Client, error
 	}
 }
 
+// recentEvents is how many of the latest project events Updates shows.
+const recentEvents = 20
+
 func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.UUID) tea.Cmd {
 	return func() tea.Msg {
 		status, err := client.Status(ctx, projectID)
@@ -240,7 +276,8 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
-		events, err := client.Events(ctx, projectID, 0, 20)
+		// The latest events, up to the state the status reflects.
+		events, err := client.Events(ctx, projectID, max(0, status.AsOfEvent-recentEvents), recentEvents)
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
@@ -248,9 +285,9 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 	}
 }
 
-func createProject(ctx context.Context, client *httpclient.Client, name string) tea.Cmd {
+func createProject(ctx context.Context, client *httpclient.Client, projectID uuid.UUID, name string) tea.Cmd {
 	return func() tea.Msg {
-		result, err := client.CreateProject(ctx, protocol.ProjectCreate{ProjectID: uuid.NewV7(), Name: strings.TrimSpace(name)})
+		result, err := client.CreateProject(ctx, protocol.ProjectCreate{ProjectID: projectID, Name: strings.TrimSpace(name)})
 		if err != nil {
 			return projectCreated{err: err}
 		}
@@ -260,15 +297,44 @@ func createProject(ctx context.Context, client *httpclient.Client, name string) 
 
 func (m model) selectedProjectID() uuid.UUID { return m.selected.Project.ProjectID }
 
+// multiline reports whether a form field is Markdown, edited in a
+// multi-line area where Enter starts a new line.
+func multiline(s screen) bool { return s == objectiveOverviewScreen || s == cellOverviewScreen }
+
 func (m model) startInput(next screen, prompt, placeholder string, value string) model {
 	m.screen, m.choosing, m.help, m.err = next, false, false, nil
+	if multiline(next) {
+		m.input.Blur()
+		m.area.Placeholder, m.area.CharLimit = placeholder, inputLimit(next)
+		m.area.SetValue(value)
+		m.area.Focus()
+		return m
+	}
+	m.area.Blur()
 	m.input.Prompt, m.input.Placeholder = prompt, placeholder
+	m.input.CharLimit = inputLimit(next)
 	m.input.SetValue(value)
 	m.input.Focus()
 	return m
 }
 
+// inputLimit is the longest value, in code points, that a form field's
+// contracts/v1 schema accepts, so drafts cannot fail on length after review.
+func inputLimit(s screen) int {
+	switch s {
+	case projectCreateScreen, objectiveTitleScreen, cellTitleScreen:
+		return 200 // common#/$defs/title
+	case memberEntryScreen:
+		return 36 // a canonical UUID
+	case charterRationaleScreen:
+		return 4000 // common#/$defs/rationale
+	default:
+		return 32768 // common#/$defs/markdown
+	}
+}
+
 func (m model) startProjectCreate() model {
+	m.projectDraftID = uuid.NewV7()
 	return m.startInput(projectCreateScreen, "Project name: ", "e.g. Checkout reliability", "")
 }
 
@@ -282,14 +348,94 @@ func (m model) startObjective() model {
 	return m.startInput(objectiveTitleScreen, "Objective title: ", "e.g. Deliver checkout reliability", "")
 }
 
+// blueprintFor returns the Blueprint that divides an Objective. An Objective
+// has at most one, and its in-force revisions all name that Objective.
+func blueprintFor(status protocol.ProjectStatus, objectiveID uuid.UUID) (protocol.BlueprintSummary, bool) {
+	for _, blueprint := range status.Blueprints {
+		for _, revision := range blueprint.Revisions {
+			if revision.ObjectiveID == objectiveID {
+				return blueprint, true
+			}
+		}
+	}
+	return protocol.BlueprintSummary{}, false
+}
+
+// chooseBlueprintObjective starts the cell set for an Objective. A new
+// blueprint starts empty. The next revision of an existing blueprint starts
+// from its latest revision's cells, so unchanged cells keep their IDs and
+// the fields this app does not edit.
+func (m model) chooseBlueprintObjective(objective protocol.ObjectiveSummary) (model, tea.Cmd) {
+	m.blueprintObjective, m.blueprintCells, m.cell = objective, nil, protocol.CellCharter{}
+	m.editingCell, m.cellCursor, m.formNote = -1, 0, ""
+	blueprint, ok := blueprintFor(m.status, objective.ObjectiveID)
+	if !ok {
+		m.blueprintID, m.blueprintExpected = uuid.NewV7(), 0
+		return m.chooseCellMember(), nil
+	}
+	m.blueprintID, m.blueprintExpected, m.loading, m.err = blueprint.BlueprintID, blueprint.CurrentRevision, true, nil
+	client, ctx, projectID := m.client, m.ctx, m.selectedProjectID()
+	return m, func() tea.Msg {
+		result, err := client.BlueprintRevision(ctx, projectID, blueprint.BlueprintID, blueprint.CurrentRevision)
+		return revisionBaseLoaded{cells: result.Data.BlueprintRevision.CellCharters, err: err}
+	}
+}
+
+// showCells returns to the draft's cell list.
+func (m model) showCells() model {
+	m.cell, m.editingCell, m.screen, m.err = protocol.CellCharter{}, -1, cellMoreScreen, nil
+	m.cellCursor = max(0, min(m.cellCursor, len(m.blueprintCells)-1))
+	return m
+}
+
+// chooseCellMember opens the member selector for the cell being drafted.
+func (m model) chooseCellMember() model {
+	n := len(m.blueprintCells) + 1
+	if m.editingCell >= 0 {
+		n = m.editingCell + 1
+	}
+	return m.chooseMember(cellMemberScreen, fmt.Sprintf("Accountable member selector for cell %d", n), m.cell.AccountableHumanID)
+}
+
+// removeCell drops the selected cell and every dependency on it, because a
+// dependency must name a cell of the same revision.
+func (m model) removeCell() model {
+	removed := m.blueprintCells[m.cellCursor]
+	cells := make([]protocol.CellCharter, 0, len(m.blueprintCells)-1)
+	dropped := 0
+	for i, cell := range m.blueprintCells {
+		if i == m.cellCursor {
+			continue
+		}
+		var kept []protocol.CellDependency
+		for _, dependency := range cell.Dependencies {
+			if dependency.CellID == removed.CellID {
+				dropped++
+				continue
+			}
+			kept = append(kept, dependency)
+		}
+		cell.Dependencies = kept
+		cells = append(cells, cell)
+	}
+	m.blueprintCells = cells
+	m.formNote = fmt.Sprintf("Removed cell %q.", clean(removed.Title))
+	if dropped > 0 {
+		m.formNote += fmt.Sprintf(" Also removed %d dependency on it from other cells.", dropped)
+	}
+	return m.showCells()
+}
+
 func (m model) startBlueprint() model {
-	m.blueprintID, m.blueprintCells, m.cell = uuid.NewV7(), nil, protocol.CellCharter{}
+	m.blueprintCells, m.cell, m.editingCell, m.formNote = nil, protocol.CellCharter{}, -1, ""
 	items := make([]list.Item, 0, len(m.status.Objectives))
 	for _, objective := range m.status.Objectives {
 		items = append(items, objectiveItem{objective})
 	}
 	m.selector.Title = "Objective selector for this blueprint"
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
 	m.screen, m.err = blueprintObjectiveScreen, nil
 	return m
 }
@@ -309,19 +455,55 @@ func (m model) startCharterDecision() model {
 		}
 	}
 	m.selector.Title = "Pending charter selector"
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
 	m.screen, m.err = charterPickScreen, nil
 	return m
 }
 
-func (m model) chooseMember(next screen, title string) model {
+// chooseMember opens the member selector with current, if set, selected.
+func (m model) chooseMember(next screen, title string, current uuid.UUID) model {
 	items := make([]list.Item, 0, len(m.members.Members))
 	for _, member := range m.members.Members {
 		items = append(items, memberItem{member})
 	}
 	m.selector.Title = title
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
+	for i, member := range m.members.Members {
+		if member.Human.HumanID == current {
+			m.selector.Select(i)
+		}
+	}
 	m.screen, m.err = next, nil
+	return m
+}
+
+// memberName shows a project member by GitHub login when known.
+func (m model) memberName(id uuid.UUID) string {
+	for _, member := range m.members.Members {
+		if member.Human.HumanID == id {
+			return "@" + clean(member.Human.GitHubLogin)
+		}
+	}
+	return id.String()
+}
+
+// confirm leaves a review screen to run its write. If the write fails, the
+// review reopens with the error and the draft intact.
+func (m model) confirm() model {
+	m.submitted, m.screen, m.loading, m.err = m.screen, normalScreen, true, nil
+	return m
+}
+
+func (m model) failed(err error) model {
+	m.loading, m.err = false, err
+	if m.submitted != normalScreen {
+		m.screen = m.submitted
+	}
+	m.submitted = normalScreen
 	return m
 }
 
@@ -331,6 +513,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.projectList.SetSize(max(30, msg.Width-4), max(8, msg.Height-7))
 		m.selector.SetSize(max(30, msg.Width-4), max(8, msg.Height-7))
+		m.sizeArea()
 		return m, nil
 	case projectsLoaded:
 		m.loading, m.err = false, msg.err
@@ -356,10 +539,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.choosing = len(msg.projects.Projects) > 1
 		return m, nil
 	case projectCreated:
-		m.loading, m.err = false, msg.err
 		if msg.err != nil {
-			return m, nil
+			return m.failed(msg.err), nil
 		}
+		m.submitted, m.err = normalScreen, nil
 		m.createdProject, m.loading, m.notice = msg.project.ProjectID, true, "Project created."
 		return m, loadProjects(m.ctx, m.clientFactory)
 	case projectLoaded:
@@ -376,12 +559,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedCharter, m.charterView, m.screen = msg.item, msg.view, charterActionScreen
 		return m, nil
 	case actionDone:
+		if msg.err != nil {
+			return m.failed(msg.err), nil
+		}
+		m.notice, m.screen, m.submitted, m.err = msg.message, normalScreen, normalScreen, nil
+		return m, loadProject(m.ctx, m.client, m.selectedProjectID())
+	case revisionBaseLoaded:
 		m.loading, m.err = false, msg.err
 		if msg.err != nil {
-			return m, nil
+			return m, nil // stays on the objective selector, which shows the error
 		}
-		m.notice, m.screen, m.loading = msg.message, normalScreen, true
-		return m, loadProject(m.ctx, m.client, m.selectedProjectID())
+		m.blueprintCells = append([]protocol.CellCharter(nil), msg.cells...)
+		return m.showCells(), nil
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -399,6 +588,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+	if m.client == nil {
+		// Not connected: nothing can be read or written, so only retry,
+		// help, and quit apply.
+		switch key {
+		case "q":
+			return m, tea.Quit
+		case "r", "enter":
+			m.loading, m.err = true, nil
+			return m, loadProjects(m.ctx, m.clientFactory)
+		case "esc":
+			m.err = nil
+		case "?":
+			m.help = !m.help
+		}
+		return m, nil
+	}
 	if m.choosing {
 		if key == "c" && !m.projectList.SettingFilter() {
 			return m.startProjectCreate(), nil
@@ -487,17 +692,24 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case memberConfirmScreen:
 			return m.startInput(memberEntryScreen, "Conn human UUID: ", "paste an already authenticated human ID", m.memberID.String()), nil
 		case objectiveOverviewScreen:
+			m.objective.OverviewMarkdown = m.area.Value() // going back keeps the draft
 			return m.startInput(objectiveTitleScreen, "Objective title: ", "e.g. Deliver checkout reliability", m.objective.Title), nil
 		case objectiveMemberScreen:
-			return m.startInput(objectiveOverviewScreen, "Markdown overview: ", "Describe the objective", m.objective.OverviewMarkdown), nil
+			return m.startInput(objectiveOverviewScreen, "", "Describe the objective in Markdown", m.objective.OverviewMarkdown), nil
 		case objectiveConfirmScreen:
-			return m.chooseMember(objectiveMemberScreen, "Accountable member selector"), nil
+			return m.chooseMember(objectiveMemberScreen, "Accountable member selector", m.objective.AccountableHumanID), nil
 		case cellMemberScreen:
-			m.screen = blueprintObjectiveScreen
-			return m, nil
+			// Back to the cells so far, or to the objective selector with
+			// its own items when there are none yet.
+			if len(m.blueprintCells) > 0 {
+				return m.showCells(), nil
+			}
+			return m.startBlueprint(), nil
 		case cellTitleScreen:
-			return m.chooseMember(cellMemberScreen, "Accountable member selector for this cell"), nil
+			m.cell.Title = strings.TrimSpace(m.input.Value())
+			return m.chooseCellMember(), nil
 		case cellOverviewScreen:
+			m.cell.OverviewMarkdown = m.area.Value()
 			return m.startInput(cellTitleScreen, "Cell title: ", "e.g. Documentation", m.cell.Title), nil
 		case blueprintConfirmScreen:
 			m.screen = cellMoreScreen
@@ -530,8 +742,8 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case projectConfirmScreen:
 		if key == "enter" {
-			m.screen, m.loading, m.err = normalScreen, true, nil
-			return m, createProject(m.ctx, m.client, m.projectName)
+			m = m.confirm()
+			return m, createProject(m.ctx, m.client, m.projectDraftID, m.projectName)
 		}
 	case memberEntryScreen:
 		if key == "enter" {
@@ -554,16 +766,16 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.objective.Title = strings.TrimSpace(m.input.Value())
-			return m.startInput(objectiveOverviewScreen, "Markdown overview: ", "Describe the objective", ""), nil
+			return m.startInput(objectiveOverviewScreen, "", "Describe the objective in Markdown", m.objective.OverviewMarkdown), nil
 		}
 	case objectiveOverviewScreen:
-		if key == "enter" {
-			if strings.TrimSpace(m.input.Value()) == "" {
+		if key == submitMarkdown {
+			if strings.TrimSpace(m.area.Value()) == "" {
 				m.err = errors.New("Enter a Markdown overview before continuing.")
 				return m, nil
 			}
-			m.objective.OverviewMarkdown = strings.TrimSpace(m.input.Value())
-			return m.chooseMember(objectiveMemberScreen, "Accountable member selector"), nil
+			m.objective.OverviewMarkdown = strings.TrimSpace(m.area.Value())
+			return m.chooseMember(objectiveMemberScreen, "Accountable member selector", m.objective.AccountableHumanID), nil
 		}
 	case objectiveMemberScreen:
 		if key == "enter" {
@@ -580,8 +792,7 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case blueprintObjectiveScreen:
 		if key == "enter" {
 			if item, ok := m.selector.SelectedItem().(objectiveItem); ok {
-				m.blueprintObjective = item.objective
-				return m.chooseMember(cellMemberScreen, "Accountable member selector for cell 1"), nil
+				return m.chooseBlueprintObjective(item.objective)
 			}
 		}
 		return m.updateSelector(msg)
@@ -589,7 +800,7 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key == "enter" {
 			if item, ok := m.selector.SelectedItem().(memberItem); ok {
 				m.cell.AccountableHumanID = item.member.Human.HumanID
-				return m.startInput(cellTitleScreen, "Cell title: ", "e.g. Documentation", ""), nil
+				return m.startInput(cellTitleScreen, "Cell title: ", "e.g. Documentation", m.cell.Title), nil
 			}
 		}
 		return m.updateSelector(msg)
@@ -600,27 +811,52 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.cell.Title = strings.TrimSpace(m.input.Value())
-			return m.startInput(cellOverviewScreen, "Cell Markdown overview: ", "Describe this human's boundary", ""), nil
+			return m.startInput(cellOverviewScreen, "", "Describe this human's boundary in Markdown", m.cell.OverviewMarkdown), nil
 		}
 	case cellOverviewScreen:
-		if key == "enter" {
-			if strings.TrimSpace(m.input.Value()) == "" {
+		if key == submitMarkdown {
+			if strings.TrimSpace(m.area.Value()) == "" {
 				m.err = errors.New("Enter a cell Markdown overview before continuing.")
 				return m, nil
 			}
-			m.cell.CellID, m.cell.OverviewMarkdown = uuid.NewV7(), strings.TrimSpace(m.input.Value())
-			m.blueprintCells = append(m.blueprintCells, m.cell)
-			m.cell, m.screen, m.err = protocol.CellCharter{}, cellMoreScreen, nil
-			return m, nil
+			m.cell.OverviewMarkdown = strings.TrimSpace(m.area.Value())
+			cells := append([]protocol.CellCharter(nil), m.blueprintCells...)
+			if m.editingCell >= 0 {
+				cells[m.editingCell], m.cellCursor = m.cell, m.editingCell // keeps the cell ID
+			} else {
+				m.cell.CellID = uuid.NewV7()
+				cells, m.cellCursor = append(cells, m.cell), len(cells)
+			}
+			m.blueprintCells = cells
+			return m.showCells(), nil
 		}
 	case cellMoreScreen:
-		if key == "a" {
-			return m.chooseMember(cellMemberScreen, fmt.Sprintf("Accountable member selector for cell %d", len(m.blueprintCells)+1)), nil
+		m.formNote = ""
+		switch key {
+		case "up", "k":
+			m.cellCursor = max(0, m.cellCursor-1)
+		case "down", "j":
+			m.cellCursor = min(len(m.blueprintCells)-1, m.cellCursor+1)
+		case "a":
+			m.cell, m.editingCell = protocol.CellCharter{}, -1
+			return m.chooseCellMember(), nil
+		case "e":
+			if len(m.blueprintCells) > 0 {
+				m.cell, m.editingCell = m.blueprintCells[m.cellCursor], m.cellCursor
+				return m.chooseCellMember(), nil
+			}
+		case "x":
+			if len(m.blueprintCells) > 0 {
+				return m.removeCell(), nil
+			}
+		case "enter":
+			if len(m.blueprintCells) == 0 {
+				m.err = errors.New("Add at least one cell before reviewing the proposal.")
+				return m, nil
+			}
+			m.screen, m.err = blueprintConfirmScreen, nil
 		}
-		if key == "enter" {
-			m.screen = blueprintConfirmScreen
-			return m, nil
-		}
+		return m, nil
 	case blueprintConfirmScreen:
 		if key == "enter" {
 			return m.submitBlueprint()
@@ -659,7 +895,11 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
+	if multiline(m.screen) {
+		m.area, cmd = m.area.Update(msg)
+	} else {
+		m.input, cmd = m.input.Update(msg)
+	}
 	m.err = nil
 	return m, cmd
 }
@@ -671,7 +911,7 @@ func (m model) updateSelector(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) submitAddMember() (tea.Model, tea.Cmd) {
-	m.screen, m.loading, m.err = normalScreen, true, nil
+	m = m.confirm()
 	return m, func() tea.Msg {
 		_, err := m.client.AddMember(m.ctx, m.selectedProjectID(), m.memberID)
 		return actionDone{"Member added.", err}
@@ -679,7 +919,7 @@ func (m model) submitAddMember() (tea.Model, tea.Cmd) {
 }
 
 func (m model) submitObjective() (tea.Model, tea.Cmd) {
-	m.screen, m.loading, m.err = normalScreen, true, nil
+	m = m.confirm()
 	input := m.objective
 	return m, func() tea.Msg {
 		_, err := m.client.CreateObjective(m.ctx, m.selectedProjectID(), input)
@@ -689,16 +929,22 @@ func (m model) submitObjective() (tea.Model, tea.Cmd) {
 
 func (m model) submitBlueprint() (tea.Model, tea.Cmd) {
 	proposal := protocol.BlueprintProposal{BlueprintID: m.blueprintID, ObjectiveID: m.blueprintObjective.ObjectiveID, ObjectiveRevision: m.blueprintObjective.CurrentRevision, CellCharters: m.blueprintCells}
-	m.screen, m.loading, m.err = normalScreen, true, nil
+	expected := m.blueprintExpected
+	m = m.confirm()
 	return m, func() tea.Msg {
-		_, err := m.client.ProposeBlueprint(m.ctx, m.selectedProjectID(), proposal)
+		var err error
+		if expected > 0 {
+			_, err = m.client.ReviseBlueprint(m.ctx, m.selectedProjectID(), expected, proposal)
+		} else {
+			_, err = m.client.ProposeBlueprint(m.ctx, m.selectedProjectID(), proposal)
+		}
 		return actionDone{"Blueprint proposal created. Assigned humans must decide their own charters.", err}
 	}
 }
 
 func (m model) submitCharterDecision() (tea.Model, tea.Cmd) {
 	item, outcome, rationale := m.selectedCharter, m.charterOutcome, m.rejectionRationale
-	m.screen, m.loading, m.err = normalScreen, true, nil
+	m = m.confirm()
 	return m, func() tea.Msg {
 		var err error
 		if outcome == protocol.CharterAccept {
@@ -723,6 +969,9 @@ func (m model) View() string {
 	}
 	if m.err != nil {
 		return m.header() + "\n\n" + m.card("Could not complete that action", errorStyle.Render(clean(m.err.Error()))) + "\n\n" + footerStyle.Render("  Esc back · r refresh · q quit") + "\n"
+	}
+	if m.client == nil {
+		return m.header() + "\n\n" + m.card("Not connected", "Conn could not load your projects, so nothing can be read or changed yet.\n\nCheck the server and your session with conn doctor, then press r to try again.") + "\n\n" + footerStyle.Render("  r retry · q quit") + "\n"
 	}
 	if m.choosing {
 		return m.header() + "\n\n" + m.projectList.View() + "\n" + footerStyle.Render("  Project picker: Up/down select · / filter · Enter open · c new project · Esc back · q quit") + "\n"
@@ -754,28 +1003,36 @@ func (m model) formView() string {
 	case objectiveTitleScreen:
 		title, body, footer = "Create objective: title", m.input.View(), "  Enter next · Esc cancel"
 	case objectiveOverviewScreen:
-		title, body, footer = "Create objective: Markdown overview", m.input.View(), "  Enter choose accountable member · Esc cancel"
+		title, body, footer = "Create objective: Markdown overview", m.area.View(), "  Ctrl+S choose accountable member · Enter new line · Esc back to title"
 	case objectiveMemberScreen:
-		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: Up/down select · / filter · Enter choose · Esc cancel") + "\n"
+		return m.selectorView("  Form selector: Up/down select · / filter · Enter choose · Esc back to overview")
 	case objectiveConfirmScreen:
-		title, body, footer = "Create this objective?", fmt.Sprintf("Title: %s\n\nMarkdown overview:\n%s\n\nAccountable human: @%s · %s", clean(m.objective.Title), clean(m.objective.OverviewMarkdown), clean(m.objectiveMember.Human.GitHubLogin), m.objective.AccountableHumanID), "  Enter create objective · Esc edit member"
+		title, body, footer = "Create this objective?", fmt.Sprintf("Title: %s\n\nMarkdown overview:\n%s\n\nAccountable human: @%s · %s", clean(m.objective.Title), cleanBlock(m.objective.OverviewMarkdown), clean(m.objectiveMember.Human.GitHubLogin), m.objective.AccountableHumanID), "  Enter create objective · Esc edit member"
 	case blueprintObjectiveScreen:
-		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: choose current objective · Enter choose · Esc cancel") + "\n"
+		return m.selectorView("  Form selector: choose current objective · Enter choose · Esc cancel")
 	case cellMemberScreen:
-		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: choose accountable member · Enter choose · Esc cancel") + "\n"
+		return m.selectorView("  Form selector: choose accountable member · Enter choose · Esc back")
 	case cellTitleScreen:
-		title, body, footer = "Add cell: title", m.input.View(), "  Enter next · Esc cancel blueprint"
+		title, body, footer = m.cellStep("title"), m.input.View(), "  Enter next · Esc back to member"
 	case cellOverviewScreen:
-		title, body, footer = "Add cell: Markdown overview", m.input.View(), "  Enter add cell · Esc cancel blueprint"
+		done := "add cell"
+		if m.editingCell >= 0 {
+			done = "save cell"
+		}
+		title, body, footer = m.cellStep("Markdown overview"), m.area.View(), "  Ctrl+S "+done+" · Enter new line · Esc back to title"
 	case cellMoreScreen:
-		title, body, footer = "Blueprint cells", m.cellsReview(), "  a add another cell · Enter review proposal · Esc cancel"
+		title, body = "Blueprint cells", m.cellsReview()
+		footer = "  a add cell · Enter review proposal · Esc cancel"
+		if len(m.blueprintCells) > 0 {
+			footer = "  Up/down select · e edit · x remove · a add cell · Enter review proposal · Esc cancel"
+		}
 	case blueprintConfirmScreen:
 		title, body, footer = "Propose this blueprint?", m.blueprintReview(), "  Enter propose blueprint · Esc edit cells"
 	case charterPickScreen:
 		if len(m.selector.Items()) == 0 {
 			title, body, footer = "No pending charter", "You have no assigned pending charters in a proposed blueprint.", "  Esc back"
 		} else {
-			return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Charter selector: Up/down select · / filter · Enter inspect · Esc back") + "\n"
+			return m.selectorView("  Charter selector: Up/down select · / filter · Enter inspect · Esc back")
 		}
 	case charterActionScreen:
 		title, body, footer = "Your pending charter", m.charterReview()+"\n\nOnly you can decide this charter. A decision is final for this revision.", "  a accept · x reject · Esc back"
@@ -796,6 +1053,23 @@ func (m model) formView() string {
 		body += "\n\n" + errorStyle.Render(clean(m.err.Error()))
 	}
 	return m.header() + "\n\n" + m.card(title, body) + "\n\n" + footerStyle.Render(footer) + "\n"
+}
+
+// selectorView shows a form selector with the last error, such as a failed
+// load after a choice.
+func (m model) selectorView(footer string) string {
+	view := m.header() + "\n\n" + m.selector.View() + "\n"
+	if m.err != nil {
+		view += errorStyle.Render("  "+clean(m.err.Error())) + "\n"
+	}
+	return view + footerStyle.Render(footer) + "\n"
+}
+
+func (m model) cellStep(field string) string {
+	if m.editingCell >= 0 {
+		return fmt.Sprintf("Edit cell %d: %s", m.editingCell+1, field)
+	}
+	return "Add cell: " + field
 }
 
 func (m model) normalFooter() string {
@@ -905,7 +1179,7 @@ func (m model) updates() string {
 	if len(m.events) == 0 {
 		return "Updates\n\nNo events have been recorded yet."
 	}
-	lines := []string{"Recent updates:"}
+	lines := []string{fmt.Sprintf("Latest updates, oldest first (project is at event %d):", m.asOfEvent)}
 	for _, event := range m.events {
 		lines = append(lines, fmt.Sprintf("  %d · %s · %s", event.EventSequence, event.EventType(), event.OccurredAt))
 	}
@@ -916,26 +1190,63 @@ func (m model) account() string {
 }
 func (m model) cellsReview() string {
 	lines := []string{fmt.Sprintf("Objective: %s revision %d", m.blueprintObjective.ObjectiveID, m.blueprintObjective.CurrentRevision)}
+	if m.blueprintExpected > 0 {
+		lines = append(lines, fmt.Sprintf("Revising blueprint %s: these cells replace the whole cell set of revision %d as revision %d.",
+			m.blueprintID, m.blueprintExpected, m.blueprintExpected+1))
+	}
+	if len(m.blueprintCells) == 0 {
+		lines = append(lines, "\nNo cells yet. Press a to add one.")
+	}
 	for i, cell := range m.blueprintCells {
-		lines = append(lines, fmt.Sprintf("\nCell %d: %s\nAccountable human: %s\n%s", i+1, clean(cell.Title), cell.AccountableHumanID, clean(cell.OverviewMarkdown)))
+		marker := "  "
+		if m.screen == cellMoreScreen && i == m.cellCursor {
+			marker = "> "
+		}
+		lines = append(lines, fmt.Sprintf("\n%sCell %d: %s\nAccountable human: %s\n%s", marker, i+1, clean(cell.Title), m.memberName(cell.AccountableHumanID), cleanBlock(cell.OverviewMarkdown)))
+		if kept := keptFields(cell); kept != "" {
+			lines = append(lines, "Kept as is (not editable here): "+kept)
+		}
+	}
+	if m.formNote != "" {
+		lines = append(lines, "\n"+m.formNote)
 	}
 	return strings.Join(lines, "\n")
 }
+
+// keptFields lists the charter fields the app carries into a revision
+// without editing them.
+func keptFields(cell protocol.CellCharter) string {
+	var parts []string
+	count := func(n int, singular, plural string) {
+		if n == 1 {
+			parts = append(parts, "1 "+singular)
+		} else if n > 1 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, plural))
+		}
+	}
+	count(len(cell.ObjectivePointRefs), "objective point reference", "objective point references")
+	count(len(cell.BoundaryPoints), "boundary point", "boundary points")
+	count(len(cell.Dependencies), "dependency", "dependencies")
+	return strings.Join(parts, ", ")
+}
 func (m model) blueprintReview() string {
-	return m.cellsReview() + "\n\nThis creates a proposed, unapproved revision. Each assigned human must decide their own charter."
+	review := m.cellsReview() + "\n\nThis creates a proposed, unapproved revision. Each assigned human must decide their own charter."
+	if m.blueprintExpected > 0 {
+		review += " A pending proposal of this blueprint is superseded; an active revision stays in force until every assigned human accepts the new one."
+	}
+	return review
 }
 func (m model) charterReview() string {
 	for _, charter := range m.charterView.BlueprintRevision.CellCharters {
 		if charter.CellID == m.selectedCharter.cell.CellID {
-			return fmt.Sprintf("Blueprint %s · revision %d\n\nCell: %s\n\nMarkdown overview:\n%s", m.selectedCharter.blueprintID, m.selectedCharter.revision.Revision, clean(charter.Title), clean(charter.OverviewMarkdown))
+			return fmt.Sprintf("Blueprint %s · revision %d\n\nCell: %s\n\nMarkdown overview:\n%s", m.selectedCharter.blueprintID, m.selectedCharter.revision.Revision, clean(charter.Title), cleanBlock(charter.OverviewMarkdown))
 		}
 	}
 	return "The selected charter could not be rendered."
 }
 
 func (m model) card(title, body string) string {
-	width := min(100, max(34, m.width-6))
-	return cardStyle.Copy().Width(width).Render(cardTitleStyle.Render(title) + "\n\n" + body)
+	return cardStyle.Width(m.cardWidth()).Render(cardTitleStyle.Render(title) + "\n\n" + body)
 }
 func (m model) header() string {
 	project := "No project selected"
@@ -956,6 +1267,21 @@ func (m model) header() string {
 func clean(value string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
+			return '?'
+		}
+		return r
+	}, value)
+}
+
+// cleanBlock is clean for multi-line text: it keeps line breaks and tabs.
+func cleanBlock(value string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\r':
+			return -1
+		case r == '\n', r == '\t':
+			return r
+		case unicode.IsControl(r):
 			return '?'
 		}
 		return r

@@ -220,6 +220,92 @@ func TestCharterRatification(t *testing.T) {
 	}
 }
 
+// TestOneBlueprintPerObjective protects decision 0005: an Objective has
+// one Blueprint, so at most one partition of it is ever active.
+//   - a second Blueprint for the same Objective is refused and names the
+//     Blueprint to revise instead;
+//   - a Blueprint's revisions keep dividing its first Objective;
+//   - retrying a stored proposal still succeeds;
+//   - concurrent first proposals for one Objective create one Blueprint.
+func TestOneBlueprintPerObjective(t *testing.T) {
+	ctx, _, projects, newHuman := newProjects(t)
+	alice := newHuman(1, "alice")
+	projectID := uuid.NewV7()
+	must(t, func() error {
+		_, err := projects.CreateProject(ctx, alice, protocol.ProjectCreate{ProjectID: projectID, Name: "Checkout reliability"})
+		return err
+	})
+	newObjective := func() uuid.UUID {
+		id := uuid.NewV7()
+		must(t, func() error {
+			_, err := projects.CreateObjectiveRevision(ctx, alice, projectID, protocol.ObjectiveRevisionInput{
+				ObjectiveID: id, Title: "Reliable checkout", OverviewMarkdown: "Survive outages.", AccountableHumanID: alice,
+			}, 0)
+			return err
+		})
+		return id
+	}
+	proposal := func(blueprintID, objectiveID uuid.UUID) protocol.BlueprintProposal {
+		return protocol.BlueprintProposal{
+			BlueprintID: blueprintID, ObjectiveID: objectiveID, ObjectiveRevision: 1,
+			CellCharters: []protocol.CellCharter{
+				{CellID: uuid.NewV7(), AccountableHumanID: alice, Title: "Gateway", OverviewMarkdown: "Own failover."},
+			},
+		}
+	}
+	objective, otherObjective := newObjective(), newObjective()
+	first, second := uuid.NewV7(), uuid.NewV7()
+
+	firstProposal := proposal(first, objective)
+	must(t, func() error {
+		_, err := projects.ProposeBlueprintRevision(ctx, alice, projectID, firstProposal, 0)
+		return err
+	})
+	if _, err := projects.ProposeBlueprintRevision(ctx, alice, projectID, firstProposal, 0); err != nil {
+		t.Fatalf("retrying the stored proposal: %v", err)
+	}
+
+	_, err := projects.ProposeBlueprintRevision(ctx, alice, projectID, proposal(second, objective), 0)
+	var taken *application.ObjectiveBlueprintError
+	if !errors.As(err, &taken) || taken.BlueprintID != first || taken.CurrentRevision != 1 {
+		t.Fatalf("second blueprint for one objective: got %v, want ObjectiveBlueprintError naming %s revision 1", err, first)
+	}
+
+	_, err = projects.ProposeBlueprintRevision(ctx, alice, projectID, proposal(first, otherObjective), 1)
+	var invalid *application.InvalidError
+	if !errors.As(err, &invalid) || invalid.Pointer != "/objective_id" {
+		t.Fatalf("revision for another objective: got %v, want invalid input at /objective_id", err)
+	}
+
+	must(t, func() error {
+		_, err := projects.ProposeBlueprintRevision(ctx, alice, projectID, proposal(second, otherObjective), 0)
+		return err
+	})
+
+	// The database serializes concurrent first proposals for one Objective.
+	contested := newObjective()
+	const writers = 6
+	errs := make(chan error, writers)
+	for range writers {
+		go func() {
+			_, err := projects.ProposeBlueprintRevision(ctx, alice, projectID, proposal(uuid.NewV7(), contested), 0)
+			errs <- err
+		}()
+	}
+	created := 0
+	for range writers {
+		switch err := <-errs; {
+		case err == nil:
+			created++
+		case !errors.Is(err, application.ErrObjectiveHasBlueprint):
+			t.Fatalf("concurrent proposal: %v", err)
+		}
+	}
+	if created != 1 {
+		t.Fatalf("concurrent first proposals created %d blueprints, want 1", created)
+	}
+}
+
 func must(t *testing.T, fn func() error) {
 	t.Helper()
 	if err := fn(); err != nil {

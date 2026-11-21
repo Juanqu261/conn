@@ -166,7 +166,30 @@ func renderChecks(out io.Writer, checks []account.Check) bool {
 
 // explain adds the next step to errors a human can fix. The original error
 // stays in the chain, so exit classification still sees it.
+// explained marks an error that already carries its next-step hint, so the
+// root command does not repeat a hint that a subcommand added.
+type explained struct{ error }
+
+func (e explained) Unwrap() error { return e.error }
+
 func explain(err error) error {
+	if err == nil || errors.As(err, new(explained)) {
+		return err
+	}
+	if hinted, ok := withHint(err); ok {
+		return explained{hinted}
+	}
+	return err
+}
+
+// withHint adds the next step for errors that have one.
+func withHint(err error) (error, bool) {
+	hinted := hintFor(err)
+	return hinted, hinted != nil
+}
+
+// hintFor returns err with its next step, or nil when it has none.
+func hintFor(err error) error {
 	switch {
 	case errors.Is(err, credentials.ErrNotLoggedIn):
 		return hint(err, "not logged in. Run `conn login`")
@@ -186,5 +209,5 @@ func explain(err error) error {
 	case errors.Is(err, github.ErrDeviceFlowDisabled):
 		return fmt.Errorf("%w. Enable Device Flow in the GitHub OAuth app settings", err)
 	}
-	return err
+	return nil
 }

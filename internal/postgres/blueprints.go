@@ -2,12 +2,40 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/Juanqu261/conn/internal/application"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
+
+// uniqueViolation is PostgreSQL's SQLSTATE for unique_violation.
+const uniqueViolation = "23505"
+
+func (t projectTx) ObjectiveBlueprint(ctx context.Context, projectID, objectiveID uuid.UUID) (uuid.UUID, int, error) {
+	var blueprintID uuid.UUID
+	var current int
+	err := t.tx.QueryRow(ctx, `
+		SELECT blueprint_id, current_revision FROM blueprints
+		WHERE project_id = $1 AND objective_id = $2`,
+		projectID, objectiveID,
+	).Scan(&blueprintID, &current)
+	return blueprintID, current, notFound(err)
+}
+
+func (t projectTx) BlueprintObjective(ctx context.Context, projectID, blueprintID uuid.UUID) (uuid.UUID, error) {
+	var objectiveID uuid.UUID
+	err := t.tx.QueryRow(ctx, `
+		SELECT objective_id FROM blueprints
+		WHERE project_id = $1 AND blueprint_id = $2`,
+		projectID, blueprintID,
+	).Scan(&objectiveID)
+	return objectiveID, notFound(err)
+}
 
 func (t projectTx) InsertBlueprintRevision(ctx context.Context, r protocol.BlueprintRevision) (bool, error) {
 	document, err := protocol.Encode(r)
@@ -15,17 +43,23 @@ func (t projectTx) InsertBlueprintRevision(ctx context.Context, r protocol.Bluep
 		return false, err
 	}
 	// As for Objectives, the conditional update serializes writers of the
-	// same next revision.
+	// same next revision. Every revision divides the blueprint's Objective.
 	query := `
 		UPDATE blueprints SET current_revision = $3
-		WHERE blueprint_id = $1 AND project_id = $2 AND current_revision = $3 - 1`
+		WHERE blueprint_id = $1 AND project_id = $2 AND current_revision = $3 - 1
+		  AND objective_id = $4`
 	if r.Revision == 1 {
 		query = `
-			INSERT INTO blueprints (blueprint_id, project_id, current_revision)
-			VALUES ($1, $2, $3)
+			INSERT INTO blueprints (blueprint_id, project_id, current_revision, objective_id)
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (blueprint_id) DO NOTHING`
 	}
-	tag, err := t.tx.Exec(ctx, query, r.BlueprintID, r.ProjectID, r.Revision)
+	tag, err := t.tx.Exec(ctx, query, r.BlueprintID, r.ProjectID, r.Revision, r.ObjectiveID)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == "blueprints_objective_id_key" {
+		// A concurrent proposal created the Objective's blueprint first.
+		return false, application.ErrObjectiveHasBlueprint
+	}
 	if err != nil || tag.RowsAffected() == 0 {
 		return false, err
 	}

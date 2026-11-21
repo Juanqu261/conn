@@ -26,7 +26,7 @@ type objectiveInput struct {
 
 type blueprintInput struct {
 	ProjectID   string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
-	BlueprintID string `json:"blueprint_id,omitempty" jsonschema:"Blueprint ID. Optional when the project has one Blueprint."`
+	BlueprintID string `json:"blueprint_id,omitempty" jsonschema:"Blueprint ID. Optional when the project has one Blueprint, or for read_my_charter when you have charters in only one."`
 	Revision    int    `json:"revision,omitempty" jsonschema:"Blueprint revision. Defaults to the active revision, or the latest when none is active."`
 }
 
@@ -139,7 +139,7 @@ func (t tools) readMyCharter(ctx context.Context, _ *sdk.CallToolRequest, in blu
 	if err != nil {
 		return t.fail("read_my_charter", err)
 	}
-	blueprint, inForce, err := pickInForce(status.Data, in)
+	blueprint, inForce, err := pickMyInForce(status.Data, in, me.HumanID)
 	if err != nil {
 		return t.fail("read_my_charter", err)
 	}
