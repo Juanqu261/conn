@@ -17,6 +17,7 @@ import (
 func TestModelMovesBetweenSectionsWithKeyboard(t *testing.T) {
 	m := newModel(context.Background(), func() (*httpclient.Client, error) { return nil, nil })
 	m.loading = false
+	m.client = &httpclient.Client{} // connected
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if got := updated.(model).section; got != planSection {
@@ -32,6 +33,7 @@ func TestModelMovesBetweenSectionsWithKeyboard(t *testing.T) {
 func TestProjectPickerOpensForSingleProject(t *testing.T) {
 	m := newModel(context.Background(), func() (*httpclient.Client, error) { return nil, nil })
 	m.loading = false
+	m.client = &httpclient.Client{} // connected
 	m.projects.Projects = []protocol.ProjectListEntry{{Project: protocol.Project{ProjectID: uuid.NewV7(), Name: "Only"}}}
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
@@ -85,6 +87,68 @@ func TestCharterRejectionRequiresRationale(t *testing.T) {
 	confirmed := updated.(model)
 	if confirmed.screen != charterConfirmScreen || confirmed.charterOutcome != protocol.CharterReject {
 		t.Fatal("rationale did not open a rejection confirmation")
+	}
+}
+
+// TestBlueprintFormRevisesTheObjectivesBlueprint protects decision 0005 in
+// the app: choosing an Objective that already has a blueprint builds that
+// blueprint's next revision instead of a second blueprint, and Esc from the
+// cell member selector returns to a usable previous step.
+func TestBlueprintFormRevisesTheObjectivesBlueprint(t *testing.T) {
+	m := newModel(context.Background(), func() (*httpclient.Client, error) { return nil, nil })
+	m.loading = false
+	objective, fresh := uuid.NewV7(), uuid.NewV7()
+	blueprint := uuid.NewV7()
+	m.status.Objectives = []protocol.ObjectiveSummary{{ObjectiveID: objective, CurrentRevision: 1}, {ObjectiveID: fresh, CurrentRevision: 1}}
+	m.status.Blueprints = []protocol.BlueprintSummary{{BlueprintID: blueprint, CurrentRevision: 3,
+		Revisions: []protocol.RevisionSummary{{Revision: 3, Status: protocol.BlueprintProposed, ObjectiveID: objective, ObjectiveRevision: 1}}}}
+	m.members.Members = []protocol.ProjectMember{{Human: protocol.Human{HumanID: uuid.NewV7(), GitHubLogin: "alice"}}}
+	press := func(m model, key tea.KeyMsg) model {
+		updated, _ := m.Update(key)
+		return updated.(model)
+	}
+	enter, esc := tea.KeyMsg{Type: tea.KeyEnter}, tea.KeyMsg{Type: tea.KeyEsc}
+
+	m = press(m.startBlueprint(), enter) // the first Objective already has a blueprint
+	if m.screen != cellMemberScreen || m.blueprintID != blueprint || m.blueprintExpected != 3 {
+		t.Fatalf("objective with a blueprint: screen %d, blueprint %s expected %d; want revision 4 of %s", m.screen, m.blueprintID, m.blueprintExpected, blueprint)
+	}
+
+	m = press(m, esc)
+	if _, ok := m.selector.SelectedItem().(objectiveItem); m.screen != blueprintObjectiveScreen || !ok {
+		t.Fatal("Esc before any cell did not reopen the objective selector with objectives")
+	}
+
+	m = press(m, tea.KeyMsg{Type: tea.KeyDown})
+	m = press(m, enter) // the second Objective has no blueprint
+	if m.blueprintID == blueprint || m.blueprintExpected != 0 {
+		t.Fatal("objective without a blueprint did not start a new blueprint")
+	}
+	m = press(m, enter)
+	m.input.SetValue("Gateway")
+	m = press(m, enter)
+	m.input.SetValue("Own failover.")
+	m = press(m, enter)
+	m = press(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m = press(m, esc)
+	if m.screen != cellMoreScreen || len(m.blueprintCells) != 1 {
+		t.Fatalf("Esc from the second cell's member selector: screen %d with %d cells, want the cell list with 1", m.screen, len(m.blueprintCells))
+	}
+}
+
+// TestDisconnectedAppOffersOnlyRetry protects against writing without a
+// backend client after the initial load fails.
+func TestDisconnectedAppOffersOnlyRetry(t *testing.T) {
+	m := newModel(context.Background(), func() (*httpclient.Client, error) { return nil, errors.New("server unreachable") })
+	updated, _ := m.Update(projectsLoaded{err: errors.New("server unreachable")})
+	updated, _ = updated.(model).Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ = updated.(model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	disconnected := updated.(model)
+	if disconnected.screen != normalScreen {
+		t.Fatal("a disconnected app opened a write form")
+	}
+	if view := disconnected.View(); !strings.Contains(view, "Not connected") || strings.Contains(view, "Start your first project") {
+		t.Fatal("a disconnected app did not say it is not connected")
 	}
 }
 

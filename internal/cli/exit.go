@@ -17,7 +17,7 @@ const (
 	ExitUsage       = 2 // invalid command line or input document
 	ExitAuth        = 3 // not logged in, session expired or revoked, or credential store unavailable
 	ExitAccess      = 4 // the resource does not exist, or you may not read or change it
-	ExitConflict    = 5 // stale revision, reused ID, or a charter that is already decided
+	ExitConflict    = 5 // stale revision, reused ID, a charter that is already decided, or an objective that already has a blueprint
 	ExitUnavailable = 6 // the server is unreachable or not ready
 	ExitInterrupted = 130
 )
@@ -28,7 +28,8 @@ const exitCodeHelp = `Exit codes:
   2    invalid command line or input document
   3    not logged in, session expired or revoked, or credential store unavailable
   4    not found, or not permitted in this project
-  5    conflict: stale revision, reused ID, or a charter already decided
+  5    conflict: stale revision, reused ID, a charter already decided, or an
+       objective that already has a blueprint
   6    server unreachable or not ready
   130  interrupted`
 
@@ -82,7 +83,7 @@ func apiExitCode(err *httpclient.APIError) int {
 		return ExitAuth
 	case "not_found", "forbidden":
 		return ExitAccess
-	case "id_conflict", "stale_revision", "charter_decided":
+	case "id_conflict", "stale_revision", "charter_decided", "objective_has_blueprint":
 		return ExitConflict
 	case "invalid_input", "invalid_json", "request_too_large", "unsupported_media_type":
 		return ExitUsage

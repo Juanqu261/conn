@@ -15,12 +15,31 @@ import (
 // this BlueprintRevision. Decisions are final; changes need a new revision.
 var ErrCharterDecided = errors.New("the charter already has a different decision")
 
+var ErrObjectiveHasBlueprint = errors.New("the objective already has a blueprint")
+
+// ObjectiveBlueprintError names the Blueprint to revise instead.
+type ObjectiveBlueprintError struct {
+	ObjectiveID     uuid.UUID
+	BlueprintID     uuid.UUID
+	CurrentRevision int
+}
+
+func (e *ObjectiveBlueprintError) Error() string {
+	return fmt.Sprintf("objective %s already has blueprint %s at revision %d", e.ObjectiveID, e.BlueprintID, e.CurrentRevision)
+}
+
+func (e *ObjectiveBlueprintError) Unwrap() error { return ErrObjectiveHasBlueprint }
+
 // ProposeBlueprintRevision lets the owner propose the next immutable
 // BlueprintRevision. expectedRevision is the latest revision the proposer
 // saw, or 0 to create the Blueprint. The new revision supersedes a pending
 // proposal, while an active revision stays in force until the new one is
 // ratified. Repeating a request that already succeeded returns the stored
 // revision without a new event.
+//
+// An Objective has one Blueprint and every revision divides that Objective:
+// creating a second Blueprint for it returns an ObjectiveBlueprintError,
+// and a revision naming another Objective is invalid.
 func (p *Projects) ProposeBlueprintRevision(ctx context.Context, actor, projectID uuid.UUID, proposal protocol.BlueprintProposal, expectedRevision int) (Result[protocol.BlueprintRevisionView], error) {
 	if expectedRevision < 0 {
 		return Result[protocol.BlueprintRevisionView]{}, &InvalidError{Message: "The expected revision cannot be negative."}
@@ -49,6 +68,9 @@ func (p *Projects) ProposeBlueprintRevision(ctx context.Context, actor, projectI
 			return err
 		}
 		if err := validateCharterReferences(ctx, tx, revision); err != nil {
+			return err
+		}
+		if err := requireOneBlueprintPerObjective(ctx, tx, revision); err != nil {
 			return err
 		}
 
@@ -267,6 +289,34 @@ func validateCharterReferences(ctx context.Context, tx Tx, revision protocol.Blu
 		}
 	}
 	return nil
+}
+
+// requireOneBlueprintPerObjective keeps one Blueprint per Objective. A
+// Blueprint keeps the Objective of its first revision, and no other
+// Blueprint may divide that Objective. Retrying a stored request passes.
+func requireOneBlueprintPerObjective(ctx context.Context, tx Tx, revision protocol.BlueprintRevision) error {
+	objectiveID, err := tx.BlueprintObjective(ctx, revision.ProjectID, revision.BlueprintID)
+	switch {
+	case err == nil && objectiveID != revision.ObjectiveID:
+		return &InvalidError{
+			Pointer: "/objective_id",
+			Message: fmt.Sprintf("This blueprint divides Objective %s. Propose a plan for another Objective as a new blueprint.", objectiveID),
+		}
+	case err == nil:
+		return nil
+	case !errors.Is(err, ErrNotFound):
+		return err
+	}
+	// A new Blueprint. Another one may already divide the Objective.
+	blueprintID, current, err := tx.ObjectiveBlueprint(ctx, revision.ProjectID, revision.ObjectiveID)
+	switch {
+	case err == nil:
+		return &ObjectiveBlueprintError{ObjectiveID: revision.ObjectiveID, BlueprintID: blueprintID, CurrentRevision: current}
+	case errors.Is(err, ErrNotFound):
+		return nil
+	default:
+		return err
+	}
 }
 
 // sameBlueprintContent compares everything except the creation time.

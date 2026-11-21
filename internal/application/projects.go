@@ -87,7 +87,15 @@ type Tx interface {
 	// the same Blueprint becomes superseded. Revision 1 creates the
 	// Blueprint; revision n requires current revision n-1 in the same
 	// Project. It reports false, changing nothing, otherwise.
+	// It returns ErrObjectiveHasBlueprint when revision 1 names an
+	// Objective that another Blueprint already divides.
 	InsertBlueprintRevision(ctx context.Context, revision protocol.BlueprintRevision) (bool, error)
+	// ObjectiveBlueprint returns the Blueprint that divides an Objective and
+	// its current revision, or ErrNotFound.
+	ObjectiveBlueprint(ctx context.Context, projectID, objectiveID uuid.UUID) (uuid.UUID, int, error)
+	// BlueprintObjective returns the Objective a Blueprint divides, or
+	// ErrNotFound.
+	BlueprintObjective(ctx context.Context, projectID, blueprintID uuid.UUID) (uuid.UUID, error)
 	BlueprintRevision(ctx context.Context, projectID, blueprintID uuid.UUID, revision int) (protocol.BlueprintRevisionView, error)
 	// LockBlueprintRevision returns the revision's status and serializes
 	// charter decisions on it until the transaction ends.

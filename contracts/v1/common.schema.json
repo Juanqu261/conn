@@ -32,10 +32,16 @@
       "maxLength": 64,
       "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
     },
+    "noNul": {
+      "description": "Text without U+0000, which PostgreSQL text cannot store. Every free-text definition includes it.",
+      "type": "string",
+      "pattern": "^[^\\x00]*$"
+    },
     "title": {
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
       "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]",
       "description": "Plain-text title containing at least one non-whitespace character."
     },
@@ -44,6 +50,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 1000,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
       "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
     },
     "markdown": {
@@ -51,6 +58,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 32768,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
       "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
     },
     "rationale": {
@@ -58,6 +66,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4000,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
       "pattern": "[^\\t\\n\\v\\f\\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]"
     },
     "httpUri": {

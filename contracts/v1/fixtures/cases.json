@@ -1333,6 +1333,37 @@
       }
     },
     {
+      "name": "charter rejection rejects a NUL character, which PostgreSQL text cannot store",
+      "schema": "urn:conn:schema:v1:charter-rejection",
+      "valid": false,
+      "at": "/rationale",
+      "document": {
+        "rationale": "Refunds\u0000belong elsewhere."
+      }
+    },
+    {
+      "name": "project creation input rejects a NUL character in its name",
+      "schema": "urn:conn:schema:v1:project-create",
+      "valid": false,
+      "at": "/name",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "name": "Checkout\u0000reliability"
+      }
+    },
+    {
+      "name": "objective input rejects a NUL character in its Markdown overview",
+      "schema": "urn:conn:schema:v1:objective-revision-input",
+      "valid": false,
+      "at": "/overview_markdown",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "# Goal\u0000",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
       "name": "project status accepts an active revision with a pending successor",
       "schema": "urn:conn:schema:v1:project-status",
       "valid": true,

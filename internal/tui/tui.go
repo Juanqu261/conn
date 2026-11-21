@@ -193,6 +193,7 @@ type model struct {
 	objectiveMember    protocol.ProjectMember
 	blueprintObjective protocol.ObjectiveSummary
 	blueprintID        uuid.UUID
+	blueprintExpected  int // the Objective's blueprint revision to replace, or 0 for a new blueprint
 	blueprintCells     []protocol.CellCharter
 	cell               protocol.CellCharter
 	selectedCharter    charterItem
@@ -230,6 +231,9 @@ func loadProjects(ctx context.Context, factory func() (*httpclient.Client, error
 	}
 }
 
+// recentEvents is how many of the latest project events Updates shows.
+const recentEvents = 20
+
 func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.UUID) tea.Cmd {
 	return func() tea.Msg {
 		status, err := client.Status(ctx, projectID)
@@ -240,7 +244,8 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
-		events, err := client.Events(ctx, projectID, 0, 20)
+		// The latest events, up to the state the status reflects.
+		events, err := client.Events(ctx, projectID, max(0, status.AsOfEvent-recentEvents), recentEvents)
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
@@ -263,9 +268,25 @@ func (m model) selectedProjectID() uuid.UUID { return m.selected.Project.Project
 func (m model) startInput(next screen, prompt, placeholder string, value string) model {
 	m.screen, m.choosing, m.help, m.err = next, false, false, nil
 	m.input.Prompt, m.input.Placeholder = prompt, placeholder
+	m.input.CharLimit = inputLimit(next)
 	m.input.SetValue(value)
 	m.input.Focus()
 	return m
+}
+
+// inputLimit is the longest value, in code points, that a form field's
+// contracts/v1 schema accepts, so drafts cannot fail on length after review.
+func inputLimit(s screen) int {
+	switch s {
+	case projectCreateScreen, objectiveTitleScreen, cellTitleScreen:
+		return 200 // common#/$defs/title
+	case memberEntryScreen:
+		return 36 // a canonical UUID
+	case charterRationaleScreen:
+		return 4000 // common#/$defs/rationale
+	default:
+		return 32768 // common#/$defs/markdown
+	}
 }
 
 func (m model) startProjectCreate() model {
@@ -282,14 +303,40 @@ func (m model) startObjective() model {
 	return m.startInput(objectiveTitleScreen, "Objective title: ", "e.g. Deliver checkout reliability", "")
 }
 
+// blueprintFor returns the Blueprint that divides an Objective. An Objective
+// has at most one, and its in-force revisions all name that Objective.
+func blueprintFor(status protocol.ProjectStatus, objectiveID uuid.UUID) (protocol.BlueprintSummary, bool) {
+	for _, blueprint := range status.Blueprints {
+		for _, revision := range blueprint.Revisions {
+			if revision.ObjectiveID == objectiveID {
+				return blueprint, true
+			}
+		}
+	}
+	return protocol.BlueprintSummary{}, false
+}
+
+// chooseBlueprintObjective starts the cell set for an Objective: the next
+// revision of its blueprint when it has one, otherwise a new blueprint.
+func (m model) chooseBlueprintObjective(objective protocol.ObjectiveSummary) model {
+	m.blueprintObjective, m.blueprintCells, m.cell = objective, nil, protocol.CellCharter{}
+	m.blueprintID, m.blueprintExpected = uuid.NewV7(), 0
+	if blueprint, ok := blueprintFor(m.status, objective.ObjectiveID); ok {
+		m.blueprintID, m.blueprintExpected = blueprint.BlueprintID, blueprint.CurrentRevision
+	}
+	return m.chooseMember(cellMemberScreen, "Accountable member selector for cell 1")
+}
+
 func (m model) startBlueprint() model {
-	m.blueprintID, m.blueprintCells, m.cell = uuid.NewV7(), nil, protocol.CellCharter{}
+	m.blueprintCells, m.cell = nil, protocol.CellCharter{}
 	items := make([]list.Item, 0, len(m.status.Objectives))
 	for _, objective := range m.status.Objectives {
 		items = append(items, objectiveItem{objective})
 	}
 	m.selector.Title = "Objective selector for this blueprint"
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
 	m.screen, m.err = blueprintObjectiveScreen, nil
 	return m
 }
@@ -309,7 +356,9 @@ func (m model) startCharterDecision() model {
 		}
 	}
 	m.selector.Title = "Pending charter selector"
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
 	m.screen, m.err = charterPickScreen, nil
 	return m
 }
@@ -320,7 +369,9 @@ func (m model) chooseMember(next screen, title string) model {
 		items = append(items, memberItem{member})
 	}
 	m.selector.Title = title
+	m.selector.ResetFilter()
 	m.selector.SetItems(items)
+	m.selector.ResetSelected()
 	m.screen, m.err = next, nil
 	return m
 }
@@ -399,6 +450,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+	if m.client == nil {
+		// Not connected: nothing can be read or written, so only retry,
+		// help, and quit apply.
+		switch key {
+		case "q":
+			return m, tea.Quit
+		case "r", "enter":
+			m.loading, m.err = true, nil
+			return m, loadProjects(m.ctx, m.clientFactory)
+		case "esc":
+			m.err = nil
+		case "?":
+			m.help = !m.help
+		}
+		return m, nil
+	}
 	if m.choosing {
 		if key == "c" && !m.projectList.SettingFilter() {
 			return m.startProjectCreate(), nil
@@ -493,8 +560,13 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case objectiveConfirmScreen:
 			return m.chooseMember(objectiveMemberScreen, "Accountable member selector"), nil
 		case cellMemberScreen:
-			m.screen = blueprintObjectiveScreen
-			return m, nil
+			// Back to the cells added so far, or to the objective selector
+			// with its own items when there are none yet.
+			if len(m.blueprintCells) > 0 {
+				m.cell, m.screen, m.err = protocol.CellCharter{}, cellMoreScreen, nil
+				return m, nil
+			}
+			return m.startBlueprint(), nil
 		case cellTitleScreen:
 			return m.chooseMember(cellMemberScreen, "Accountable member selector for this cell"), nil
 		case cellOverviewScreen:
@@ -580,8 +652,7 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case blueprintObjectiveScreen:
 		if key == "enter" {
 			if item, ok := m.selector.SelectedItem().(objectiveItem); ok {
-				m.blueprintObjective = item.objective
-				return m.chooseMember(cellMemberScreen, "Accountable member selector for cell 1"), nil
+				return m.chooseBlueprintObjective(item.objective), nil
 			}
 		}
 		return m.updateSelector(msg)
@@ -689,9 +760,15 @@ func (m model) submitObjective() (tea.Model, tea.Cmd) {
 
 func (m model) submitBlueprint() (tea.Model, tea.Cmd) {
 	proposal := protocol.BlueprintProposal{BlueprintID: m.blueprintID, ObjectiveID: m.blueprintObjective.ObjectiveID, ObjectiveRevision: m.blueprintObjective.CurrentRevision, CellCharters: m.blueprintCells}
+	expected := m.blueprintExpected
 	m.screen, m.loading, m.err = normalScreen, true, nil
 	return m, func() tea.Msg {
-		_, err := m.client.ProposeBlueprint(m.ctx, m.selectedProjectID(), proposal)
+		var err error
+		if expected > 0 {
+			_, err = m.client.ReviseBlueprint(m.ctx, m.selectedProjectID(), expected, proposal)
+		} else {
+			_, err = m.client.ProposeBlueprint(m.ctx, m.selectedProjectID(), proposal)
+		}
 		return actionDone{"Blueprint proposal created. Assigned humans must decide their own charters.", err}
 	}
 }
@@ -723,6 +800,9 @@ func (m model) View() string {
 	}
 	if m.err != nil {
 		return m.header() + "\n\n" + m.card("Could not complete that action", errorStyle.Render(clean(m.err.Error()))) + "\n\n" + footerStyle.Render("  Esc back · r refresh · q quit") + "\n"
+	}
+	if m.client == nil {
+		return m.header() + "\n\n" + m.card("Not connected", "Conn could not load your projects, so nothing can be read or changed yet.\n\nCheck the server and your session with conn doctor, then press r to try again.") + "\n\n" + footerStyle.Render("  r retry · q quit") + "\n"
 	}
 	if m.choosing {
 		return m.header() + "\n\n" + m.projectList.View() + "\n" + footerStyle.Render("  Project picker: Up/down select · / filter · Enter open · c new project · Esc back · q quit") + "\n"
@@ -762,11 +842,11 @@ func (m model) formView() string {
 	case blueprintObjectiveScreen:
 		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: choose current objective · Enter choose · Esc cancel") + "\n"
 	case cellMemberScreen:
-		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: choose accountable member · Enter choose · Esc cancel") + "\n"
+		return m.header() + "\n\n" + m.selector.View() + "\n" + footerStyle.Render("  Form selector: choose accountable member · Enter choose · Esc back") + "\n"
 	case cellTitleScreen:
-		title, body, footer = "Add cell: title", m.input.View(), "  Enter next · Esc cancel blueprint"
+		title, body, footer = "Add cell: title", m.input.View(), "  Enter next · Esc back to member"
 	case cellOverviewScreen:
-		title, body, footer = "Add cell: Markdown overview", m.input.View(), "  Enter add cell · Esc cancel blueprint"
+		title, body, footer = "Add cell: Markdown overview", m.input.View(), "  Enter add cell · Esc back to title"
 	case cellMoreScreen:
 		title, body, footer = "Blueprint cells", m.cellsReview(), "  a add another cell · Enter review proposal · Esc cancel"
 	case blueprintConfirmScreen:
@@ -905,7 +985,7 @@ func (m model) updates() string {
 	if len(m.events) == 0 {
 		return "Updates\n\nNo events have been recorded yet."
 	}
-	lines := []string{"Recent updates:"}
+	lines := []string{fmt.Sprintf("Latest updates, oldest first (project is at event %d):", m.asOfEvent)}
 	for _, event := range m.events {
 		lines = append(lines, fmt.Sprintf("  %d · %s · %s", event.EventSequence, event.EventType(), event.OccurredAt))
 	}
@@ -916,13 +996,21 @@ func (m model) account() string {
 }
 func (m model) cellsReview() string {
 	lines := []string{fmt.Sprintf("Objective: %s revision %d", m.blueprintObjective.ObjectiveID, m.blueprintObjective.CurrentRevision)}
+	if m.blueprintExpected > 0 {
+		lines = append(lines, fmt.Sprintf("Revising blueprint %s: these cells replace the whole cell set of revision %d as revision %d.",
+			m.blueprintID, m.blueprintExpected, m.blueprintExpected+1))
+	}
 	for i, cell := range m.blueprintCells {
 		lines = append(lines, fmt.Sprintf("\nCell %d: %s\nAccountable human: %s\n%s", i+1, clean(cell.Title), cell.AccountableHumanID, clean(cell.OverviewMarkdown)))
 	}
 	return strings.Join(lines, "\n")
 }
 func (m model) blueprintReview() string {
-	return m.cellsReview() + "\n\nThis creates a proposed, unapproved revision. Each assigned human must decide their own charter."
+	review := m.cellsReview() + "\n\nThis creates a proposed, unapproved revision. Each assigned human must decide their own charter."
+	if m.blueprintExpected > 0 {
+		review += " A pending proposal of this blueprint is superseded; an active revision stays in force until every assigned human accepts the new one."
+	}
+	return review
 }
 func (m model) charterReview() string {
 	for _, charter := range m.charterView.BlueprintRevision.CellCharters {

@@ -19,18 +19,20 @@ import (
 // Identities used by the schema scenario. A and B are project members; C is
 // authenticated but not a member.
 const (
-	humanA    = "019a8f00-0000-7000-8000-00000000000a"
-	humanB    = "019a8f00-0000-7000-8000-00000000000b"
-	humanC    = "019a8f00-0000-7000-8000-00000000000c"
-	project   = "019a8f00-0001-7000-8000-000000000001"
-	project2  = "019a8f00-0001-7000-8000-000000000002"
-	objective = "019a8f00-0002-7000-8000-000000000001"
-	blueprint = "019a8f00-0003-7000-8000-000000000001"
-	cellA     = "019a8f00-0004-7000-8000-000000000001"
-	cellB     = "019a8f00-0004-7000-8000-000000000002"
-	cellC     = "019a8f00-0004-7000-8000-000000000003"
-	decisionA = "019a8f00-0005-7000-8000-000000000001"
-	decision2 = "019a8f00-0005-7000-8000-000000000002"
+	humanA     = "019a8f00-0000-7000-8000-00000000000a"
+	humanB     = "019a8f00-0000-7000-8000-00000000000b"
+	humanC     = "019a8f00-0000-7000-8000-00000000000c"
+	project    = "019a8f00-0001-7000-8000-000000000001"
+	project2   = "019a8f00-0001-7000-8000-000000000002"
+	objective  = "019a8f00-0002-7000-8000-000000000001"
+	objective2 = "019a8f00-0002-7000-8000-000000000002"
+	blueprint  = "019a8f00-0003-7000-8000-000000000001"
+	blueprint2 = "019a8f00-0003-7000-8000-000000000002"
+	cellA      = "019a8f00-0004-7000-8000-000000000001"
+	cellB      = "019a8f00-0004-7000-8000-000000000002"
+	cellC      = "019a8f00-0004-7000-8000-000000000003"
+	decisionA  = "019a8f00-0005-7000-8000-000000000001"
+	decision2  = "019a8f00-0005-7000-8000-000000000002"
 )
 
 // TestSchemaIntegrity protects the database-level guarantees behind
@@ -66,7 +68,8 @@ func TestSchemaIntegrity(t *testing.T) {
 			VALUES ('{objective}', 1, '{project}', '{humanA}', now(),
 				'{"objective_id": "{objective}", "project_id": "{project}", "revision": 1,
 				  "accountable_human_id": "{humanA}"}');
-		INSERT INTO blueprints VALUES ('{blueprint}', '{project}', 1);
+		INSERT INTO blueprints (blueprint_id, project_id, current_revision, objective_id)
+			VALUES ('{blueprint}', '{project}', 1, '{objective}');
 		INSERT INTO blueprint_revisions
 			(blueprint_id, revision, project_id, objective_id, objective_revision,
 			 proposed_by_human_id, status, created_at, document)
@@ -137,6 +140,15 @@ func TestSchemaIntegrity(t *testing.T) {
 			 INSERT INTO blueprint_revisions (blueprint_id, revision, project_id, objective_id, objective_revision, proposed_by_human_id, status, created_at, document)
 			 VALUES ('{blueprint}', 2, '{project}', '{objective}', 1, '{humanA}', 'proposed', now(), '{revision2}');
 			 UPDATE blueprint_revisions SET status = 'active' WHERE revision = 2`},
+		{"an objective has one blueprint", "blueprints_objective_id_key",
+			`INSERT INTO blueprints (blueprint_id, project_id, current_revision, objective_id) VALUES ('{blueprint2}', '{project}', 1, '{objective}')`},
+		{"every revision divides its blueprint's objective", "blueprint_revisions_blueprint_objective_fkey",
+			`INSERT INTO objectives VALUES ('{objective2}', '{project}', 1);
+			 INSERT INTO objective_revisions (objective_id, revision, project_id, accountable_human_id, created_at, document)
+			 VALUES ('{objective2}', 1, '{project}', '{humanA}', now(), '{"objective_id": "{objective2}", "project_id": "{project}", "revision": 1, "accountable_human_id": "{humanA}"}');
+			 UPDATE blueprint_revisions SET status = 'superseded';
+			 INSERT INTO blueprint_revisions (blueprint_id, revision, project_id, objective_id, objective_revision, proposed_by_human_id, status, created_at, document)
+			 VALUES ('{blueprint}', 2, '{project}', '{objective2}', 1, '{humanA}', 'proposed', now(), '{revision2ForObjective2}')`},
 		{"blueprint snapshots are immutable", "blueprint revision snapshots are immutable",
 			`UPDATE blueprint_revisions SET document = document || '{"cell_charters": [{}]}'`},
 		{"blueprint status cannot leave a decided state", "cannot change from rejected to proposed",
@@ -208,11 +220,13 @@ func expand(sql string) string {
 	replacer := strings.NewReplacer(
 		"{humanA}", humanA, "{humanB}", humanB, "{humanC}", humanC,
 		"{project2}", project2, "{project}", project,
-		"{objective}", objective, "{blueprint}", blueprint,
+		"{objective2}", objective2, "{objective}", objective,
+		"{blueprint2}", blueprint2, "{blueprint}", blueprint,
 		"{cellA}", cellA, "{cellB}", cellB, "{cellC}", cellC,
 		"{decisionA}", decisionA, "{decision2}", decision2,
 		"{revision2WithStatus}", revisionDocument(2, humanA, `, "status": "proposed"`),
 		"{revision2ByB}", revisionDocument(2, humanB, ""),
+		"{revision2ForObjective2}", strings.Replace(revisionDocument(2, humanA, ""), objective, objective2, 1),
 		"{revision2}", revisionDocument(2, humanA, ""),
 	)
 	out := replacer.Replace(sql)
