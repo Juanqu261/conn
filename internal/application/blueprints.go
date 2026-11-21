@@ -227,7 +227,8 @@ func (p *Projects) decideCharter(ctx context.Context, actor, projectID, blueprin
 
 // validatePartition checks the rules that need only the proposal: unique
 // cells, unique boundary keys within a charter, and dependencies on other
-// cells of the same revision.
+// cells of the same revision. Dependency cycles are allowed: a dependency
+// is a coordination link between cells, not an execution order.
 func validatePartition(charters []protocol.CellCharter) error {
 	cells := make(map[uuid.UUID]bool, len(charters))
 	for i, charter := range charters {
