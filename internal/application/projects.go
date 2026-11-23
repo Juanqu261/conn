@@ -118,6 +118,23 @@ type Tx interface {
 	// identity was already recorded.
 	InsertCollisionAssessment(ctx context.Context, assessment protocol.CollisionAssessment) (bool, error)
 
+	// CollisionAssessment returns an assessment in this Project, including
+	// historical records that are no longer open.
+	CollisionAssessment(ctx context.Context, projectID, collisionID uuid.UUID) (protocol.CollisionAssessment, error)
+	// IntentRevision returns an exact immutable Intent revision.
+	IntentRevision(ctx context.Context, projectID, intentID uuid.UUID, revision int) (protocol.IntentRevision, error)
+	// SemanticClaims returns named immutable claims in Project scope.
+	SemanticClaims(ctx context.Context, projectID uuid.UUID, claimIDs []uuid.UUID) ([]protocol.SemanticClaim, error)
+	// InsertResolutionProposal appends one non-binding participant proposal.
+	InsertResolutionProposal(ctx context.Context, proposal protocol.ResolutionProposal) error
+	// InsertResolutionDecision appends one immutable human decision.
+	InsertResolutionDecision(ctx context.Context, decision protocol.ResolutionDecision) error
+	// Proposal belongs to this collision in Project scope.
+	Proposal(ctx context.Context, projectID, collisionID, proposalID uuid.UUID) (protocol.ResolutionProposal, error)
+	// ResolutionDecisionRefsForCollision lists decisions already recorded for
+	// this collision in chronological order.
+	ResolutionDecisionRefsForCollision(ctx context.Context, projectID, collisionID uuid.UUID) ([]uuid.UUID, error)
+
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in
 	// the same Project. It reports false, changing nothing, otherwise.
@@ -169,6 +186,8 @@ type Tx interface {
 	OpenCollisions(ctx context.Context, projectID uuid.UUID) ([]protocol.CollisionAssessment, error)
 	// ResolutionDecisionRefs returns immutable decision identifiers visible in the Project.
 	ResolutionDecisionRefs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
+	// ResolutionDecisions returns immutable decisions for Radar dependency projection.
+	ResolutionDecisions(ctx context.Context, projectID uuid.UUID) ([]protocol.ResolutionDecision, error)
 	// ActiveEvidenceReferences returns evidence for current Objective revisions.
 	ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error)
 

@@ -47,6 +47,10 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 		if err != nil {
 			return err
 		}
+		decisions, err := tx.ResolutionDecisions(ctx, projectID)
+		if err != nil {
+			return err
+		}
 		evidence, err := tx.ActiveEvidenceReferences(ctx, projectID)
 		if err != nil {
 			return err
@@ -58,7 +62,7 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 			return err
 		}
 
-		view := buildRadar(project, objectives, activeBlueprint, repositories, intents, claims, collisions, decisionRefs, evidence)
+		view := buildRadar(project, objectives, activeBlueprint, repositories, intents, claims, collisions, decisionRefs, decisions, evidence)
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		if err != nil {
 			return err
@@ -73,7 +77,7 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 	return result, err
 }
 
-func buildRadar(project protocol.Project, objectives []protocol.Objective, activeBlueprint *protocol.BlueprintRevision, repositories []protocol.RepositoryConnection, intents []protocol.IntentView, claims []protocol.SemanticClaim, collisions []protocol.CollisionAssessment, decisionRefs []uuid.UUID, evidence []protocol.EvidenceReference) protocol.RadarView {
+func buildRadar(project protocol.Project, objectives []protocol.Objective, activeBlueprint *protocol.BlueprintRevision, repositories []protocol.RepositoryConnection, intents []protocol.IntentView, claims []protocol.SemanticClaim, collisions []protocol.CollisionAssessment, decisionRefs []uuid.UUID, decisions []protocol.ResolutionDecision, evidence []protocol.EvidenceReference) protocol.RadarView {
 	view := protocol.RadarView{
 		Project: project, Objectives: make([]protocol.RadarObjective, 0, len(objectives)),
 		Repositories: repositories, ActiveIntents: []protocol.IntentRevision{}, SemanticClaims: claims,
@@ -110,6 +114,7 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 	view.OpenQuestions = uniqueBounded(view.OpenQuestions, 200)
 	view.Assumptions = uniqueBounded(view.Assumptions, 200)
 	view.Dependencies, view.KnownUnknowns = radarDependencies(activeBlueprint, view.ActiveIntents, view.KnownUnknowns)
+	view.Dependencies, view.KnownUnknowns = resolutionDependencies(view.Dependencies, view.KnownUnknowns, collisions, decisions)
 	if len(objectives) == 0 {
 		view.KnownUnknowns = append(view.KnownUnknowns, "No governing Objective has been recorded.")
 	}
@@ -225,6 +230,37 @@ func radarDependencies(blueprint *protocol.BlueprintRevision, intents []protocol
 		dependencies = dependencies[:500]
 	}
 	return dependencies, unknowns
+}
+
+func resolutionDependencies(existing []protocol.RadarDependency, unknowns []string, collisions []protocol.CollisionAssessment, decisions []protocol.ResolutionDecision) ([]protocol.RadarDependency, []string) {
+	byID := make(map[uuid.UUID]protocol.CollisionAssessment, len(collisions))
+	for _, collision := range collisions {
+		byID[collision.CollisionID] = collision
+	}
+	for _, decision := range decisions {
+		if decision.Kind != "dependency" {
+			continue
+		}
+		collision, ok := byID[decision.CollisionID]
+		if !ok {
+			unknowns = append(unknowns, fmt.Sprintf("Dependency decision %s references a collision that is no longer open; review its historical collision context.", decision.DecisionID))
+			continue
+		}
+		existing = append(existing, protocol.RadarDependency{FromIntentID: collision.LeftIntentID, ToIntentID: collision.RightIntentID, Summary: decision.RationaleMarkdown})
+	}
+	sort.Slice(existing, func(i, j int) bool {
+		if existing[i].FromIntentID != existing[j].FromIntentID {
+			return existing[i].FromIntentID.String() < existing[j].FromIntentID.String()
+		}
+		if existing[i].ToIntentID != existing[j].ToIntentID {
+			return existing[i].ToIntentID.String() < existing[j].ToIntentID.String()
+		}
+		return existing[i].Summary < existing[j].Summary
+	})
+	if len(existing) > 500 {
+		existing = existing[:500]
+	}
+	return existing, unknowns
 }
 
 func uniqueBounded(values []string, limit int) []string {

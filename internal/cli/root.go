@@ -133,6 +133,8 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newRadarCommand(deps, streams),
 		newConflictsCommand(deps, streams),
 		newExplainCommand(deps, streams),
+		newConflictCommand(deps, streams),
+		newResolutionCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
 		newAppCommand(deps, streams),

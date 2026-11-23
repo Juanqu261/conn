@@ -50,6 +50,21 @@ func (c *Client) Radar(ctx context.Context, projectID uuid.UUID) (Result[protoco
 	return read[protocol.RadarView](ctx, c, projectPath(projectID)+"/radar")
 }
 
+// ConflictContext reads a portable, source-free context pack for one collision.
+func (c *Client) ConflictContext(ctx context.Context, projectID, collisionID uuid.UUID) (Result[protocol.ConflictContextPack], error) {
+	return read[protocol.ConflictContextPack](ctx, c, fmt.Sprintf("%s/collisions/%s/context", projectPath(projectID), collisionID))
+}
+
+// ProposeResolution records the caller's non-binding participant proposal.
+func (c *Client) ProposeResolution(ctx context.Context, projectID, collisionID uuid.UUID, input protocol.ResolutionProposalInput) (Result[protocol.ResolutionProposal], error) {
+	return post[protocol.ResolutionProposal](ctx, c, fmt.Sprintf("%s/collisions/%s/proposals", projectPath(projectID), collisionID), input)
+}
+
+// DecideResolution records an immutable decision by the authenticated human.
+func (c *Client) DecideResolution(ctx context.Context, projectID, collisionID uuid.UUID, input protocol.ResolutionDecisionInput) (Result[protocol.ResolutionDecision], error) {
+	return post[protocol.ResolutionDecision](ctx, c, fmt.Sprintf("%s/collisions/%s/decisions", projectPath(projectID), collisionID), input)
+}
+
 // ConnectRepository connects an owner-authorized repository scope to a Project.
 func (c *Client) ConnectRepository(ctx context.Context, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
 	return post[protocol.RepositoryConnection](ctx, c, projectPath(projectID)+"/repositories", input)

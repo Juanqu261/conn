@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:resolution-decision-input",
+  "title": "ResolutionDecisionInput",
+  "description": "Human-authored content for an immutable resolution decision. Conn derives the deciding human from the authenticated session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "binding", "rationale_markdown"],
+  "properties": {
+    "selected_proposal_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+    "binding": { "type": "boolean" },
+    "rationale_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/rationale" },
+    "references": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": ["contract_agreement", "accepted_risk", "revise_objective", "revise_blueprint"]
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": { "properties": { "binding": { "const": true } } }
+    }
+  ]
+}

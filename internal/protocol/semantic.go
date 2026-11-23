@@ -199,6 +199,28 @@ type CollisionAssessment struct {
 
 func (CollisionAssessment) SchemaID() string { return CollisionAssessmentSchema }
 
+// ResolutionProposalInput is participant-authored proposal content. Identity,
+// authority, Project scope, and timestamp come from Conn.
+type ResolutionProposalInput struct {
+	Kind              string   `json:"kind"`
+	RationaleMarkdown string   `json:"rationale_markdown"`
+	References        []string `json:"references,omitempty"`
+}
+
+func (ResolutionProposalInput) SchemaID() string { return ResolutionProposalInputSchema }
+
+// ResolutionDecisionInput is human-authored decision content. Conn derives
+// the deciding Human from the authenticated session.
+type ResolutionDecisionInput struct {
+	SelectedProposalID *uuid.UUID `json:"selected_proposal_id,omitempty"`
+	Kind               string     `json:"kind"`
+	Binding            bool       `json:"binding"`
+	RationaleMarkdown  string     `json:"rationale_markdown"`
+	References         []string   `json:"references,omitempty"`
+}
+
+func (ResolutionDecisionInput) SchemaID() string { return ResolutionDecisionInputSchema }
+
 // ResolutionProposal is non-binding until an authorized human decides it.
 type ResolutionProposal struct {
 	ProposalID              uuid.UUID  `json:"proposal_id"`

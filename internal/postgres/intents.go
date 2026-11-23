@@ -112,6 +112,19 @@ func (t projectTx) Intents(ctx context.Context, projectID uuid.UUID) ([]protocol
 	return items, rows.Err()
 }
 
+func (t projectTx) IntentRevision(ctx context.Context, projectID, intentID uuid.UUID, revision int) (protocol.IntentRevision, error) {
+	var document []byte
+	err := t.tx.QueryRow(ctx, `SELECT document FROM intent_revisions WHERE project_id = $1 AND intent_id = $2 AND revision = $3`, projectID, intentID, revision).Scan(&document)
+	if err != nil {
+		return protocol.IntentRevision{}, notFound(err)
+	}
+	item, err := protocol.Decode[protocol.IntentRevision](document)
+	if err != nil {
+		return protocol.IntentRevision{}, fmt.Errorf("stored intent revision: %w", err)
+	}
+	return item, nil
+}
+
 func (t projectTx) ReleaseIntent(ctx context.Context, projectID, intentID, participantID uuid.UUID, expectedRevision int) (bool, error) {
 	tag, err := t.tx.Exec(ctx, `
 		UPDATE intents SET status = 'released'

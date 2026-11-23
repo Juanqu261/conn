@@ -78,6 +78,58 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/collisions/{collision_id}/context", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		collisionID, ok := pathID(w, r, log, "collision_id")
+		if !ok {
+			return
+		}
+		result, err := projects.ConflictContext(r.Context(), s.Human.HumanID, projectID, collisionID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("POST /v1/projects/{project_id}/collisions/{collision_id}/proposals", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		collisionID, ok := pathID(w, r, log, "collision_id")
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.ResolutionProposalInput](w, r, log)
+		if !ok {
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.ProposeResolution(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, collisionID, input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
+	handle("POST /v1/projects/{project_id}/collisions/{collision_id}/decisions", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		collisionID, ok := pathID(w, r, log, "collision_id")
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.ResolutionDecisionInput](w, r, log)
+		if !ok {
+			return
+		}
+		result, err := projects.DecideResolution(r.Context(), s.Human.HumanID, projectID, collisionID, input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
 	handle("GET /v1/projects/{project_id}/repositories", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

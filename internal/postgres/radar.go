@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"uuid"
 
@@ -88,6 +90,29 @@ func (t projectTx) ResolutionDecisionRefs(ctx context.Context, projectID uuid.UU
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (t projectTx) ResolutionDecisions(ctx context.Context, projectID uuid.UUID) ([]protocol.ResolutionDecision, error) {
+	rows, err := t.tx.Query(ctx, `SELECT decision_id, project_id, collision_id, selected_proposal_id, decided_by_human_id, kind, binding, rationale_markdown, references_json, created_at FROM resolution_decisions WHERE project_id = $1 ORDER BY created_at, decision_id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	decisions := []protocol.ResolutionDecision{}
+	for rows.Next() {
+		var item protocol.ResolutionDecision
+		var references []byte
+		var createdAt time.Time
+		if err := rows.Scan(&item.DecisionID, &item.ProjectID, &item.CollisionID, &item.SelectedProposalID, &item.DecidedByHumanID, &item.Kind, &item.Binding, &item.RationaleMarkdown, &references, &createdAt); err != nil {
+			return nil, err
+		}
+		item.CreatedAt = protocol.NewTimestamp(createdAt)
+		if err := json.Unmarshal(references, &item.References); err != nil {
+			return nil, fmt.Errorf("stored resolution decision references: %w", err)
+		}
+		decisions = append(decisions, item)
+	}
+	return decisions, rows.Err()
 }
 
 func (t projectTx) ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error) {
