@@ -26,6 +26,8 @@ const (
 	ParticipantSchema              = "urn:conn:schema:v1:participant"
 	IntentInputSchema              = "urn:conn:schema:v1:intent-input"
 	IntentRevisionSchema           = "urn:conn:schema:v1:intent-revision"
+	IntentViewSchema               = "urn:conn:schema:v1:intent-view"
+	IntentListSchema               = "urn:conn:schema:v1:intent-list"
 	SemanticClaimCandidateSchema   = "urn:conn:schema:v1:semantic-claim-candidate"
 	SemanticClaimSchema            = "urn:conn:schema:v1:semantic-claim"
 	LocalAnalyzerReportSchema      = "urn:conn:schema:v1:local-analyzer-report"

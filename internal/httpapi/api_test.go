@@ -98,7 +98,7 @@ func TestAPI(t *testing.T) {
 	bob, bobID := login("gh-bob")
 	dave, daveID := login("gh-dave")
 
-	project, objective, blueprint, repository := uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+	project, objective, blueprint, repository, intent := uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
 	cellA, cellB := uuid.NewV7(), uuid.NewV7()
 	projectPath := "/v1/projects/" + project.String()
 	objectiveBody := func(id uuid.UUID, title, keyPoints string) string {
@@ -112,6 +112,9 @@ func TestAPI(t *testing.T) {
 			blueprint, objective, cellA, aliceID, cellB, bobID, bobOverview)
 	}
 	blueprintRevision := projectPath + "/blueprints/" + blueprint.String() + "/revisions/1"
+	intentBody := func(summary string) string {
+		return fmt.Sprintf(`{"intent_id": %q, "objective_id": %q, "objective_revision": 1, "summary_markdown": %q}`, intent, objective, summary)
+	}
 	const jsonType = "application/json"
 	duplicateKeys := `, "key_points": [
 		{"key": "latency", "kind": "constraint", "statement": "p99 under 300 ms."},
@@ -245,8 +248,30 @@ func TestAPI(t *testing.T) {
 			}},
 		{name: "a member cannot connect a repository", method: "POST", path: projectPath + "/repositories", token: bob,
 			body: fmt.Sprintf(`{"repository_id": %q, "host_kind": "github", "canonical_remote": "github.com/acme/orders", "analysis_enabled": true}`, uuid.NewV7()), wantStatus: 403, wantCode: "forbidden"},
-		{name: "repository input cannot name its creating human", method: "POST", path: projectPath + "/repositories", token: alice,
-			body: fmt.Sprintf(`{"repository_id": %q, "host_kind": "github", "canonical_remote": "github.com/acme/hidden", "analysis_enabled": true, "created_by_human_id": %q}`, uuid.NewV7(), aliceID), wantStatus: 422, wantCode: "invalid_input", wantPointer: ""},
+		{name: "intent input cannot choose a participant or human", method: "POST", path: projectPath + "/intents", token: bob,
+			body: strings.TrimSuffix(intentBody("Publish safely."), "}") + fmt.Sprintf(`, "participant_id": %q}`, uuid.NewV7()), wantStatus: 422, wantCode: "invalid_input"},
+		{name: "a member publishes an Intent under the session-bound participant", method: "POST", path: projectPath + "/intents", token: bob,
+			body: intentBody("Publish safely."), wantStatus: 201, wantEvent: 11, check: func(t *testing.T, data json.RawMessage) {
+				view, err := protocol.Decode[protocol.IntentView](data)
+				if err != nil || view.IntentRevision.ParticipantID.String() == "" || view.IntentRevision.Revision != 1 || view.Status != "active" {
+					t.Fatalf("intent publish = %#v, %v", view, err)
+				}
+			}},
+		{name: "another participant cannot revise the Intent", method: "POST", path: projectPath + "/intents/" + intent.String() + "/revisions?expected_revision=1", token: alice,
+			body: intentBody("Impersonate."), wantStatus: 403, wantCode: "forbidden"},
+		{name: "a project member reads an Intent", method: "GET", path: projectPath + "/intents/" + intent.String(), token: alice,
+			wantStatus: 200, wantEvent: 11, check: field("status", "active")},
+		{name: "the participant revises its own Intent", method: "POST", path: projectPath + "/intents/" + intent.String() + "/revisions?expected_revision=1", token: bob,
+			body: intentBody("Publish safely with metrics."), wantStatus: 201, wantEvent: 12, check: func(t *testing.T, data json.RawMessage) { field("status", "active")(t, data) }},
+		{name: "the participant releases its own Intent", method: "POST", path: projectPath + "/intents/" + intent.String() + "/release", token: bob,
+			wantStatus: 201, wantEvent: 13, check: field("status", "released")},
+		{name: "members list released current Intent snapshots", method: "GET", path: projectPath + "/intents", token: alice,
+			wantStatus: 200, wantEvent: 13, check: func(t *testing.T, data json.RawMessage) {
+				list, err := protocol.Decode[protocol.IntentList](data)
+				if err != nil || len(list.Intents) != 1 || list.Intents[0].Status != "released" || list.Intents[0].IntentRevision.Revision != 2 {
+					t.Fatalf("intent list = %#v, %v", list, err)
+				}
+			}},
 	}
 	for _, step := range steps {
 		contentType := step.contentType

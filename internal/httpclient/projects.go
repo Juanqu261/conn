@@ -55,6 +55,36 @@ func (c *Client) RepositoryConnections(ctx context.Context, projectID uuid.UUID)
 	return read[protocol.RepositoryConnectionList](ctx, c, projectPath(projectID)+"/repositories")
 }
 
+// PublishIntent creates the caller's default CLI-bound participant Intent.
+func (c *Client) PublishIntent(ctx context.Context, projectID uuid.UUID, input protocol.IntentInput) (Result[protocol.IntentView], error) {
+	return post[protocol.IntentView](ctx, c, projectPath(projectID)+"/intents", input)
+}
+
+// ReviseIntent appends a revision after expectedRevision for the caller's participant.
+func (c *Client) ReviseIntent(ctx context.Context, projectID, intentID uuid.UUID, expectedRevision int, input protocol.IntentInput) (Result[protocol.IntentView], error) {
+	path := fmt.Sprintf("%s/intents/%s/revisions?expected_revision=%d", projectPath(projectID), intentID, expectedRevision)
+	return post[protocol.IntentView](ctx, c, path, input)
+}
+
+// ReleaseIntent releases the caller's own active Intent.
+func (c *Client) ReleaseIntent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
+	body, err := c.send(ctx, http.MethodPost, fmt.Sprintf("%s/intents/%s/release", projectPath(projectID), intentID), c.token, nil)
+	if err != nil {
+		return Result[protocol.IntentView]{}, err
+	}
+	return decodeResult[protocol.IntentView](body)
+}
+
+// Intent reads one current Intent snapshot.
+func (c *Client) Intent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
+	return read[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s", projectPath(projectID), intentID))
+}
+
+// Intents lists current snapshots, including released Intents.
+func (c *Client) Intents(ctx context.Context, projectID uuid.UUID) (Result[protocol.IntentList], error) {
+	return read[protocol.IntentList](ctx, c, projectPath(projectID)+"/intents")
+}
+
 // CreateObjective creates revision 1 of an Objective.
 func (c *Client) CreateObjective(ctx context.Context, projectID uuid.UUID, input protocol.ObjectiveRevisionInput) (Result[protocol.Objective], error) {
 	return post[protocol.Objective](ctx, c, projectPath(projectID)+"/objectives", input)

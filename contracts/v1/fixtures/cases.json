@@ -1826,6 +1826,50 @@
         "project_id": "019a8f00-0001-7000-8000-000000000001",
         "repositories": []
       }
+    },
+    {
+      "name": "intent view accepts an active immutable intent revision",
+      "schema": "urn:conn:schema:v1:intent-view",
+      "valid": true,
+      "document": {
+        "intent_revision": {
+          "intent_id": "019a8f00-0022-7000-8000-000000000022",
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "participant_id": "019a8f00-0011-7000-8000-000000000011",
+          "revision": 1,
+          "objective_id": "019a8f00-0002-7000-8000-000000000001",
+          "objective_revision": 1,
+          "summary_markdown": "Update retry behavior.",
+          "created_at": "2026-11-22T09:12:00Z"
+        },
+        "status": "active",
+        "advisory_observations": ["No accepted Charter is associated with this Intent."]
+      }
+    },
+    {
+      "name": "intent list rejects an unknown status",
+      "schema": "urn:conn:schema:v1:intent-list",
+      "valid": false,
+      "at": "/intents/0/status",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intents": [
+          {
+            "intent_revision": {
+              "intent_id": "019a8f00-0022-7000-8000-000000000022",
+              "project_id": "019a8f00-0001-7000-8000-000000000001",
+              "participant_id": "019a8f00-0011-7000-8000-000000000011",
+              "revision": 1,
+              "objective_id": "019a8f00-0002-7000-8000-000000000001",
+              "objective_revision": 1,
+              "summary_markdown": "Update retry behavior.",
+              "created_at": "2026-11-22T09:12:00Z"
+            },
+            "status": "closed",
+            "advisory_observations": []
+          }
+        ]
+      }
     }
   ]
 }

@@ -137,6 +137,24 @@ type IntentRevision struct {
 
 func (IntentRevision) SchemaID() string { return IntentRevisionSchema }
 
+// IntentView combines an immutable snapshot with its current lifecycle state.
+// Advisory observations deliberately do not alter a Charter or an Intent.
+type IntentView struct {
+	IntentRevision       IntentRevision `json:"intent_revision"`
+	Status               string         `json:"status"`
+	AdvisoryObservations []string       `json:"advisory_observations"`
+}
+
+func (IntentView) SchemaID() string { return IntentViewSchema }
+
+// IntentList lists current snapshots for every Intent visible to a member.
+type IntentList struct {
+	ProjectID uuid.UUID    `json:"project_id"`
+	Intents   []IntentView `json:"intents"`
+}
+
+func (IntentList) SchemaID() string { return IntentListSchema }
+
 // LocalAnalyzerReport is the bounded source-free result of local analysis.
 type LocalAnalyzerReport struct {
 	ReportVersion int                      `json:"report_version"`

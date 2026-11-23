@@ -86,7 +86,16 @@ type Tx interface {
 	// Participant resolves a human-bound operating identity. A missing local
 	// session reference is matched as a deliberate null-equivalent value.
 	Participant(ctx context.Context, projectID, humanID uuid.UUID, adapterKind, localSessionRef string) (protocol.Participant, error)
+	ParticipantByID(ctx context.Context, projectID, participantID uuid.UUID) (protocol.Participant, error)
 	InsertParticipant(ctx context.Context, participant protocol.Participant) (bool, error)
+
+	// InsertIntentRevision atomically creates revision 1 or advances an active
+	// caller-owned Intent from revision n-1. It reports false when either
+	// expected state was no longer current.
+	InsertIntentRevision(ctx context.Context, revision protocol.IntentRevision) (bool, error)
+	Intent(ctx context.Context, projectID, intentID uuid.UUID) (protocol.IntentView, error)
+	Intents(ctx context.Context, projectID uuid.UUID) ([]protocol.IntentView, error)
+	ReleaseIntent(ctx context.Context, projectID, intentID, participantID uuid.UUID, expectedRevision int) (bool, error)
 
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in

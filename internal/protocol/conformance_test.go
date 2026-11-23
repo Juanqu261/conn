@@ -39,6 +39,8 @@ func TestConformance(t *testing.T) {
 		protocol.ParticipantSchema:              roundTrip[protocol.Participant],
 		protocol.IntentInputSchema:              roundTrip[protocol.IntentInput],
 		protocol.IntentRevisionSchema:           roundTrip[protocol.IntentRevision],
+		protocol.IntentViewSchema:               roundTrip[protocol.IntentView],
+		protocol.IntentListSchema:               roundTrip[protocol.IntentList],
 		protocol.SemanticClaimCandidateSchema:   roundTrip[protocol.SemanticClaimCandidate],
 		protocol.SemanticClaimSchema:            roundTrip[protocol.SemanticClaim],
 		protocol.LocalAnalyzerReportSchema:      roundTrip[protocol.LocalAnalyzerReport],

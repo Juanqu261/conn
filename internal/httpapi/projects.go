@@ -91,6 +91,94 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
+	handle("POST /v1/projects/{project_id}/intents", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.IntentInput](w, r, log)
+		if !ok {
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.PublishIntent(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
+	handle("POST /v1/projects/{project_id}/intents/{intent_id}/revisions", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		expected, ok := queryInt(w, r, log, "expected_revision", 1, math.MaxInt32-1, nil)
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.IntentInput](w, r, log)
+		if !ok {
+			return
+		}
+		if input.IntentID != intentID {
+			writeInvalid(w, log, "The intent_id must match the Intent in the request path.", "/intent_id")
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.ReviseIntent(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, int(expected), input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
+	handle("POST /v1/projects/{project_id}/intents/{intent_id}/release", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.ReleaseIntent(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, intentID)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/intents", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		result, err := projects.Intents(r.Context(), s.Human.HumanID, projectID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/intents/{intent_id}", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		result, err := projects.Intent(r.Context(), s.Human.HumanID, projectID, intentID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/objectives", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

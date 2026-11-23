@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:intent-view",
+  "title": "Intent view",
+  "description": "An immutable Intent revision paired with its current lifecycle state and advisory coordination observations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intent_revision", "status", "advisory_observations"],
+  "properties": {
+    "intent_revision": { "$ref": "urn:conn:schema:v1:intent-revision" },
+    "status": { "enum": ["active", "released", "superseded"] },
+    "advisory_observations": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+    }
+  }
+}
