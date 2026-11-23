@@ -69,6 +69,15 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/radar", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		result, err := projects.Radar(r.Context(), s.Human.HumanID, projectID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("GET /v1/projects/{project_id}/repositories", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

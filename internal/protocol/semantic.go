@@ -293,6 +293,7 @@ type RadarView struct {
 	ActiveBlueprint  *RadarBlueprint         `json:"active_blueprint,omitempty"`
 	Repositories     []RepositoryConnection  `json:"repositories"`
 	ActiveIntents    []IntentRevision        `json:"active_intents"`
+	SemanticClaims   []SemanticClaim         `json:"semantic_claims"`
 	SemanticConcepts []RadarSemanticConcept  `json:"semantic_concepts,omitempty"`
 	OpenCollisions   []CollisionAssessment   `json:"open_collisions"`
 	DecisionRefs     []uuid.UUID             `json:"decision_refs,omitempty"`

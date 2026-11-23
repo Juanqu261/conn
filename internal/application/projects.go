@@ -161,6 +161,17 @@ type Tx interface {
 	// each with its revisions in force and their cell decisions.
 	BlueprintSummaries(ctx context.Context, projectID uuid.UUID) ([]protocol.BlueprintSummary, error)
 
+	// CurrentObjectives returns every current immutable objective snapshot.
+	CurrentObjectives(ctx context.Context, projectID uuid.UUID) ([]protocol.Objective, error)
+	// ActiveBlueprint returns the current active blueprint revision, if any.
+	ActiveBlueprint(ctx context.Context, projectID uuid.UUID) (protocol.BlueprintRevision, error)
+	// OpenCollisions returns advisory assessments that remain open or under review.
+	OpenCollisions(ctx context.Context, projectID uuid.UUID) ([]protocol.CollisionAssessment, error)
+	// ResolutionDecisionRefs returns immutable decision identifiers visible in the Project.
+	ResolutionDecisionRefs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
+	// ActiveEvidenceReferences returns evidence for current Objective revisions.
+	ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error)
+
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
 	AppendEvent(ctx context.Context, event protocol.EventEnvelope) (int64, error)

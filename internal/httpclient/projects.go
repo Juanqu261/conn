@@ -45,6 +45,11 @@ func (c *Client) AddMember(ctx context.Context, projectID, humanID uuid.UUID) (R
 	return post[protocol.ProjectMembership](ctx, c, projectPath(projectID)+"/members", protocol.ProjectMemberAdd{HumanID: humanID})
 }
 
+// Radar reads the complete member-authorized semantic coordination snapshot at one cursor.
+func (c *Client) Radar(ctx context.Context, projectID uuid.UUID) (Result[protocol.RadarView], error) {
+	return read[protocol.RadarView](ctx, c, projectPath(projectID)+"/radar")
+}
+
 // ConnectRepository connects an owner-authorized repository scope to a Project.
 func (c *Client) ConnectRepository(ctx context.Context, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
 	return post[protocol.RepositoryConnection](ctx, c, projectPath(projectID)+"/repositories", input)

@@ -11,6 +11,7 @@
     "objectives",
     "repositories",
     "active_intents",
+    "semantic_claims",
     "open_collisions",
     "open_questions",
     "assumptions",
@@ -49,6 +50,12 @@
     "active_intents": {
       "type": "array",
       "items": { "$ref": "urn:conn:schema:v1:intent-revision" }
+    },
+    "semantic_claims": {
+      "description": "Immutable claims on current active Intent revisions. Empty means no claims are available, not that the Project is complete.",
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "urn:conn:schema:v1:semantic-claim" }
     },
     "semantic_concepts": {
       "type": "array",
