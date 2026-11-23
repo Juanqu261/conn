@@ -97,6 +97,21 @@ type Tx interface {
 	Intents(ctx context.Context, projectID uuid.UUID) ([]protocol.IntentView, error)
 	ReleaseIntent(ctx context.Context, projectID, intentID, participantID uuid.UUID, expectedRevision int) (bool, error)
 
+	// InsertSemanticClaims records immutable claims for an exact immutable
+	// IntentRevision. Claim IDs are assigned by the application.
+	InsertSemanticClaims(ctx context.Context, claims []protocol.SemanticClaim) error
+	// ActiveSemanticClaims returns claims belonging to each current active
+	// Intent revision in a Project.
+	ActiveSemanticClaims(ctx context.Context, projectID uuid.UUID) ([]protocol.SemanticClaim, error)
+	// StaleOpenCollisionsForIntent transitions open or under-review
+	// assessments involving this exact Intent revision to stale. It returns the
+	// affected assessment IDs for append-only lifecycle events.
+	StaleOpenCollisionsForIntent(ctx context.Context, projectID, intentID uuid.UUID, revision int, staleAt protocol.Timestamp) ([]uuid.UUID, error)
+	// InsertCollisionAssessment stores one new assessment and its immutable
+	// matching-claim references. It returns false when that exact assessment
+	// identity was already recorded.
+	InsertCollisionAssessment(ctx context.Context, assessment protocol.CollisionAssessment) (bool, error)
+
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in
 	// the same Project. It reports false, changing nothing, otherwise.

@@ -98,12 +98,30 @@ func (p *Projects) writeIntent(ctx context.Context, actor, projectID, participan
 			}
 			return ErrStaleRevision
 		}
+		claims, err := persistDeclaredClaims(ctx, tx, revision)
+		if err != nil {
+			return err
+		}
+		if !publish {
+			if err := p.staleIntentCollisions(ctx, tx, actor, projectID, revision.IntentID, expectedRevision, revision.CreatedAt); err != nil {
+				return err
+			}
+		}
 		result.Data = protocol.IntentView{IntentRevision: revision, Status: "active", AdvisoryObservations: intentObservations(revision)}
 		payload := protocol.EventPayload(protocol.IntentPublished{Revision: revision.Revision})
 		if !publish {
 			payload = protocol.IntentRevised{Revision: revision.Revision}
 		}
-		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, input.IntentID, actor, now, payload))
+		if _, err := tx.AppendEvent(ctx, newEvent(projectID, input.IntentID, actor, now, payload)); err != nil {
+			return err
+		}
+		if err := p.appendClaimEvents(ctx, tx, actor, claims, revision.CreatedAt); err != nil {
+			return err
+		}
+		if err := p.assessActiveIntentCollisions(ctx, tx, actor, revision, revision.CreatedAt); err != nil {
+			return err
+		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		return err
 	})
 	return result, err
@@ -149,7 +167,13 @@ func (p *Projects) ReleaseIntent(ctx context.Context, actor, projectID, particip
 		}
 		current.Status = "released"
 		result.Data = current
-		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, intentID, actor, now, protocol.IntentReleased{Revision: current.IntentRevision.Revision}))
+		if _, err := tx.AppendEvent(ctx, newEvent(projectID, intentID, actor, now, protocol.IntentReleased{Revision: current.IntentRevision.Revision})); err != nil {
+			return err
+		}
+		if err := p.staleIntentCollisions(ctx, tx, actor, projectID, intentID, current.IntentRevision.Revision, protocol.NewTimestamp(now)); err != nil {
+			return err
+		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		return err
 	})
 	return result, err
