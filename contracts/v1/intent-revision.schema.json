@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:intent-revision",
+  "title": "IntentRevision",
+  "description": "Immutable snapshot of a participant's change intent. The server derives the Participant and timestamps it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "intent_id",
+    "project_id",
+    "participant_id",
+    "revision",
+    "objective_id",
+    "objective_revision",
+    "summary_markdown",
+    "created_at"
+  ],
+  "properties": {
+    "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "blueprint_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "charter_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "base_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+    "head_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+    "branch_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "summary_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "assumptions": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "declared_claims": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "allOf": [
+          { "$ref": "urn:conn:schema:v1:semantic-claim-candidate" },
+          {
+            "type": "object",
+            "properties": { "provenance_kind": { "const": "declared" } },
+            "required": ["provenance_kind"]
+          }
+        ]
+      }
+    },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:intent-input",
+  "title": "Intent publish or revision input",
+  "description": "Participant-authored intent content. The server derives participant and Human authority and assigns record timestamps.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intent_id", "objective_id", "objective_revision", "summary_markdown"],
+  "properties": {
+    "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "blueprint_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "charter_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "base_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+    "head_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+    "branch_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "summary_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "assumptions": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "declared_claims": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "allOf": [
+          { "$ref": "urn:conn:schema:v1:semantic-claim-candidate" },
+          {
+            "type": "object",
+            "properties": { "provenance_kind": { "const": "declared" } },
+            "required": ["provenance_kind"]
+          }
+        ]
+      }
+    }
+  }
+}

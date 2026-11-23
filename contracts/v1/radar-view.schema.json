@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:radar-view",
+  "title": "RadarView",
+  "description": "One authorized member's explainable current Project coordination state at an event cursor. Missing or stale information is represented explicitly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "as_of_event",
+    "objectives",
+    "repositories",
+    "active_intents",
+    "open_collisions",
+    "open_questions",
+    "assumptions",
+    "evidence_coverage",
+    "known_unknowns"
+  ],
+  "properties": {
+    "project": { "$ref": "urn:conn:schema:v1:project" },
+    "as_of_event": { "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence" },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["objective_id", "revision", "title"],
+        "properties": {
+          "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+          "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+        }
+      }
+    },
+    "active_blueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blueprint_id", "revision"],
+      "properties": {
+        "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "urn:conn:schema:v1:repository-connection" }
+    },
+    "active_intents": {
+      "type": "array",
+      "items": { "$ref": "urn:conn:schema:v1:intent-revision" }
+    },
+    "semantic_concepts": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["normalized_subject", "claim_refs"],
+        "properties": {
+          "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+          "claim_refs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+          }
+        }
+      }
+    },
+    "open_collisions": {
+      "type": "array",
+      "items": { "$ref": "urn:conn:schema:v1:collision-assessment" }
+    },
+    "decision_refs": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+    },
+    "dependencies": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from_intent_id", "to_intent_id", "summary"],
+        "properties": {
+          "from_intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "to_intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "assumptions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "evidence_coverage": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "objective_id",
+          "objective_revision",
+          "acceptance_key",
+          "state",
+          "evidence_refs"
+        ],
+        "properties": {
+          "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+          "acceptance_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+          "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
+          "evidence_refs": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+          }
+        }
+      }
+    },
+    "known_unknowns": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    }
+  }
+}

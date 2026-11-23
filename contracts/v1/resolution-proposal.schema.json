@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:resolution-proposal",
+  "title": "ResolutionProposal",
+  "description": "A non-binding proposed response to one CollisionAssessment. It may be authored by an agent participant or a human.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proposal_id",
+    "project_id",
+    "collision_id",
+    "kind",
+    "rationale_markdown",
+    "created_at"
+  ],
+  "properties": {
+    "proposal_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "proposed_by_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "proposed_by_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+    "rationale_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/rationale" },
+    "references": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+    },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["proposed_by_participant_id"],
+      "properties": {
+        "proposed_by_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      },
+      "not": {
+        "type": "object",
+        "required": ["proposed_by_human_id"],
+        "properties": {
+          "proposed_by_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["proposed_by_human_id"],
+      "properties": {
+        "proposed_by_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      },
+      "not": {
+        "type": "object",
+        "required": ["proposed_by_participant_id"],
+        "properties": {
+          "proposed_by_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+        }
+      }
+    }
+  ]
+}

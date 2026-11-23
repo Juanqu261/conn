@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:semantic-claim-candidate",
+  "title": "SemanticClaim candidate",
+  "description": "A bounded semantic assertion before Conn assigns a claim identity. It deliberately carries references, never raw source or prompt content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["subject_kind", "normalized_subject", "display_name", "relation", "provenance_kind"],
+  "properties": {
+    "subject_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticClaimKind" },
+    "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+    "display_name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "relation": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticRelation" },
+    "provenance_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/claimProvenance" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/evidenceRef" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "provenance_kind": { "const": "model_inference" } },
+        "required": ["provenance_kind"]
+      },
+      "then": {
+        "properties": { "confidence": { "type": "number", "minimum": 0, "maximum": 1 } },
+        "required": ["confidence"]
+      }
+    }
+  ],
+  "$defs": {
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "source_location",
+            "contract_operation",
+            "schema_resource",
+            "commit",
+            "external_link",
+            "decision"
+          ]
+        },
+        "locator": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+        "path": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+        "line": { "type": "integer", "minimum": 1 },
+        "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" }
+      }
+    }
+  }
+}

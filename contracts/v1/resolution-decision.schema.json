@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:resolution-decision",
+  "title": "ResolutionDecision",
+  "description": "An immutable human-authorized decision for one CollisionAssessment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "project_id",
+    "collision_id",
+    "decided_by_human_id",
+    "kind",
+    "binding",
+    "rationale_markdown",
+    "created_at"
+  ],
+  "properties": {
+    "decision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "selected_proposal_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "decided_by_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+    "binding": { "type": "boolean" },
+    "rationale_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/rationale" },
+    "references": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+    },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": ["contract_agreement", "accepted_risk", "revise_objective", "revise_blueprint"]
+          }
+        },
+        "required": ["kind"]
+      },
+      "then": { "properties": { "binding": { "const": true } } }
+    }
+  ]
+}

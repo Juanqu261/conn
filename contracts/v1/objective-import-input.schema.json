@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:objective-import-input",
+  "title": "Objective import input",
+  "description": "Human-authorized import metadata for proposing a versioned Conn Objective from an external source. Source content is not a live master after import.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_kind", "source_ref", "content_hash", "title", "overview_markdown"],
+  "properties": {
+    "source_kind": { "enum": ["kiro_spec", "github_issue"] },
+    "source_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "source_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },
+    "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "overview_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "key_points": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:objective#/$defs/keyPoint" }
+    }
+  }
+}

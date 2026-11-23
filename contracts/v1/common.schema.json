@@ -75,6 +75,109 @@
       "minLength": 1,
       "maxLength": 2048,
       "pattern": "^https?://[!-~]+$"
+    },
+    "sha256": {
+      "description": "Lowercase hexadecimal SHA-256 digest.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "description": "Lowercase abbreviated or full Git object ID. Repository-specific validation determines whether it exists.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$"
+    },
+    "repositoryRemote": {
+      "description": "Normalized, credential-free Git host and path. It has no scheme, user information, port, query, or fragment.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 1024,
+      "pattern": "^[a-z0-9][a-z0-9.-]*(/[A-Za-z0-9._~-]+)+$"
+    },
+    "relativePath": {
+      "description": "Bounded non-empty path reference. Callers enforce repository-relative semantics and reject traversal.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
+      "pattern": "[^\\r\\n]"
+    },
+    "opaqueReference": {
+      "description": "A bounded non-secret correlation or external reference. It must not contain control characters.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "allOf": [{ "$ref": "#/$defs/noNul" }],
+      "pattern": "[^\\t\\n\\v\\f\\r ]"
+    },
+    "semanticSubject": {
+      "description": "A stable namespaced semantic-concept key. Its namespace and native references explain how it was derived.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 512,
+      "pattern": "^[a-z][a-z0-9_-]*(?::[A-Za-z0-9._~/-]+)+$"
+    },
+    "semanticClaimKind": {
+      "enum": [
+        "behavior",
+        "invariant",
+        "contract",
+        "data_resource",
+        "infrastructure_resource",
+        "code_symbol",
+        "dependency",
+        "assumption",
+        "question",
+        "acceptance_criterion"
+      ]
+    },
+    "semanticRelation": {
+      "enum": [
+        "affects",
+        "changes",
+        "consumes",
+        "produces",
+        "depends_on",
+        "removes",
+        "verifies",
+        "assumes",
+        "questions"
+      ]
+    },
+    "claimProvenance": {
+      "enum": ["declared", "static_analysis", "external_import", "ci_evidence", "model_inference"]
+    },
+    "collisionSeverity": {
+      "enum": ["info", "amber", "red"]
+    },
+    "resolutionKind": {
+      "enum": [
+        "dependency",
+        "sequencing",
+        "contract_agreement",
+        "accepted_risk",
+        "false_positive",
+        "revise_objective",
+        "revise_blueprint",
+        "other"
+      ]
+    },
+    "evidenceState": {
+      "enum": ["passing", "failing", "missing", "stale", "inaccessible", "unknown"]
+    },
+    "semanticEventType": {
+      "enum": [
+        "repository.connected",
+        "intent.published",
+        "intent.revised",
+        "intent.released",
+        "claims.observed",
+        "collision.opened",
+        "collision.updated",
+        "resolution.proposed",
+        "resolution.decided",
+        "evidence.attached",
+        "objective.imported"
+      ]
     }
   }
 }

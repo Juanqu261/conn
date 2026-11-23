@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:local-analyzer-report",
+  "title": "Local analyzer report",
+  "description": "Bounded local analysis output. It contains normalized claims and diagnostics, never repository source or prompts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["report_version", "repository", "claims", "diagnostics"],
+  "properties": {
+    "report_version": { "const": 1 },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_remote"],
+      "properties": {
+        "canonical_remote": { "$ref": "urn:conn:schema:v1:common#/$defs/repositoryRemote" },
+        "head_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "branch_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "allOf": [
+          { "$ref": "urn:conn:schema:v1:semantic-claim-candidate" },
+          {
+            "type": "object",
+            "properties": { "provenance_kind": { "const": "static_analysis" } },
+            "required": ["provenance_kind"]
+          }
+        ]
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+          "message": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+          "path": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+          "line": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

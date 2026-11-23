@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:repository-connection",
+  "title": "RepositoryConnection",
+  "description": "A Project-owned, credential-free connection to one source repository. It never grants Conn source-write authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repository_id",
+    "project_id",
+    "host_kind",
+    "canonical_remote",
+    "analysis_enabled",
+    "created_by_human_id",
+    "created_at"
+  ],
+  "properties": {
+    "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "host_kind": { "enum": ["github", "generic_git"] },
+    "canonical_remote": { "$ref": "urn:conn:schema:v1:common#/$defs/repositoryRemote" },
+    "host_repository_node_id": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "default_branch": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "analysis_enabled": { "type": "boolean" },
+    "created_by_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}

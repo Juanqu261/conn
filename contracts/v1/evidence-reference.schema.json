@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:evidence-reference",
+  "title": "EvidenceReference",
+  "description": "Reference-first evidence linked to a project objective. Conn does not require the underlying artifact or raw output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_id",
+    "project_id",
+    "objective_id",
+    "objective_revision",
+    "kind",
+    "state",
+    "locator",
+    "observed_at"
+  ],
+  "properties": {
+    "evidence_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "acceptance_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+    "kind": {
+      "enum": [
+        "commit",
+        "pull_request",
+        "ci_run",
+        "test_case",
+        "trace",
+        "artifact",
+        "decision",
+        "external_link"
+      ]
+    },
+    "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
+    "locator": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },
+    "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+    "producer_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "observed_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}
