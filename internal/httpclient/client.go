@@ -67,9 +67,10 @@ func NewHTTPClient() *http.Client {
 
 // Client calls one Conn server, optionally with a session token.
 type Client struct {
-	base  *url.URL
-	http  *http.Client
-	token secret.String
+	base    *url.URL
+	http    *http.Client
+	token   secret.String
+	adapter string
 }
 
 // New validates serverURL and returns a client for it.
@@ -114,6 +115,15 @@ func (c *Client) URL() string { return c.base.String() }
 func (c *Client) WithToken(token secret.String) *Client {
 	clone := *c
 	clone.token = token
+	return &clone
+}
+
+// WithAdapter identifies a bounded adapter participant for participant-owned
+// operations. It does not carry human authority, which always comes from the
+// bearer session. An empty adapter retains the CLI default.
+func (c *Client) WithAdapter(adapter string) *Client {
+	clone := *c
+	clone.adapter = adapter
 	return &clone
 }
 
@@ -181,6 +191,9 @@ func (c *Client) send(ctx context.Context, method, path string, credential secre
 	}
 	if !credential.IsZero() {
 		req.Header.Set("Authorization", "Bearer "+credential.Reveal())
+	}
+	if c.adapter != "" {
+		req.Header.Set("X-Conn-Participant-Adapter", c.adapter)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

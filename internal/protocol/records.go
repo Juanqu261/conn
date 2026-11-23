@@ -38,6 +38,7 @@ const (
 	ResolutionDecisionSchema       = "urn:conn:schema:v1:resolution-decision"
 	ResolutionDecisionInputSchema  = "urn:conn:schema:v1:resolution-decision-input"
 	EvidenceReferenceSchema        = "urn:conn:schema:v1:evidence-reference"
+	EvidenceAttachmentInputSchema  = "urn:conn:schema:v1:evidence-attachment-input"
 	ObjectiveImportInputSchema     = "urn:conn:schema:v1:objective-import-input"
 	RadarViewSchema                = "urn:conn:schema:v1:radar-view"
 )

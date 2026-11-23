@@ -50,14 +50,18 @@ func (t projectTx) SemanticClaims(ctx context.Context, projectID uuid.UUID, clai
 }
 
 func (t projectTx) InsertResolutionProposal(ctx context.Context, proposal protocol.ResolutionProposal) error {
-	references, err := json.Marshal(proposal.References)
+	references := proposal.References
+	if references == nil {
+		references = []string{}
+	}
+	encodedReferences, err := json.Marshal(references)
 	if err != nil {
 		return err
 	}
 	_, err = t.tx.Exec(ctx, `INSERT INTO resolution_proposals
 		(proposal_id, project_id, collision_id, proposed_by_participant_id, proposed_by_human_id, kind, rationale_markdown, references_json, created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, proposal.ProposalID, proposal.ProjectID, proposal.CollisionID,
-		proposal.ProposedByParticipantID, proposal.ProposedByHumanID, proposal.Kind, proposal.RationaleMarkdown, references, proposal.CreatedAt.Time())
+		proposal.ProposedByParticipantID, proposal.ProposedByHumanID, proposal.Kind, proposal.RationaleMarkdown, encodedReferences, proposal.CreatedAt.Time())
 	return err
 }
 

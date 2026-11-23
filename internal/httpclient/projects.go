@@ -95,6 +95,12 @@ func (c *Client) ReleaseIntent(ctx context.Context, projectID, intentID uuid.UUI
 	return decodeResult[protocol.IntentView](body)
 }
 
+// AttachEvidence attaches a bounded, reference-only evidence item to the
+// caller's own active Intent.
+func (c *Client) AttachEvidence(ctx context.Context, projectID, intentID uuid.UUID, input protocol.EvidenceAttachmentInput) (Result[protocol.EvidenceReference], error) {
+	return post[protocol.EvidenceReference](ctx, c, fmt.Sprintf("%s/intents/%s/evidence", projectPath(projectID), intentID), input)
+}
+
 // AttachStaticAnalysis attaches a validated source-free local analyzer report
 // to the caller's active Intent revision.
 func (c *Client) AttachStaticAnalysis(ctx context.Context, projectID, intentID uuid.UUID, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {

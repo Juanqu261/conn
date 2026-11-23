@@ -252,6 +252,23 @@ type ResolutionDecision struct {
 
 func (ResolutionDecision) SchemaID() string { return ResolutionDecisionSchema }
 
+// EvidenceAttachmentInput is participant-authored, reference-only evidence
+// for the caller's own active Intent. Conn derives the evidence identifier,
+// Project, producer, and observation time.
+type EvidenceAttachmentInput struct {
+	IntentID          uuid.UUID `json:"intent_id"`
+	ObjectiveID       uuid.UUID `json:"objective_id"`
+	ObjectiveRevision int       `json:"objective_revision"`
+	AcceptanceKey     string    `json:"acceptance_key,omitempty"`
+	Kind              string    `json:"kind"`
+	State             string    `json:"state"`
+	Locator           string    `json:"locator"`
+	ContentHash       string    `json:"content_hash,omitempty"`
+	Summary           string    `json:"summary,omitempty"`
+}
+
+func (EvidenceAttachmentInput) SchemaID() string { return EvidenceAttachmentInputSchema }
+
 // EvidenceReference links an objective revision to externally held evidence.
 type EvidenceReference struct {
 	EvidenceID            uuid.UUID  `json:"evidence_id"`

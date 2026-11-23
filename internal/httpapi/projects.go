@@ -104,7 +104,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
 		if err != nil {
 			writeProblem(w, log, err)
 			return
@@ -161,7 +161,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
 		if err != nil {
 			writeProblem(w, log, err)
 			return
@@ -191,7 +191,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 			writeInvalid(w, log, "The intent_id must match the Intent in the request path.", "/intent_id")
 			return
 		}
-		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
 		if err != nil {
 			writeProblem(w, log, err)
 			return
@@ -209,7 +209,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
 		if err != nil {
 			writeProblem(w, log, err)
 			return
@@ -240,6 +240,32 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("POST /v1/projects/{project_id}/intents/{intent_id}/evidence", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.EvidenceAttachmentInput](w, r, log)
+		if !ok {
+			return
+		}
+		if input.IntentID != intentID {
+			writeInvalid(w, log, "The intent_id must match the Intent in the request path.", "/intent_id")
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.AttachEvidence(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/intents/{intent_id}/analysis", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
@@ -253,7 +279,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, participantAdapter(r), "")
 		if err != nil {
 			writeProblem(w, log, err)
 			return
@@ -432,4 +458,14 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		result, err := projects.Events(r.Context(), s.Human.HumanID, projectID, after, int(limit))
 		respondEvents(w, log, result, err)
 	})
+}
+
+// participantAdapter accepts only Conn's built-in Kiro identifier. It never
+// selects a Human or local session reference; those remain session-derived and
+// unavailable to HTTP/MCP input. Other clients retain the CLI participant.
+func participantAdapter(r *http.Request) string {
+	if r.Header.Get("X-Conn-Participant-Adapter") == "kiro" {
+		return "kiro"
+	}
+	return "cli"
 }

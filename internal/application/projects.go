@@ -190,6 +190,8 @@ type Tx interface {
 	ResolutionDecisions(ctx context.Context, projectID uuid.UUID) ([]protocol.ResolutionDecision, error)
 	// ActiveEvidenceReferences returns evidence for current Objective revisions.
 	ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error)
+	// InsertEvidenceReference stores one immutable, participant-attributed evidence record.
+	InsertEvidenceReference(ctx context.Context, evidence protocol.EvidenceReference) error
 
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
