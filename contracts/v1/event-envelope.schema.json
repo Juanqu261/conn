@@ -29,12 +29,35 @@
         "blueprint.revision_activated",
         "blueprint.revision_rejected",
         "charter.accepted",
-        "charter.rejected"
+        "charter.rejected",
+        "repository.connected",
+        "intent.published",
+        "intent.revised",
+        "intent.released",
+        "claims.observed",
+        "collision.opened",
+        "collision.updated",
+        "resolution.proposed",
+        "resolution.decided",
+        "evidence.attached",
+        "objective.imported"
       ]
     },
     "entity_type": {
       "description": "Membership events use entity type project with the member identity in the payload.",
-      "enum": ["project", "objective", "blueprint", "charter_decision"]
+      "enum": [
+        "project",
+        "objective",
+        "blueprint",
+        "charter_decision",
+        "repository",
+        "intent",
+        "semantic_claim",
+        "collision",
+        "resolution_proposal",
+        "resolution_decision",
+        "evidence_reference"
+      ]
     },
     "entity_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "actor_human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
@@ -125,6 +148,104 @@
           "payload": { "$ref": "#/$defs/charterDecisionPayload" }
         }
       }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "repository.connected" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "repository" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": { "enum": ["intent.published", "intent.revised", "intent.released"] }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "intent" },
+          "payload": { "$ref": "#/$defs/revisionPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "claims.observed" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "semantic_claim" },
+          "payload": { "$ref": "#/$defs/claimObservedPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "enum": ["collision.opened", "collision.updated"] } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "collision" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "resolution.proposed" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "resolution_proposal" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "resolution.decided" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "resolution_decision" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "evidence.attached" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "evidence_reference" },
+          "payload": { "$ref": "#/$defs/emptyPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "objective.imported" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "objective" },
+          "payload": { "$ref": "#/$defs/revisionPayload" }
+        }
+      }
     }
   ],
   "$defs": {
@@ -147,6 +268,15 @@
       "required": ["revision"],
       "properties": {
         "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "claimObservedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_id", "intent_revision"],
+      "properties": {
+        "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
       }
     },
     "blueprintProposedPayload": {

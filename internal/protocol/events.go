@@ -18,16 +18,34 @@ const (
 	EventBlueprintRevisionRejected  EventType = "blueprint.revision_rejected"
 	EventCharterAccepted            EventType = "charter.accepted"
 	EventCharterRejected            EventType = "charter.rejected"
+	EventRepositoryConnected        EventType = "repository.connected"
+	EventIntentPublished            EventType = "intent.published"
+	EventIntentRevised              EventType = "intent.revised"
+	EventIntentReleased             EventType = "intent.released"
+	EventClaimsObserved             EventType = "claims.observed"
+	EventCollisionOpened            EventType = "collision.opened"
+	EventCollisionUpdated           EventType = "collision.updated"
+	EventResolutionProposed         EventType = "resolution.proposed"
+	EventResolutionDecided          EventType = "resolution.decided"
+	EventEvidenceAttached           EventType = "evidence.attached"
+	EventObjectiveImported          EventType = "objective.imported"
 )
 
 // EntityType names the kind of entity an event's EntityID refers to.
 type EntityType string
 
 const (
-	EntityProject         EntityType = "project"
-	EntityObjective       EntityType = "objective"
-	EntityBlueprint       EntityType = "blueprint"
-	EntityCharterDecision EntityType = "charter_decision"
+	EntityProject            EntityType = "project"
+	EntityObjective          EntityType = "objective"
+	EntityBlueprint          EntityType = "blueprint"
+	EntityCharterDecision    EntityType = "charter_decision"
+	EntityRepository         EntityType = "repository"
+	EntityIntent             EntityType = "intent"
+	EntitySemanticClaim      EntityType = "semantic_claim"
+	EntityCollision          EntityType = "collision"
+	EntityResolutionProposal EntityType = "resolution_proposal"
+	EntityResolutionDecision EntityType = "resolution_decision"
+	EntityEvidenceReference  EntityType = "evidence_reference"
 )
 
 // EventPayload is implemented by exactly one payload type per EventType.
@@ -128,6 +146,17 @@ var payloadDecoders = map[EventType]func([]byte) (EventPayload, error){
 	EventBlueprintRevisionRejected:  decodePayload[BlueprintRevisionRejected],
 	EventCharterAccepted:            decodePayload[CharterAccepted],
 	EventCharterRejected:            decodePayload[CharterRejected],
+	EventRepositoryConnected:        decodePayload[RepositoryConnected],
+	EventIntentPublished:            decodePayload[IntentPublished],
+	EventIntentRevised:              decodePayload[IntentRevised],
+	EventIntentReleased:             decodePayload[IntentReleased],
+	EventClaimsObserved:             decodePayload[ClaimsObserved],
+	EventCollisionOpened:            decodePayload[CollisionOpened],
+	EventCollisionUpdated:           decodePayload[CollisionUpdated],
+	EventResolutionProposed:         decodePayload[ResolutionProposed],
+	EventResolutionDecided:          decodePayload[ResolutionDecided],
+	EventEvidenceAttached:           decodePayload[EvidenceAttached],
+	EventObjectiveImported:          decodePayload[ObjectiveImported],
 }
 
 func decodePayload[T EventPayload](data []byte) (EventPayload, error) {
@@ -211,3 +240,80 @@ type CharterRejected struct {
 
 func (CharterRejected) EventType() EventType   { return EventCharterRejected }
 func (CharterRejected) EntityType() EntityType { return EntityCharterDecision }
+
+// RepositoryConnected reports that a Project gained a repository connection.
+type RepositoryConnected struct{}
+
+func (RepositoryConnected) EventType() EventType   { return EventRepositoryConnected }
+func (RepositoryConnected) EntityType() EntityType { return EntityRepository }
+
+// IntentPublished reports the first immutable revision of an Intent.
+type IntentPublished struct {
+	Revision int `json:"revision"`
+}
+
+func (IntentPublished) EventType() EventType   { return EventIntentPublished }
+func (IntentPublished) EntityType() EntityType { return EntityIntent }
+
+// IntentRevised reports a new immutable IntentRevision.
+type IntentRevised struct {
+	Revision int `json:"revision"`
+}
+
+func (IntentRevised) EventType() EventType   { return EventIntentRevised }
+func (IntentRevised) EntityType() EntityType { return EntityIntent }
+
+// IntentReleased reports that an active Intent no longer coordinates work.
+type IntentReleased struct {
+	Revision int `json:"revision"`
+}
+
+func (IntentReleased) EventType() EventType   { return EventIntentReleased }
+func (IntentReleased) EntityType() EntityType { return EntityIntent }
+
+// ClaimsObserved reports a claim observation tied to one exact IntentRevision.
+type ClaimsObserved struct {
+	IntentID       uuid.UUID `json:"intent_id"`
+	IntentRevision int       `json:"intent_revision"`
+}
+
+func (ClaimsObserved) EventType() EventType   { return EventClaimsObserved }
+func (ClaimsObserved) EntityType() EntityType { return EntitySemanticClaim }
+
+// CollisionOpened reports a newly assessed advisory collision.
+type CollisionOpened struct{}
+
+func (CollisionOpened) EventType() EventType   { return EventCollisionOpened }
+func (CollisionOpened) EntityType() EntityType { return EntityCollision }
+
+// CollisionUpdated reports a change to an existing advisory collision state.
+type CollisionUpdated struct{}
+
+func (CollisionUpdated) EventType() EventType   { return EventCollisionUpdated }
+func (CollisionUpdated) EntityType() EntityType { return EntityCollision }
+
+// ResolutionProposed reports a non-binding collision response proposal.
+type ResolutionProposed struct{}
+
+func (ResolutionProposed) EventType() EventType   { return EventResolutionProposed }
+func (ResolutionProposed) EntityType() EntityType { return EntityResolutionProposal }
+
+// ResolutionDecided reports a human-authorized collision decision.
+type ResolutionDecided struct{}
+
+func (ResolutionDecided) EventType() EventType   { return EventResolutionDecided }
+func (ResolutionDecided) EntityType() EntityType { return EntityResolutionDecision }
+
+// EvidenceAttached reports a reference-first evidence attachment.
+type EvidenceAttached struct{}
+
+func (EvidenceAttached) EventType() EventType   { return EventEvidenceAttached }
+func (EvidenceAttached) EntityType() EntityType { return EntityEvidenceReference }
+
+// ObjectiveImported reports an imported Objective revision.
+type ObjectiveImported struct {
+	Revision int `json:"revision"`
+}
+
+func (ObjectiveImported) EventType() EventType   { return EventObjectiveImported }
+func (ObjectiveImported) EntityType() EntityType { return EntityObjective }

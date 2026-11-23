@@ -20,6 +20,20 @@ const (
 	ProjectStatusSchema          = "urn:conn:schema:v1:project-status"
 	CharterViewSchema            = "urn:conn:schema:v1:charter-view"
 	EventEnvelopeSchema          = "urn:conn:schema:v1:event-envelope"
+	RepositoryConnectionSchema   = "urn:conn:schema:v1:repository-connection"
+	ParticipantSchema            = "urn:conn:schema:v1:participant"
+	IntentInputSchema            = "urn:conn:schema:v1:intent-input"
+	IntentRevisionSchema         = "urn:conn:schema:v1:intent-revision"
+	SemanticClaimCandidateSchema = "urn:conn:schema:v1:semantic-claim-candidate"
+	SemanticClaimSchema          = "urn:conn:schema:v1:semantic-claim"
+	LocalAnalyzerReportSchema    = "urn:conn:schema:v1:local-analyzer-report"
+	CollisionAssessmentSchema    = "urn:conn:schema:v1:collision-assessment"
+	ConflictContextPackSchema    = "urn:conn:schema:v1:conflict-context-pack"
+	ResolutionProposalSchema     = "urn:conn:schema:v1:resolution-proposal"
+	ResolutionDecisionSchema     = "urn:conn:schema:v1:resolution-decision"
+	EvidenceReferenceSchema      = "urn:conn:schema:v1:evidence-reference"
+	ObjectiveImportInputSchema   = "urn:conn:schema:v1:objective-import-input"
+	RadarViewSchema              = "urn:conn:schema:v1:radar-view"
 )
 
 // Project is the authorization and event-cursor boundary for one team effort.

@@ -1754,6 +1754,45 @@
         "title": "Semantic intent radar",
         "overview_markdown": "Coordinate semantic change intent before implementation."
       }
+    },
+    {
+      "name": "event envelope accepts a semantic claim observation",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 9,
+        "event_id": "019a8f00-0020-7000-8000-000000000020",
+        "event_type": "claims.observed",
+        "entity_type": "semantic_claim",
+        "entity_id": "019a8f00-0014-7000-8000-000000000014",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-22T09:10:00Z",
+        "payload": {
+          "intent_id": "019a8f00-0012-7000-8000-000000000012",
+          "intent_revision": 1
+        }
+      }
+    },
+    {
+      "name": "semantic event rejects the wrong entity type",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": false,
+      "at": "/entity_type",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 9,
+        "event_id": "019a8f00-0020-7000-8000-000000000020",
+        "event_type": "claims.observed",
+        "entity_type": "intent",
+        "entity_id": "019a8f00-0014-7000-8000-000000000014",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-22T09:10:00Z",
+        "payload": {
+          "intent_id": "019a8f00-0012-7000-8000-000000000012",
+          "intent_revision": 1
+        }
+      }
     }
   ]
 }
