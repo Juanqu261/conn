@@ -124,6 +124,7 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newLogoutCommand(deps, streams),
 		newWhoAmICommand(deps, streams),
 		newProjectCommand(deps, streams),
+		newRepositoryCommand(deps, streams),
 		newObjectiveCommand(deps, streams),
 		newBlueprintCommand(deps, streams),
 		newCharterCommand(deps, streams),

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:repository-connect-input",
+  "title": "Repository connection input",
+  "description": "Owner-authored, credential-free details for connecting one repository to a Project. The server derives the actor and creation time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository_id", "host_kind", "canonical_remote", "analysis_enabled"],
+  "properties": {
+    "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "host_kind": { "enum": ["github", "generic_git"] },
+    "canonical_remote": { "$ref": "urn:conn:schema:v1:common#/$defs/repositoryRemote" },
+    "host_repository_node_id": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "default_branch": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+    "analysis_enabled": { "type": "boolean" }
+  }
+}

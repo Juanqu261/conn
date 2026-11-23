@@ -69,6 +69,28 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/repositories", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		result, err := projects.RepositoryConnections(r.Context(), s.Human.HumanID, projectID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("POST /v1/projects/{project_id}/repositories", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.RepositoryConnectInput](w, r, log)
+		if !ok {
+			return
+		}
+		result, err := projects.ConnectRepository(r.Context(), s.Human.HumanID, projectID, input)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/objectives", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

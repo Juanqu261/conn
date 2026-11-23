@@ -91,14 +91,23 @@ func TestSemanticLedgerSchema(t *testing.T) {
 				(evidence_id, project_id, intent_id, objective_id, objective_revision, kind, state, locator, observed_at, document)
 			VALUES
 				('019a8f00-0114-7000-8000-000000000114', $1, $2, $3, 1, 'ci_run', 'passing', 'run-114', now(),
-				 '{"evidence_id":"019a8f00-0114-7000-8000-000000000114","project_id":"019a8f00-0101-7000-8000-000000000101","objective_id":"019a8f00-0102-7000-8000-000000000102","objective_revision":1,"observed_at":"2026-11-22T09:00:00Z"}');
-			UPDATE project_event_counters SET last_event_sequence = 2 WHERE project_id = $1;
+				 '{"evidence_id":"019a8f00-0114-7000-8000-000000000114","project_id":"019a8f00-0101-7000-8000-000000000101","objective_id":"019a8f00-0102-7000-8000-000000000102","objective_revision":1,"observed_at":"2026-11-22T09:00:00Z"}')`,
+			semanticProject, semanticIntent, semanticObjective); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE project_event_counters SET last_event_sequence = 2 WHERE project_id = $1`, semanticProject); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO events (project_id, event_sequence, event_id, event_type, entity_type, entity_id, actor_human_id, occurred_at, payload)
 			VALUES ($1, 2, '019a8f00-0115-7000-8000-000000000115', 'evidence.attached', 'evidence_reference',
-				'019a8f00-0114-7000-8000-000000000114', $4, now(), '{}');
+				'019a8f00-0114-7000-8000-000000000114', $2, now(), '{}')`, semanticProject, semanticHuman); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO repository_connections (repository_id, project_id, host_kind, canonical_remote, analysis_enabled, created_by_human_id, created_at)
-			VALUES ('019a8f00-0116-7000-8000-000000000116', $1, 'github', 'github.com/acme/payments', true, $4, now())`,
-			semanticProject, semanticIntent, semanticObjective, semanticHuman); err == nil {
+			VALUES ('019a8f00-0116-7000-8000-000000000116', $1, 'github', 'github.com/acme/payments', true, $2, now())`,
+			semanticProject, semanticHuman); err == nil {
 			t.Fatal("expected duplicate repository failure")
 		}
 		if err := tx.Rollback(ctx); err != nil {

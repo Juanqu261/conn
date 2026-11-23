@@ -98,7 +98,7 @@ func TestAPI(t *testing.T) {
 	bob, bobID := login("gh-bob")
 	dave, daveID := login("gh-dave")
 
-	project, objective, blueprint := uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+	project, objective, blueprint, repository := uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
 	cellA, cellB := uuid.NewV7(), uuid.NewV7()
 	projectPath := "/v1/projects/" + project.String()
 	objectiveBody := func(id uuid.UUID, title, keyPoints string) string {
@@ -233,6 +233,20 @@ func TestAPI(t *testing.T) {
 			wantStatus: 422, wantCode: "invalid_input"},
 		{name: "a non-member cannot page events", method: "GET", path: projectPath + "/events", token: dave,
 			wantStatus: 404, wantCode: "not_found"},
+		{name: "the owner connects a credential-free repository", method: "POST", path: projectPath + "/repositories", token: alice,
+			body: fmt.Sprintf(`{"repository_id": %q, "host_kind": "github", "canonical_remote": "github.com/acme/payments", "analysis_enabled": true}`, repository), wantStatus: 201, wantEvent: 10,
+			check: field("created_by_human_id", aliceID)},
+		{name: "a member reads repository scopes", method: "GET", path: projectPath + "/repositories", token: bob,
+			wantStatus: 200, wantEvent: 10, check: func(t *testing.T, data json.RawMessage) {
+				list, err := protocol.Decode[protocol.RepositoryConnectionList](data)
+				if err != nil || len(list.Repositories) != 1 || list.Repositories[0].RepositoryID != repository {
+					t.Fatalf("repositories = %#v, err = %v", list, err)
+				}
+			}},
+		{name: "a member cannot connect a repository", method: "POST", path: projectPath + "/repositories", token: bob,
+			body: fmt.Sprintf(`{"repository_id": %q, "host_kind": "github", "canonical_remote": "github.com/acme/orders", "analysis_enabled": true}`, uuid.NewV7()), wantStatus: 403, wantCode: "forbidden"},
+		{name: "repository input cannot name its creating human", method: "POST", path: projectPath + "/repositories", token: alice,
+			body: fmt.Sprintf(`{"repository_id": %q, "host_kind": "github", "canonical_remote": "github.com/acme/hidden", "analysis_enabled": true, "created_by_human_id": %q}`, uuid.NewV7(), aliceID), wantStatus: 422, wantCode: "invalid_input", wantPointer: ""},
 	}
 	for _, step := range steps {
 		contentType := step.contentType

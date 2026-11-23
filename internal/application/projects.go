@@ -76,6 +76,18 @@ type Tx interface {
 	// ProjectMembers lists every Project membership with its human identity.
 	ProjectMembers(ctx context.Context, projectID uuid.UUID) ([]protocol.ProjectMember, error)
 
+	// InsertRepositoryConnection stores a Project repository connection. It
+	// reports false, changing nothing, when any unique identity is taken.
+	InsertRepositoryConnection(ctx context.Context, repository protocol.RepositoryConnection) (bool, error)
+	RepositoryConnection(ctx context.Context, projectID, repositoryID uuid.UUID) (protocol.RepositoryConnection, error)
+	RepositoryConnectionByRemote(ctx context.Context, projectID uuid.UUID, canonicalRemote string) (protocol.RepositoryConnection, error)
+	RepositoryConnections(ctx context.Context, projectID uuid.UUID) ([]protocol.RepositoryConnection, error)
+
+	// Participant resolves a human-bound operating identity. A missing local
+	// session reference is matched as a deliberate null-equivalent value.
+	Participant(ctx context.Context, projectID, humanID uuid.UUID, adapterKind, localSessionRef string) (protocol.Participant, error)
+	InsertParticipant(ctx context.Context, participant protocol.Participant) (bool, error)
+
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in
 	// the same Project. It reports false, changing nothing, otherwise.
@@ -268,6 +280,135 @@ func (p *Projects) AddMember(ctx context.Context, actor, projectID, humanID uuid
 		return err
 	})
 	return result, err
+}
+
+// ConnectRepository lets a Project owner add a credential-free repository
+// scope. Repeating the same connection returns the stored record without a
+// new event. A different connection using an occupied ID or remote conflicts.
+func (p *Projects) ConnectRepository(ctx context.Context, actor, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
+	now := p.now()
+	repository := protocol.RepositoryConnection{
+		RepositoryID:         input.RepositoryID,
+		ProjectID:            projectID,
+		HostKind:             input.HostKind,
+		CanonicalRemote:      input.CanonicalRemote,
+		HostRepositoryNodeID: input.HostRepositoryNodeID,
+		DefaultBranch:        input.DefaultBranch,
+		AnalysisEnabled:      input.AnalysisEnabled,
+		CreatedByHumanID:     actor,
+		CreatedAt:            protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(repository); err != nil {
+		return Result[protocol.RepositoryConnection]{}, err
+	}
+
+	var result Result[protocol.RepositoryConnection]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if err := requireOwner(ctx, tx, projectID, actor); err != nil {
+			return err
+		}
+		inserted, err := tx.InsertRepositoryConnection(ctx, repository)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			existing, err := tx.RepositoryConnection(ctx, projectID, repository.RepositoryID)
+			if errors.Is(err, ErrNotFound) {
+				existing, err = tx.RepositoryConnectionByRemote(ctx, projectID, repository.CanonicalRemote)
+			}
+			if err != nil {
+				return err
+			}
+			if !sameRepositoryContent(existing, repository) {
+				return ErrConflict
+			}
+			result.Data = existing
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		result.Data = repository
+		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, repository.RepositoryID, actor, now, protocol.RepositoryConnected{}))
+		return err
+	})
+	return result, err
+}
+
+// RepositoryConnections lists the repository scopes visible to a Project
+// member. The returned cursor reflects the same database snapshot.
+func (p *Projects) RepositoryConnections(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.RepositoryConnectionList], error) {
+	var result Result[protocol.RepositoryConnectionList]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		repositories, err := tx.RepositoryConnections(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		result.Data = protocol.RepositoryConnectionList{ProjectID: projectID, Repositories: repositories}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+// ResolveParticipant returns the caller's bounded operating identity for an
+// adapter and optional opaque local-session reference. It is deliberately not
+// an HTTP authority selector: callers derive actor from the Conn session.
+func (p *Projects) ResolveParticipant(ctx context.Context, actor, projectID uuid.UUID, adapterKind, localSessionRef string) (Result[protocol.Participant], error) {
+	now := p.now()
+	participant := protocol.Participant{
+		ParticipantID:   uuid.NewV7(),
+		ProjectID:       projectID,
+		HumanID:         actor,
+		AdapterKind:     adapterKind,
+		LocalSessionRef: localSessionRef,
+		CreatedAt:       protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(participant); err != nil {
+		return Result[protocol.Participant]{}, err
+	}
+
+	var result Result[protocol.Participant]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		existing, err := tx.Participant(ctx, projectID, actor, adapterKind, localSessionRef)
+		if err == nil {
+			result.Data = existing
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		inserted, err := tx.InsertParticipant(ctx, participant)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			result.Data, err = tx.Participant(ctx, projectID, actor, adapterKind, localSessionRef)
+			if err != nil {
+				return err
+			}
+		} else {
+			result.Data = participant
+		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+func sameRepositoryContent(a, b protocol.RepositoryConnection) bool {
+	return a.ProjectID == b.ProjectID &&
+		a.HostKind == b.HostKind &&
+		a.CanonicalRemote == b.CanonicalRemote &&
+		a.HostRepositoryNodeID == b.HostRepositoryNodeID &&
+		a.DefaultBranch == b.DefaultBranch &&
+		a.AnalysisEnabled == b.AnalysisEnabled &&
+		a.CreatedByHumanID == b.CreatedByHumanID
 }
 
 // CreateObjectiveRevision lets the owner append the next immutable revision

@@ -107,8 +107,9 @@ func TestCLI(t *testing.T) {
 		}
 		return path
 	}
-	project, objective := uuid.NewV7().String(), uuid.NewV7().String()
+	project, objective, repository := uuid.NewV7().String(), uuid.NewV7().String(), uuid.NewV7().String()
 	projectFile := file("project.json", `{"project_id": "`+project+`", "name": "Checkout reliability"}`)
+	repositoryFile := file("repository.json", `{"repository_id": "`+repository+`", "host_kind": "github", "canonical_remote": "github.com/acme/payments", "analysis_enabled": true}`)
 	blankName := file("blank.json", `{"project_id": "`+project+`", "name": " "}`)
 	objectiveJSON := `{"objective_id": "` + objective + `", "title": "Reliable checkout",
 		"overview_markdown": "Survive provider outages.\u001b]0;pwned\u0007", "accountable_human_id": "` + aliceID + `"}`
@@ -174,6 +175,21 @@ func TestCLI(t *testing.T) {
 					t.Fatalf("stdout is not a two-event page: %v\n%s", err, stdout)
 				}
 			}},
+		{name: "repository connection uses the same JSON command contract", token: alice,
+			args:     append([]string{"repository", "connect", "--project", project, "--file", repositoryFile, "--json"}, server...),
+			wantCode: cli.ExitOK, wantOut: `"as_of_event":3`, check: func(t *testing.T, stdout string) {
+				var envelope struct {
+					Data struct {
+						RepositoryID string `json:"repository_id"`
+					} `json:"data"`
+				}
+				if err := json.Unmarshal([]byte(stdout), &envelope); err != nil || envelope.Data.RepositoryID != repository {
+					t.Fatalf("stdout is not the repository envelope: %v\n%s", err, stdout)
+				}
+			}},
+		{name: "repository list presents member-visible scope", token: alice,
+			args:     append([]string{"repository", "list", "--project", project}, server...),
+			wantCode: cli.ExitOK, wantOut: "github.com/acme/payments"},
 		{name: "an unreachable server is unavailable", token: alice, args: []string{"status", "--project", project, "--server", "http://127.0.0.1:1"},
 			wantCode: cli.ExitUnavailable, wantErr: "could not be reached"},
 	}

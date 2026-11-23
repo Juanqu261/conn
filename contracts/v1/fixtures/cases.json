@@ -1793,6 +1793,39 @@
           "intent_revision": 1
         }
       }
+    },
+    {
+      "name": "repository connection input accepts owner-supplied repository facts",
+      "schema": "urn:conn:schema:v1:repository-connect-input",
+      "valid": true,
+      "document": {
+        "repository_id": "019a8f00-0021-7000-8000-000000000021",
+        "host_kind": "github",
+        "canonical_remote": "github.com/acme/payments",
+        "analysis_enabled": true
+      }
+    },
+    {
+      "name": "repository connection input rejects server-assigned authority",
+      "schema": "urn:conn:schema:v1:repository-connect-input",
+      "valid": false,
+      "at": "",
+      "document": {
+        "repository_id": "019a8f00-0021-7000-8000-000000000021",
+        "host_kind": "github",
+        "canonical_remote": "github.com/acme/payments",
+        "analysis_enabled": true,
+        "created_by_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "repository connection list accepts an empty project scope",
+      "schema": "urn:conn:schema:v1:repository-connection-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "repositories": []
+      }
     }
   ]
 }

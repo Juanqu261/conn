@@ -17,6 +17,27 @@ type RepositoryConnection struct {
 
 func (RepositoryConnection) SchemaID() string { return RepositoryConnectionSchema }
 
+// RepositoryConnectInput is owner-authored connection content. The backend
+// supplies Project, Human, and creation-time fields.
+type RepositoryConnectInput struct {
+	RepositoryID         uuid.UUID `json:"repository_id"`
+	HostKind             string    `json:"host_kind"`
+	CanonicalRemote      string    `json:"canonical_remote"`
+	HostRepositoryNodeID string    `json:"host_repository_node_id,omitempty"`
+	DefaultBranch        string    `json:"default_branch,omitempty"`
+	AnalysisEnabled      bool      `json:"analysis_enabled"`
+}
+
+func (RepositoryConnectInput) SchemaID() string { return RepositoryConnectInputSchema }
+
+// RepositoryConnectionList lists a member-visible Project repository scope.
+type RepositoryConnectionList struct {
+	ProjectID    uuid.UUID              `json:"project_id"`
+	Repositories []RepositoryConnection `json:"repositories"`
+}
+
+func (RepositoryConnectionList) SchemaID() string { return RepositoryConnectionListSchema }
+
 // Participant is an attributed operating identity under one Conn Human.
 type Participant struct {
 	ParticipantID   uuid.UUID  `json:"participant_id"`

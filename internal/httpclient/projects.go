@@ -45,6 +45,16 @@ func (c *Client) AddMember(ctx context.Context, projectID, humanID uuid.UUID) (R
 	return post[protocol.ProjectMembership](ctx, c, projectPath(projectID)+"/members", protocol.ProjectMemberAdd{HumanID: humanID})
 }
 
+// ConnectRepository connects an owner-authorized repository scope to a Project.
+func (c *Client) ConnectRepository(ctx context.Context, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
+	return post[protocol.RepositoryConnection](ctx, c, projectPath(projectID)+"/repositories", input)
+}
+
+// RepositoryConnections lists the repository scopes visible to the caller.
+func (c *Client) RepositoryConnections(ctx context.Context, projectID uuid.UUID) (Result[protocol.RepositoryConnectionList], error) {
+	return read[protocol.RepositoryConnectionList](ctx, c, projectPath(projectID)+"/repositories")
+}
+
 // CreateObjective creates revision 1 of an Objective.
 func (c *Client) CreateObjective(ctx context.Context, projectID uuid.UUID, input protocol.ObjectiveRevisionInput) (Result[protocol.Objective], error) {
 	return post[protocol.Objective](ctx, c, projectPath(projectID)+"/objectives", input)

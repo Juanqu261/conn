@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:repository-connection-list",
+  "title": "Repository connection list",
+  "description": "Repository connections visible to an authorized Project member.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "repositories"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "repositories": {
+      "type": "array",
+      "items": { "$ref": "urn:conn:schema:v1:repository-connection" }
+    }
+  }
+}
