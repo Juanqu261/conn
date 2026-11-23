@@ -3,11 +3,14 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
+	"time"
 
 	"uuid"
 
 	"github.com/spf13/cobra"
 
+	localanalyzer "github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
@@ -84,6 +87,51 @@ func newIntentCommand(deps Dependencies, streams Streams) *cobra.Command {
 		return printResult(rl, result, printIntent)
 	}
 
+	analyze := &cobra.Command{Use: "analyze", Short: "Analyze a local TypeScript worktree and attach source-free claims", Args: cobra.NoArgs}
+	ra := newRemote(analyze, deps, streams)
+	var analyzeProject, analyzeIntent uuid.UUID
+	var worktree, remote, nodePath, analyzerPath, tsconfigPath string
+	var paths []string
+	var timeout time.Duration
+	requiredUUID(analyze, &analyzeProject, "project", "project ID")
+	requiredUUID(analyze, &analyzeIntent, "intent", "intent ID")
+	requiredString(analyze, &worktree, "worktree", "local repository worktree")
+	requiredString(analyze, &remote, "remote", "credential-free canonical repository remote")
+	analyze.Flags().StringVar(&nodePath, "node", "node", "Node.js executable")
+	analyze.Flags().StringVar(&analyzerPath, "analyzer-script", "packages/typescript-analyzer/dist/cli.js", "built local TypeScript analyzer script")
+	analyze.Flags().StringVar(&tsconfigPath, "tsconfig", "", "optional repository-relative tsconfig path")
+	analyze.Flags().StringSliceVar(&paths, "path", nil, "repository-relative TypeScript path to analyze (repeatable)")
+	analyze.Flags().DurationVar(&timeout, "timeout", localanalyzer.DefaultTimeout, "maximum local analysis duration")
+	analyze.RunE = func(cmd *cobra.Command, _ []string) error {
+		if timeout <= 0 {
+			return usageError{fmt.Errorf("--timeout must be positive")}
+		}
+		absoluteScript, err := filepath.Abs(analyzerPath)
+		if err != nil {
+			return fmt.Errorf("resolve analyzer script: %w", err)
+		}
+		report, err := localanalyzer.Run(cmd.Context(), localanalyzer.Config{NodePath: nodePath, AnalyzerPath: absoluteScript, Timeout: timeout}, localanalyzer.Request{
+			Worktree: worktree, CanonicalRemote: remote, TSConfigPath: tsconfigPath, Paths: paths,
+		})
+		if err != nil {
+			return err
+		}
+		client, err := ra.client()
+		if err != nil {
+			return err
+		}
+		result, err := client.AttachStaticAnalysis(cmd.Context(), analyzeProject, analyzeIntent, report)
+		if err != nil {
+			return err
+		}
+		return printResult(ra, result, func(out io.Writer, value protocol.IntentView) {
+			fmt.Fprintf(out, "Attached %d static-analysis claims to Intent %s revision %d.\n", len(report.Claims), value.IntentRevision.IntentID, value.IntentRevision.Revision)
+			if len(report.Diagnostics) > 0 {
+				fmt.Fprintf(out, "Analyzer reported %d bounded diagnostics; Conn retained them as incomplete-analysis context.\n", len(report.Diagnostics))
+			}
+		})
+	}
+
 	list := &cobra.Command{Use: "list", Short: "List active and released Intents", Args: cobra.NoArgs}
 	rlist := newRemote(list, deps, streams)
 	var listProject uuid.UUID
@@ -125,7 +173,7 @@ func newIntentCommand(deps Dependencies, streams Streams) *cobra.Command {
 		}
 		return printResult(rread, result, printIntent)
 	}
-	intent.AddCommand(publish, revise, release, list, read)
+	intent.AddCommand(publish, revise, release, analyze, list, read)
 	return intent
 }
 

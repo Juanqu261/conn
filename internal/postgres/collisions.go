@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"uuid"
@@ -30,6 +31,28 @@ func (t projectTx) InsertSemanticClaims(ctx context.Context, claims []protocol.S
 		}
 	}
 	return nil
+}
+
+func (t projectTx) AnalyzerReportAttached(ctx context.Context, projectID, intentID uuid.UUID, revision int) (bool, error) {
+	var attached bool
+	err := t.tx.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM intent_analysis_reports
+		WHERE project_id = $1 AND intent_id = $2 AND intent_revision = $3
+	)`, projectID, intentID, revision).Scan(&attached)
+	return attached, err
+}
+
+func (t projectTx) InsertAnalyzerReport(ctx context.Context, projectID, intentID uuid.UUID, revision int, report protocol.LocalAnalyzerReport, observedAt protocol.Timestamp) error {
+	diagnostics, err := json.Marshal(report.Diagnostics)
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.Exec(ctx, `
+		INSERT INTO intent_analysis_reports
+			(project_id, intent_id, intent_revision, canonical_remote, diagnostics, observed_at)
+		VALUES ($1,$2,$3,$4,$5,$6)`,
+		projectID, intentID, revision, report.Repository.CanonicalRemote, diagnostics, observedAt.Time())
+	return err
 }
 
 func (t projectTx) ActiveSemanticClaims(ctx context.Context, projectID uuid.UUID) ([]protocol.SemanticClaim, error) {

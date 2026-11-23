@@ -179,6 +179,28 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("POST /v1/projects/{project_id}/intents/{intent_id}/analysis", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		report, ok := readDocument[protocol.LocalAnalyzerReport](w, r, log)
+		if !ok {
+			return
+		}
+		participant, err := projects.ResolveParticipant(r.Context(), s.Human.HumanID, projectID, "cli", "")
+		if err != nil {
+			writeProblem(w, log, err)
+			return
+		}
+		result, err := projects.AttachStaticAnalysis(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, intentID, report)
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/objectives", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

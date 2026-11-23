@@ -75,6 +75,12 @@ func (c *Client) ReleaseIntent(ctx context.Context, projectID, intentID uuid.UUI
 	return decodeResult[protocol.IntentView](body)
 }
 
+// AttachStaticAnalysis attaches a validated source-free local analyzer report
+// to the caller's active Intent revision.
+func (c *Client) AttachStaticAnalysis(ctx context.Context, projectID, intentID uuid.UUID, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {
+	return post[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s/analysis", projectPath(projectID), intentID), report)
+}
+
 // Intent reads one current Intent snapshot.
 func (c *Client) Intent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
 	return read[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s", projectPath(projectID), intentID))

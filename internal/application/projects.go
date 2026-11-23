@@ -100,6 +100,12 @@ type Tx interface {
 	// InsertSemanticClaims records immutable claims for an exact immutable
 	// IntentRevision. Claim IDs are assigned by the application.
 	InsertSemanticClaims(ctx context.Context, claims []protocol.SemanticClaim) error
+	// AnalyzerReportAttached identifies an immutable local analysis report already
+	// attached to this exact IntentRevision.
+	AnalyzerReportAttached(ctx context.Context, projectID, intentID uuid.UUID, revision int) (bool, error)
+	// InsertAnalyzerReport records only bounded analyzer diagnostics and report
+	// metadata, never analyzer input or repository source.
+	InsertAnalyzerReport(ctx context.Context, projectID, intentID uuid.UUID, revision int, report protocol.LocalAnalyzerReport, observedAt protocol.Timestamp) error
 	// ActiveSemanticClaims returns claims belonging to each current active
 	// Intent revision in a Project.
 	ActiveSemanticClaims(ctx context.Context, projectID uuid.UUID) ([]protocol.SemanticClaim, error)
