@@ -60,3 +60,11 @@ func TestRunBoundsOutputAndStripsConnEnvironment(t *testing.T) {
 		t.Fatalf("cancellation = %v", err)
 	}
 }
+
+func TestRunReportsMissingAnalyzerScript(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "dist", "cli.js")
+	_, err := Run(context.Background(), Config{NodePath: "node", AnalyzerPath: missing}, Request{Worktree: t.TempDir(), CanonicalRemote: "github.com/acme/payments"})
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "pnpm build") {
+		t.Fatalf("missing analyzer = %v, want an unavailable error with a build hint", err)
+	}
+}

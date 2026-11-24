@@ -33,3 +33,22 @@ func TestRadarSectionAndCollisionDrillDownStayKeyboardFirst(t *testing.T) {
 		t.Fatal("Esc did not return from collision drill-down to Radar")
 	}
 }
+
+// TestRadarDrillDownSurvivesShrinkingRefresh guards against an index panic
+// when a background reload removes collisions under the open drill-down.
+func TestRadarDrillDownSurvivesShrinkingRefresh(t *testing.T) {
+	m := newModel(context.Background(), func() (*httpclient.Client, error) { return nil, nil })
+	collision := func() protocol.CollisionAssessment {
+		return protocol.CollisionAssessment{CollisionID: uuid.NewV7(), RuleID: "shared_exported_symbol", Severity: "amber", State: "open", Confidence: 1,
+			LeftIntentID: uuid.NewV7(), LeftIntentRevision: 1, RightIntentID: uuid.NewV7(), RightIntentRevision: 1, ExplanationMarkdown: "Shared symbol."}
+	}
+	m.loading, m.client, m.section = false, &httpclient.Client{}, radarSection
+	m.radar = protocol.RadarView{OpenCollisions: []protocol.CollisionAssessment{collision(), collision(), collision()}}
+	m.screen, m.radarCollision = radarCollisionScreen, 2
+
+	updated, _ := m.Update(projectLoaded{radar: protocol.RadarView{OpenCollisions: []protocol.CollisionAssessment{collision()}}})
+	m = updated.(model)
+	if m.radarCollision != 0 || !strings.Contains(m.View(), "Collision 1 of 1") {
+		t.Fatalf("drill-down after shrinking refresh: index %d view %q", m.radarCollision, m.View())
+	}
+}

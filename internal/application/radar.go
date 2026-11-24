@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"uuid"
 
@@ -84,6 +85,13 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 		OpenCollisions: collisions, DecisionRefs: decisionRefs, Dependencies: []protocol.RadarDependency{},
 		OpenQuestions: []string{}, Assumptions: []string{}, EvidenceCoverage: []protocol.RadarEvidenceCoverage{}, KnownUnknowns: []string{},
 	}
+	// The ledger is append-only and unbounded; the Radar contract is not.
+	// Keep the most recent references and label every truncation.
+	if len(view.DecisionRefs) > maxRadarDecisionRefs {
+		view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only the %d most recent of %d resolution decisions are referenced; older decisions remain in the event history.", maxRadarDecisionRefs, len(view.DecisionRefs)))
+		view.DecisionRefs = view.DecisionRefs[len(view.DecisionRefs)-maxRadarDecisionRefs:]
+	}
+	truncatedEvidence := false
 	for _, objective := range objectives {
 		view.Objectives = append(view.Objectives, protocol.RadarObjective{ObjectiveID: objective.ObjectiveID, Revision: objective.Revision, Title: objective.Title})
 		for _, point := range objective.KeyPoints {
@@ -91,9 +99,18 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 			case protocol.KeyPointQuestion:
 				view.OpenQuestions = append(view.OpenQuestions, point.Statement)
 			case protocol.KeyPointAcceptanceCriterion:
-				view.EvidenceCoverage = append(view.EvidenceCoverage, coverageFor(objective, point.Key, evidence))
+				coverage, truncated := coverageFor(objective, point.Key, evidence)
+				truncatedEvidence = truncatedEvidence || truncated
+				view.EvidenceCoverage = append(view.EvidenceCoverage, coverage)
 			}
 		}
+	}
+	if truncatedEvidence {
+		view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Some acceptance criteria have more than %d evidence references; only the most recent are listed, and coverage state uses the latest.", maxRadarCoverageRefs))
+	}
+	if len(view.EvidenceCoverage) > maxRadarCoverage {
+		view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only %d of %d keyed acceptance criteria are shown in evidence coverage.", maxRadarCoverage, len(view.EvidenceCoverage)))
+		view.EvidenceCoverage = view.EvidenceCoverage[:maxRadarCoverage]
 	}
 	if activeBlueprint != nil {
 		view.ActiveBlueprint = &protocol.RadarBlueprint{BlueprintID: activeBlueprint.BlueprintID, Revision: activeBlueprint.Revision}
@@ -146,27 +163,57 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 	return view
 }
 
+// Radar contract bounds for lists whose ledger source is unbounded.
+const (
+	maxRadarDecisionRefs     = 200
+	maxRadarCoverage         = 200
+	maxRadarCoverageRefs     = 50
+	maxRadarStatementRunes   = 1000
+	truncatedStatementMarker = "…"
+)
+
 // coverageFor distinguishes absent evidence from current, stale, inaccessible,
-// or unknown evidence. The most recently observed record supplies the state;
-// every matching record remains referenced for an explainable audit trail.
-func coverageFor(objective protocol.Objective, key string, evidence []protocol.EvidenceReference) protocol.RadarEvidenceCoverage {
+// or unknown evidence. The most recently observed record supplies the state.
+// At most maxRadarCoverageRefs of the most recent matching records are
+// referenced; truncated reports whether older references were omitted.
+func coverageFor(objective protocol.Objective, key string, evidence []protocol.EvidenceReference) (protocol.RadarEvidenceCoverage, bool) {
 	coverage := protocol.RadarEvidenceCoverage{ObjectiveID: objective.ObjectiveID, ObjectiveRevision: objective.Revision, AcceptanceKey: key, State: "missing", EvidenceRefs: []uuid.UUID{}}
-	var latest *protocol.EvidenceReference
-	for i := range evidence {
-		item := &evidence[i]
-		if item.ObjectiveID != objective.ObjectiveID || item.ObjectiveRevision != objective.Revision || item.AcceptanceKey != key {
-			continue
-		}
-		coverage.EvidenceRefs = append(coverage.EvidenceRefs, item.EvidenceID)
-		if latest == nil || item.ObservedAt.Time().After(latest.ObservedAt.Time()) || (item.ObservedAt.Time().Equal(latest.ObservedAt.Time()) && item.EvidenceID.String() > latest.EvidenceID.String()) {
-			latest = item
+	var matching []protocol.EvidenceReference
+	for _, item := range evidence {
+		if item.ObjectiveID == objective.ObjectiveID && item.ObjectiveRevision == objective.Revision && item.AcceptanceKey == key {
+			matching = append(matching, item)
 		}
 	}
-	if latest != nil {
-		coverage.State = latest.State
+	sort.Slice(matching, func(i, j int) bool {
+		a, b := matching[i].ObservedAt.Time(), matching[j].ObservedAt.Time()
+		if !a.Equal(b) {
+			return a.Before(b)
+		}
+		return matching[i].EvidenceID.String() < matching[j].EvidenceID.String()
+	})
+	if len(matching) > 0 {
+		coverage.State = matching[len(matching)-1].State
+	}
+	truncated := len(matching) > maxRadarCoverageRefs
+	if truncated {
+		matching = matching[len(matching)-maxRadarCoverageRefs:]
+	}
+	for _, item := range matching {
+		coverage.EvidenceRefs = append(coverage.EvidenceRefs, item.EvidenceID)
 	}
 	sort.Slice(coverage.EvidenceRefs, func(i, j int) bool { return coverage.EvidenceRefs[i].String() < coverage.EvidenceRefs[j].String() })
-	return coverage
+	return coverage, truncated
+}
+
+// boundedStatement fits free text into the Radar statement contract: it trims
+// surrounding whitespace and truncates on a rune boundary with a marker.
+func boundedStatement(text string) string {
+	text = strings.TrimSpace(text)
+	runes := []rune(text)
+	if len(runes) <= maxRadarStatementRunes {
+		return text
+	}
+	return strings.TrimSpace(string(runes[:maxRadarStatementRunes-1])) + truncatedStatementMarker
 }
 
 func radarConcepts(claims []protocol.SemanticClaim) []protocol.RadarSemanticConcept {
@@ -246,7 +293,7 @@ func resolutionDependencies(existing []protocol.RadarDependency, unknowns []stri
 			unknowns = append(unknowns, fmt.Sprintf("Dependency decision %s references a collision that is no longer open; review its historical collision context.", decision.DecisionID))
 			continue
 		}
-		existing = append(existing, protocol.RadarDependency{FromIntentID: collision.LeftIntentID, ToIntentID: collision.RightIntentID, Summary: decision.RationaleMarkdown})
+		existing = append(existing, protocol.RadarDependency{FromIntentID: collision.LeftIntentID, ToIntentID: collision.RightIntentID, Summary: boundedStatement(decision.RationaleMarkdown)})
 	}
 	sort.Slice(existing, func(i, j int) bool {
 		if existing[i].FromIntentID != existing[j].FromIntentID {

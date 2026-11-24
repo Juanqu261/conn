@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"uuid"
 
@@ -118,7 +117,28 @@ func printConflicts(out io.Writer, view protocol.RadarView) {
 
 func printCollision(out io.Writer, collision protocol.CollisionAssessment, view protocol.RadarView) {
 	fmt.Fprintf(out, "Collision %s\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n", collision.CollisionID, clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence)
-	fmt.Fprintf(out, "Intents: %s revision %d and %s revision %d\nMatching claims: %s\n\n%s\n", collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision, joinUUIDs(collision.MatchingClaimRefs), indent(collision.ExplanationMarkdown, "  "))
+	fmt.Fprintf(out, "Intents: %s revision %d and %s revision %d\n", collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision)
+	claims := make(map[uuid.UUID]protocol.SemanticClaim, len(view.SemanticClaims))
+	for _, claim := range view.SemanticClaims {
+		claims[claim.ClaimID] = claim
+	}
+	fmt.Fprintln(out, "Matching claims:")
+	for _, claimID := range collision.MatchingClaimRefs {
+		claim, ok := claims[claimID]
+		if !ok {
+			fmt.Fprintf(out, "  - %s (details unavailable in this Radar snapshot)\n", claimID)
+			continue
+		}
+		confidence := ""
+		if claim.Confidence != nil {
+			confidence = fmt.Sprintf(", confidence %.2f", *claim.Confidence)
+		}
+		fmt.Fprintf(out, "  - %s %s %s (Intent %s revision %d, provenance %s%s)\n", clean(claim.SubjectKind), clean(claim.Relation), clean(claim.NormalizedSubject), claim.IntentID, claim.IntentRevision, clean(claim.ProvenanceKind), confidence)
+		for _, evidence := range claim.EvidenceRefs {
+			fmt.Fprintf(out, "      evidence %s %s\n", clean(evidence.Kind), clean(evidence.Locator))
+		}
+	}
+	fmt.Fprintf(out, "\n%s\n", indent(collision.ExplanationMarkdown, "  "))
 	printStatements(out, "Known unknowns", view.KnownUnknowns)
 	fmt.Fprintf(out, "As of event %d.\n", view.AsOfEvent)
 }
@@ -131,12 +151,4 @@ func printStatements(out io.Writer, title string, values []string) {
 	for _, value := range values {
 		fmt.Fprintf(out, "  - %s\n", clean(value))
 	}
-}
-
-func joinUUIDs(values []uuid.UUID) string {
-	items := make([]string, len(values))
-	for i, value := range values {
-		items[i] = value.String()
-	}
-	return strings.Join(items, ", ")
 }

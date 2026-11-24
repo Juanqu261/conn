@@ -28,6 +28,7 @@ type collisionCandidate struct {
 	ruleID        string
 	subjects      map[string]struct{}
 	claims        map[uuid.UUID]struct{}
+	provenance    map[string]struct{}
 }
 
 // persistDeclaredClaims turns the transport candidates in an IntentRevision
@@ -213,12 +214,15 @@ func addCollisionCandidate(candidates map[string]*collisionCandidate, ruleID, su
 			leftIntentID: left.IntentID, leftRevision: left.IntentRevision,
 			rightIntentID: right.IntentID, rightRevision: right.IntentRevision,
 			ruleID: ruleID, subjects: map[string]struct{}{}, claims: map[uuid.UUID]struct{}{},
+			provenance: map[string]struct{}{},
 		}
 		candidates[key] = candidate
 	}
 	candidate.subjects[subject] = struct{}{}
 	candidate.claims[one.ClaimID] = struct{}{}
 	candidate.claims[two.ClaimID] = struct{}{}
+	candidate.provenance[one.ProvenanceKind] = struct{}{}
+	candidate.provenance[two.ProvenanceKind] = struct{}{}
 }
 
 func (c collisionCandidate) assessment(projectID uuid.UUID, at protocol.Timestamp) protocol.CollisionAssessment {
@@ -238,13 +242,18 @@ func (c collisionCandidate) assessment(projectID uuid.UUID, at protocol.Timestam
 	if len(subjects) > 3 {
 		subjects = append(subjects[:3], "additional normalized subjects")
 	}
+	provenance := make([]string, 0, len(c.provenance))
+	for kind := range c.provenance {
+		provenance = append(provenance, kind)
+	}
+	sort.Strings(provenance)
 	return protocol.CollisionAssessment{
 		CollisionID: uuid.NewV7(), ProjectID: projectID,
 		LeftIntentID: c.leftIntentID, LeftIntentRevision: c.leftRevision,
 		RightIntentID: c.rightIntentID, RightIntentRevision: c.rightRevision,
 		RuleID: c.ruleID, Severity: "amber", Confidence: 1, State: "open",
 		MatchingClaimRefs:   claimRefs,
-		ExplanationMarkdown: fmt.Sprintf("Rule `%s` matched normalized subject(s) `%s` from declared claims on active Intent revisions %s@%d and %s@%d. Matching claim identifiers provide the provenance for this advisory assessment.", c.ruleID, strings.Join(subjects, "`, `"), c.leftIntentID, c.leftRevision, c.rightIntentID, c.rightRevision),
+		ExplanationMarkdown: fmt.Sprintf("Rule `%s` matched normalized subject(s) `%s` from %s claims on active Intent revisions %s@%d and %s@%d. Matching claim identifiers provide the provenance for this advisory assessment.", c.ruleID, strings.Join(subjects, "`, `"), strings.Join(provenance, " and "), c.leftIntentID, c.leftRevision, c.rightIntentID, c.rightRevision),
 		CreatedAt:           at,
 	}
 }

@@ -1,10 +1,11 @@
 package application
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"uuid"
 
@@ -266,13 +267,14 @@ func validateIntentReferences(ctx context.Context, tx Tx, participant protocol.P
 	return err
 }
 
+// sameIntentContent compares two revisions' canonical JSON, ignoring only the
+// server-assigned CreatedAt. Comparing encodings rather than Go values makes a
+// client's explicit empty list equal to the omitted list read back from jsonb.
 func sameIntentContent(a, b protocol.IntentRevision) bool {
-	return a.IntentID == b.IntentID && a.ProjectID == b.ProjectID && a.ParticipantID == b.ParticipantID && a.Revision == b.Revision &&
-		a.ObjectiveID == b.ObjectiveID && a.ObjectiveRevision == b.ObjectiveRevision && a.SummaryMarkdown == b.SummaryMarkdown &&
-		reflect.DeepEqual(a.BlueprintID, b.BlueprintID) && reflect.DeepEqual(a.BlueprintRevision, b.BlueprintRevision) &&
-		reflect.DeepEqual(a.CharterID, b.CharterID) && reflect.DeepEqual(a.RepositoryID, b.RepositoryID) &&
-		a.BaseRevisionRef == b.BaseRevisionRef && a.HeadRevisionRef == b.HeadRevisionRef && a.BranchRef == b.BranchRef &&
-		reflect.DeepEqual(a.Assumptions, b.Assumptions) && reflect.DeepEqual(a.DeclaredClaims, b.DeclaredClaims)
+	b.CreatedAt = a.CreatedAt
+	left, leftErr := json.Marshal(a)
+	right, rightErr := json.Marshal(b)
+	return leftErr == nil && rightErr == nil && bytes.Equal(left, right)
 }
 
 func intentObservations(revision protocol.IntentRevision) []string {

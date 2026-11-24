@@ -66,7 +66,13 @@ func (t projectTx) InsertResolutionProposal(ctx context.Context, proposal protoc
 }
 
 func (t projectTx) InsertResolutionDecision(ctx context.Context, decision protocol.ResolutionDecision) error {
-	references, err := json.Marshal(decision.References)
+	// references is optional input; the column CHECK requires a JSON array, so
+	// an omitted list must be stored as [] rather than JSON null.
+	stored := decision.References
+	if stored == nil {
+		stored = []string{}
+	}
+	references, err := json.Marshal(stored)
 	if err != nil {
 		return err
 	}

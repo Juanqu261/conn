@@ -558,6 +558,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading, m.err = false, msg.err
 		if msg.err == nil {
 			m.status, m.radar, m.members, m.events, m.asOfEvent = msg.status, msg.radar, msg.members, msg.events, msg.asOfEvent
+			// A refresh can shrink the open collision list under the drill-down.
+			m.radarCollision = max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
 		}
 		return m, nil
 	case charterLoaded:
@@ -1240,8 +1242,9 @@ func (m model) radarCollisionView() string {
 	if len(m.radar.OpenCollisions) == 0 {
 		return "No open collision assessment is available."
 	}
-	collision := m.radar.OpenCollisions[m.radarCollision]
-	return fmt.Sprintf("Collision %d of %d\n\nID: %s\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n\nIntents: %s revision %d and %s revision %d\nMatching claims: %d\n\nExplanation:\n%s\n\nA human decision has not been recorded by this screen.", m.radarCollision+1, len(m.radar.OpenCollisions), collision.CollisionID, clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence, collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision, len(collision.MatchingClaimRefs), cleanBlock(collision.ExplanationMarkdown))
+	index := max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
+	collision := m.radar.OpenCollisions[index]
+	return fmt.Sprintf("Collision %d of %d\n\nID: %s\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n\nIntents: %s revision %d and %s revision %d\nMatching claims: %d\n\nExplanation:\n%s\n\nA human decision has not been recorded by this screen.", index+1, len(m.radar.OpenCollisions), collision.CollisionID, clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence, collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision, len(collision.MatchingClaimRefs), cleanBlock(collision.ExplanationMarkdown))
 }
 
 func (m model) team() string {

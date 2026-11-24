@@ -6,6 +6,12 @@ import ts from "typescript";
 export const MAX_CLAIMS = 500;
 export const MAX_DIAGNOSTICS = 100;
 const MAX_PROJECTS = 25;
+// Conn contract bounds: semanticSubject, opaqueReference, relativePath, title.
+const MAX_SUBJECT_LENGTH = 512;
+const MAX_LOCATOR_LENGTH = 256;
+const MAX_PATH_LENGTH = 1024;
+const MAX_DISPLAY_NAME_LENGTH = 200;
+const SKIPPED_CLAIM_CODE = "conn-claim-skipped";
 
 export interface AnalyzeRequest {
   worktree: string;
@@ -68,12 +74,14 @@ export function analyze(request: AnalyzeRequest): AnalyzerReport {
     for (const diagnostic of ts.getPreEmitDiagnostics(program))
       addDiagnostic(diagnostics, diagnostic, worktree);
 
+    const output: ClaimOutput = { claims, diagnostics };
     for (const sourceFile of program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile || !isInside(worktree, sourceFile.fileName)) continue;
+      if (sourceFile.isDeclarationFile || !isRepositorySource(program, worktree, sourceFile))
+        continue;
       const path = normalizedRelative(worktree, sourceFile.fileName);
       if (selectedPaths.size > 0 && !selectedPaths.has(path)) continue;
-      collectExports(program, sourceFile, path, worktree, claims);
-      collectImports(program, sourceFile, path, worktree, claims);
+      collectExports(program, sourceFile, path, worktree, output);
+      collectImports(program, sourceFile, path, worktree, output);
       if (claims.size >= MAX_CLAIMS) break;
     }
   }
@@ -151,12 +159,30 @@ function readConfig(
   return parsed;
 }
 
+interface ClaimOutput {
+  claims: Map<string, Claim>;
+  diagnostics: Diagnostic[];
+}
+
+/**
+ * A repository source is inside the worktree and not an external library.
+ * Third-party packages, including the pnpm node_modules/.pnpm store, are not
+ * work that another Intent in this repository can change.
+ */
+function isRepositorySource(program: ts.Program, worktree: string, file: ts.SourceFile): boolean {
+  return (
+    isInside(worktree, file.fileName) &&
+    !program.isSourceFileFromExternalLibrary(file) &&
+    !normalizedRelative(worktree, file.fileName).split("/").includes("node_modules")
+  );
+}
+
 function collectExports(
   program: ts.Program,
   file: ts.SourceFile,
   path: string,
   worktree: string,
-  claims: Map<string, Claim>,
+  output: ClaimOutput,
 ): void {
   const checker = program.getTypeChecker();
   const moduleSymbol = checker.getSymbolAtLocation(file);
@@ -165,14 +191,14 @@ function collectExports(
     const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
     if (declaration === undefined) continue;
     const name = checker.symbolToString(symbol);
-    const reference = `${path}/${stableName(name)}`;
-    const evidence = evidenceFor(
-      declaration.getSourceFile(),
-      declaration.getStart(),
-      worktree,
-      name,
-    );
-    addClaim(claims, {
+    const reference = `${subjectPath(path)}/${stableName(name)}`;
+    // `export *` can surface a declaration outside the worktree. Its location
+    // must not be disclosed, so cite the re-exporting module instead.
+    const declared = declaration.getSourceFile();
+    const evidence = isInside(worktree, declared.fileName)
+      ? evidenceFor(declared, declaration.getStart(), worktree, name)
+      : evidenceFor(file, 0, worktree, name);
+    addClaim(output, {
       subject_kind: "code_symbol",
       normalized_subject: `symbol:typescript:${reference}`,
       display_name: name,
@@ -180,7 +206,7 @@ function collectExports(
       provenance_kind: "static_analysis",
       evidence_refs: [evidence],
     });
-    addClaim(claims, {
+    addClaim(output, {
       subject_kind: "contract",
       normalized_subject: `contract:typescript:${reference}`,
       display_name: name,
@@ -196,7 +222,7 @@ function collectImports(
   file: ts.SourceFile,
   path: string,
   worktree: string,
-  claims: Map<string, Claim>,
+  output: ClaimOutput,
 ): void {
   const checker = program.getTypeChecker();
   for (const statement of file.statements) {
@@ -204,8 +230,8 @@ function collectImports(
       continue;
     const moduleSymbol = checker.getSymbolAtLocation(statement.moduleSpecifier);
     const target = moduleSymbol?.declarations?.[0]?.getSourceFile();
-    if (target === undefined || !isInside(worktree, target.fileName)) continue;
-    const targetPath = normalizedRelative(worktree, target.fileName);
+    if (target === undefined || !isRepositorySource(program, worktree, target)) continue;
+    const targetPath = subjectPath(normalizedRelative(worktree, target.fileName));
     const bindings = importBindings(statement.importClause);
     for (const name of bindings) {
       const resolved = checker
@@ -213,7 +239,7 @@ function collectImports(
         .find((symbol) => symbol.name === name);
       const stable = stableName(resolved === undefined ? name : checker.symbolToString(resolved));
       const reference = `${targetPath}/${stable}`;
-      addClaim(claims, {
+      addClaim(output, {
         subject_kind: "contract",
         normalized_subject: `contract:typescript:${reference}`,
         display_name: name,
@@ -237,9 +263,40 @@ function importBindings(clause: ts.ImportClause | undefined): string[] {
   return bindings.length === 0 ? ["module"] : bindings;
 }
 
-function addClaim(claims: Map<string, Claim>, claim: Claim): void {
-  if (claims.size >= MAX_CLAIMS || claims.has(claim.normalized_subject + claim.relation)) return;
-  claims.set(claim.normalized_subject + claim.relation, claim);
+/**
+ * Adds a claim only when it fits the Conn contract bounds. A claim that cannot
+ * be represented is omitted with a code-only diagnostic, so one unusual file
+ * cannot invalidate the whole report.
+ */
+function addClaim(output: ClaimOutput, claim: Claim): void {
+  const { claims, diagnostics } = output;
+  const key = `${claim.normalized_subject} ${claim.relation}`;
+  if (claims.size >= MAX_CLAIMS || claims.has(key)) return;
+  const evidence = claim.evidence_refs[0];
+  if (
+    claim.normalized_subject.length > MAX_SUBJECT_LENGTH ||
+    (evidence !== undefined &&
+      (evidence.locator.length > MAX_LOCATOR_LENGTH || evidence.path.length > MAX_PATH_LENGTH))
+  ) {
+    if (diagnostics.length < MAX_DIAGNOSTICS) {
+      const diagnostic: Diagnostic = {
+        code: SKIPPED_CLAIM_CODE,
+        message: "A claim exceeded the Conn reference length bounds and was omitted.",
+      };
+      if (evidence !== undefined && evidence.path.length <= MAX_PATH_LENGTH) {
+        diagnostic.path = evidence.path;
+        diagnostic.line = evidence.line;
+      }
+      diagnostics.push(diagnostic);
+    }
+    return;
+  }
+  claims.set(key, { ...claim, display_name: displayName(claim.display_name) });
+}
+
+function displayName(value: string): string {
+  const bounded = value.slice(0, MAX_DISPLAY_NAME_LENGTH);
+  return bounded.trim() === "" ? "module" : bounded;
 }
 
 function evidenceFor(
@@ -248,10 +305,11 @@ function evidenceFor(
   worktree: string,
   locator: string,
 ): EvidenceRef {
+  const path = normalizedRelative(worktree, file.fileName);
   return {
     kind: "source_location",
-    locator: `typescript:${normalizedRelative(worktree, file.fileName)}:${stableName(locator)}`,
-    path: normalizedRelative(worktree, file.fileName),
+    locator: `typescript:${subjectPath(path)}:${stableName(locator)}`,
+    path,
     line: file.getLineAndCharacterOfPosition(position).line + 1,
     content_hash: createHash("sha256").update(readFileSync(file.fileName)).digest("hex"),
   };
@@ -289,6 +347,18 @@ function isInside(worktree: string, path: string): boolean {
 
 function stableName(value: string): string {
   return value.replace(/[^A-Za-z0-9._~-]/g, "_").slice(0, 160) || "module";
+}
+
+/**
+ * Maps a repository-relative path onto the semantic-subject alphabet while
+ * keeping its directory structure: `app/[slug]/page.ts` becomes
+ * `app/_slug_/page.ts`. The unmodified path remains in the evidence reference.
+ */
+function subjectPath(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => segment.replace(/[^A-Za-z0-9._~-]/g, "_") || "_")
+    .join("/");
 }
 
 export const analyzerCapability = { language: "typescript", status: "local-compiler-api" } as const;

@@ -56,6 +56,11 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 	if request.Worktree == "" || request.CanonicalRemote == "" {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: worktree and canonical remote are required", ErrInvalid)
 	}
+	// The child's stderr is never surfaced, so diagnose the most common
+	// setup failure here rather than as an opaque process failure.
+	if info, err := os.Stat(cfg.AnalyzerPath); err != nil || info.IsDir() {
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: analyzer script %q was not found; build it with `pnpm build` or pass --analyzer-script", ErrUnavailable, cfg.AnalyzerPath)
+	}
 	input, err := json.Marshal(request)
 	if err != nil || len(input) > MaxInputBytes {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: request exceeds %d bytes", ErrInvalid, MaxInputBytes)

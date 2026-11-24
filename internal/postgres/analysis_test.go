@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"uuid"
@@ -50,8 +51,9 @@ func TestStaticAnalysisAttachment(t *testing.T) {
 	if err := store.Pool.QueryRow(ctx, `SELECT count(*), jsonb_array_length(diagnostics) FROM intent_analysis_reports WHERE intent_id = $1 GROUP BY diagnostics`, leftIntent).Scan(&reports, &diagnostics); err != nil || reports != 1 || diagnostics != 1 {
 		t.Fatalf("stored report = reports %d diagnostics %d err %v", reports, diagnostics, err)
 	}
-	if assessments := loadAssessments(t, ctx, store, leftIntent, rightIntent); len(assessments) != 1 || assessments[0].RuleID != "shared_exported_symbol" {
-		t.Fatalf("static collision = %#v", assessments)
+	if assessments := loadAssessments(t, ctx, store, leftIntent, rightIntent); len(assessments) != 1 || assessments[0].RuleID != "shared_exported_symbol" ||
+		!strings.Contains(assessments[0].ExplanationMarkdown, "from declared and static_analysis claims") {
+		t.Fatalf("static collision = %#v, want its explanation to name both provenances", assessments)
 	}
 	if _, err := projects.AttachStaticAnalysis(ctx, owner, projectID, left, leftIntent, report); err != nil {
 		t.Fatalf("idempotent attach = %v", err)
