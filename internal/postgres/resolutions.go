@@ -101,6 +101,42 @@ func (t projectTx) Proposal(ctx context.Context, projectID, collisionID, proposa
 	return item, nil
 }
 
+func (t projectTx) ResolutionProposals(ctx context.Context, projectID, collisionID uuid.UUID, limit int) ([]protocol.ResolutionProposal, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT proposal_id, project_id, collision_id, proposed_by_participant_id, proposed_by_human_id,
+			kind, rationale_markdown, references_json, created_at
+		FROM (
+			SELECT * FROM resolution_proposals
+			WHERE project_id = $1 AND collision_id = $2
+			ORDER BY created_at DESC, proposal_id DESC
+			LIMIT $3
+		) recent
+		ORDER BY created_at, proposal_id`, projectID, collisionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	proposals := []protocol.ResolutionProposal{}
+	for rows.Next() {
+		var item protocol.ResolutionProposal
+		var references []byte
+		var createdAt time.Time
+		if err := rows.Scan(&item.ProposalID, &item.ProjectID, &item.CollisionID, &item.ProposedByParticipantID, &item.ProposedByHumanID,
+			&item.Kind, &item.RationaleMarkdown, &references, &createdAt); err != nil {
+			return nil, err
+		}
+		item.CreatedAt = protocol.NewTimestamp(createdAt)
+		if err := json.Unmarshal(references, &item.References); err != nil {
+			return nil, fmt.Errorf("stored resolution proposal references: %w", err)
+		}
+		if len(item.References) == 0 {
+			item.References = nil
+		}
+		proposals = append(proposals, item)
+	}
+	return proposals, rows.Err()
+}
+
 func (t projectTx) ResolutionDecisionRefsForCollision(ctx context.Context, projectID, collisionID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := t.tx.Query(ctx, `SELECT decision_id FROM resolution_decisions WHERE project_id = $1 AND collision_id = $2 ORDER BY created_at, decision_id`, projectID, collisionID)
 	if err != nil {

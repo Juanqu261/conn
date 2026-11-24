@@ -35,6 +35,7 @@ const (
 	ConflictContextPackSchema      = "urn:conn:schema:v1:conflict-context-pack"
 	ResolutionProposalSchema       = "urn:conn:schema:v1:resolution-proposal"
 	ResolutionProposalInputSchema  = "urn:conn:schema:v1:resolution-proposal-input"
+	ResolutionProposalListSchema   = "urn:conn:schema:v1:resolution-proposal-list"
 	ResolutionDecisionSchema       = "urn:conn:schema:v1:resolution-decision"
 	ResolutionDecisionInputSchema  = "urn:conn:schema:v1:resolution-decision-input"
 	EvidenceReferenceSchema        = "urn:conn:schema:v1:evidence-reference"

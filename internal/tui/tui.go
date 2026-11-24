@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
@@ -61,12 +62,13 @@ const (
 	overviewSection section = iota
 	planSection
 	radarSection
+	workSection
 	teamSection
 	updatesSection
 	accountSection
 )
 
-var sections = []string{"Overview", "Plan", "Radar", "Team", "Updates", "Account"}
+var sections = []string{"Overview", "Plan", "Radar", "Work", "Team", "Updates", "Account"}
 
 type screen int
 
@@ -91,6 +93,46 @@ const (
 	charterRationaleScreen
 	charterConfirmScreen
 	radarCollisionScreen
+	// Semantic coordination screens, handled in semantic.go.
+	repoRemoteScreen
+	repoConfirmScreen
+	intentListScreen
+	intentObjectiveScreen
+	intentCharterScreen
+	intentRepositoryScreen
+	intentSummaryScreen
+	intentAssumptionsScreen
+	intentClaimsScreen
+	intentConfirmScreen
+	intentReleaseScreen
+	evidenceKeyScreen
+	evidenceKindScreen
+	evidenceStateScreen
+	evidenceLocatorScreen
+	evidenceSummaryScreen
+	evidenceConfirmScreen
+	analysisWorktreeScreen
+	analysisScriptScreen
+	analysisPathsScreen
+	analysisConfirmScreen
+	contextScreen
+	proposalKindScreen
+	proposalRationaleScreen
+	proposalReferencesScreen
+	proposalConfirmScreen
+	decisionProposalScreen
+	decisionKindScreen
+	decisionBindingScreen
+	decisionRationaleScreen
+	decisionReferencesScreen
+	decisionConfirmScreen
+	importSourceScreen
+	importTargetScreen
+	importTitleScreen
+	importOverviewScreen
+	importCriteriaScreen
+	importMemberScreen
+	importConfirmScreen
 )
 
 type projectItem struct{ entry protocol.ProjectListEntry }
@@ -144,6 +186,7 @@ type projectLoaded struct {
 	projectID uuid.UUID
 	status    protocol.ProjectStatus
 	radar     protocol.RadarView
+	intents   protocol.IntentList
 	members   protocol.ProjectMemberList
 	events    []protocol.EventEnvelope
 	asOfEvent int64
@@ -186,6 +229,7 @@ type model struct {
 	selected      protocol.ProjectListEntry
 	status        protocol.ProjectStatus
 	radar         protocol.RadarView
+	intents       protocol.IntentList
 	members       protocol.ProjectMemberList
 	events        []protocol.EventEnvelope
 	asOfEvent     int64
@@ -222,6 +266,9 @@ type model struct {
 	charterView        protocol.BlueprintRevisionView
 	charterOutcome     protocol.CharterOutcome
 	radarCollision     int
+	intentCursor       int
+	semantic           semanticDraft  // drafts and reads for the semantic flows
+	viewer             viewport.Model // scrollable conflict context pack
 	rejectionRationale string
 	createdProject     uuid.UUID
 }
@@ -237,7 +284,7 @@ func newModel(ctx context.Context, clientFactory func() (*httpclient.Client, err
 	area := textarea.New()
 	area.ShowLineNumbers = false
 	area.MaxHeight = 0 // CharLimit bounds the text, not a row count
-	m := model{ctx: ctx, clientFactory: clientFactory, projectList: projects, selector: selector, input: input, area: area, loading: true, width: 80, height: 24, editingCell: -1}
+	m := model{ctx: ctx, clientFactory: clientFactory, projectList: projects, selector: selector, input: input, area: area, viewer: viewport.New(80, 16), loading: true, width: 80, height: 24, editingCell: -1}
 	m.sizeArea()
 	return m
 }
@@ -249,6 +296,7 @@ func (m model) cardWidth() int { return min(100, max(34, m.width-6)) }
 func (m *model) sizeArea() {
 	m.area.SetWidth(m.cardWidth() - 6)
 	m.area.SetHeight(max(3, m.height-14))
+	m.viewer.Width, m.viewer.Height = m.cardWidth()-6, max(3, m.height-14)
 }
 
 func (m model) Init() tea.Cmd { return loadProjects(m.ctx, m.clientFactory) }
@@ -281,6 +329,10 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
+		intents, err := client.Intents(ctx, projectID)
+		if err != nil {
+			return projectLoaded{projectID: projectID, err: err}
+		}
 		members, err := client.ProjectMembers(ctx, projectID)
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
@@ -290,7 +342,7 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
-		return projectLoaded{projectID: projectID, status: status.Data, radar: radar.Data, members: members.Data, events: events.Data, asOfEvent: status.AsOfEvent}
+		return projectLoaded{projectID: projectID, status: status.Data, radar: radar.Data, intents: intents.Data, members: members.Data, events: events.Data, asOfEvent: status.AsOfEvent}
 	}
 }
 
@@ -308,7 +360,14 @@ func (m model) selectedProjectID() uuid.UUID { return m.selected.Project.Project
 
 // multiline reports whether a form field is Markdown, edited in a
 // multi-line area where Enter starts a new line.
-func multiline(s screen) bool { return s == objectiveOverviewScreen || s == cellOverviewScreen }
+func multiline(s screen) bool {
+	switch s {
+	case objectiveOverviewScreen, cellOverviewScreen, intentSummaryScreen, intentAssumptionsScreen, intentClaimsScreen,
+		proposalRationaleScreen, decisionRationaleScreen, importOverviewScreen, importCriteriaScreen:
+		return true
+	}
+	return false
+}
 
 func (m model) startInput(next screen, prompt, placeholder string, value string) model {
 	m.screen, m.choosing, m.help, m.err = next, false, false, nil
@@ -331,12 +390,22 @@ func (m model) startInput(next screen, prompt, placeholder string, value string)
 // contracts/v1 schema accepts, so drafts cannot fail on length after review.
 func inputLimit(s screen) int {
 	switch s {
-	case projectCreateScreen, objectiveTitleScreen, cellTitleScreen:
+	case projectCreateScreen, objectiveTitleScreen, cellTitleScreen, importTitleScreen:
 		return 200 // common#/$defs/title
 	case memberEntryScreen:
 		return 36 // a canonical UUID
-	case charterRationaleScreen:
+	case charterRationaleScreen, proposalRationaleScreen, decisionRationaleScreen:
 		return 4000 // common#/$defs/rationale
+	case evidenceLocatorScreen:
+		return 256 // common#/$defs/opaqueReference
+	case evidenceSummaryScreen:
+		return 1000 // common#/$defs/statement
+	case repoRemoteScreen, importSourceScreen, analysisWorktreeScreen, analysisScriptScreen:
+		return 1024 // a remote or local path
+	case proposalReferencesScreen, decisionReferencesScreen:
+		return 20 * 257 // up to 20 comma-separated opaque references
+	case analysisPathsScreen:
+		return 64 << 10 // bounded by the analyzer request limit
 	default:
 		return 32768 // common#/$defs/markdown
 	}
@@ -557,9 +626,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case projectLoaded:
 		m.loading, m.err = false, msg.err
 		if msg.err == nil {
-			m.status, m.radar, m.members, m.events, m.asOfEvent = msg.status, msg.radar, msg.members, msg.events, msg.asOfEvent
-			// A refresh can shrink the open collision list under the drill-down.
+			m.status, m.radar, m.intents, m.members, m.events, m.asOfEvent = msg.status, msg.radar, msg.intents, msg.members, msg.events, msg.asOfEvent
+			// A refresh can shrink the open collision or Intent list under a drill-down.
 			m.radarCollision = max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
+			m.intentCursor = max(0, min(m.intentCursor, len(m.intents.Intents)-1))
 		}
 		return m, nil
 	case charterLoaded:
@@ -575,6 +645,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.notice, m.screen, m.submitted, m.err = msg.message, normalScreen, normalScreen, nil
 		return m, loadProject(m.ctx, m.client, m.selectedProjectID())
+	case proposalsLoaded, contextLoaded, evidenceKeysLoaded, importBaseLoaded:
+		return m.updateSemanticMessage(msg)
 	case revisionBaseLoaded:
 		m.loading, m.err = false, msg.err
 		if msg.err != nil {
@@ -588,6 +660,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.loading {
 			return m, nil
+		}
+		if semanticScreen(m.screen) {
+			return m.updateSemanticScreen(msg)
 		}
 		if m.screen != normalScreen {
 			return m.updateScreen(msg)
@@ -653,10 +728,12 @@ func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "3":
 		m.section = radarSection
 	case "4":
-		m.section = teamSection
+		m.section = workSection
 	case "5":
-		m.section = updatesSection
+		m.section = teamSection
 	case "6":
+		m.section = updatesSection
+	case "7":
 		m.section = accountSection
 	case "tab", "right", "l":
 		m.section = (m.section + 1) % section(len(sections))
@@ -689,8 +766,10 @@ func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		if m.section == radarSection && len(m.radar.OpenCollisions) > 0 {
 			m.radarCollision, m.screen, m.err = 0, radarCollisionScreen, nil
-			return m, nil
+			return m.loadProposals()
 		}
+	case "g", "n", "i", "k":
+		return m.startSemanticAction(key)
 	case "r", "enter":
 		m.loading, m.err = true, nil
 		if m.client == nil || m.selectedProjectID() == (uuid.UUID{}) {
@@ -879,16 +958,6 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key == "enter" {
 			return m.submitBlueprint()
 		}
-	case radarCollisionScreen:
-		if len(m.radar.OpenCollisions) > 0 {
-			switch key {
-			case "up", "k":
-				m.radarCollision = max(0, m.radarCollision-1)
-			case "down", "j":
-				m.radarCollision = min(len(m.radar.OpenCollisions)-1, m.radarCollision+1)
-			}
-		}
-		return m, nil
 	case charterPickScreen:
 		if key == "enter" {
 			if item, ok := m.selector.SelectedItem().(charterItem); ok {
@@ -992,6 +1061,9 @@ func (m model) View() string {
 	if m.loading {
 		return m.header() + "\n\n" + m.card("Loading", "Loading shared team state...") + "\n"
 	}
+	if semanticScreen(m.screen) {
+		return m.semanticFormView()
+	}
 	if m.screen != normalScreen {
 		return m.formView()
 	}
@@ -1076,8 +1148,6 @@ func (m model) formView() string {
 			body += "\n\nRationale:\n" + clean(m.rejectionRationale)
 		}
 		title, footer = "Confirm charter decision", "  Enter confirm · Esc edit"
-	case radarCollisionScreen:
-		title, body, footer = "Collision drill-down", m.radarCollisionView(), "  Up/down collision · Esc back to Radar"
 	}
 	if m.err != nil {
 		body += "\n\n" + errorStyle.Render(clean(m.err.Error()))
@@ -1107,12 +1177,21 @@ func (m model) normalFooter() string {
 	if m.section == radarSection && len(m.radar.OpenCollisions) > 0 {
 		footer += " · x inspect collision"
 	}
+	if m.section == workSection {
+		if m.status.Role == protocol.RoleOwner {
+			footer += " · g connect repository"
+		}
+		footer += " · n publish Intent"
+		if len(m.intents.Intents) > 0 {
+			footer += " · i inspect Intents"
+		}
+	}
 	if m.section == teamSection && m.status.Role == protocol.RoleOwner {
 		footer += " · a add member"
 	}
 	if m.section == planSection {
 		if m.status.Role == protocol.RoleOwner {
-			footer += " · o objective · b blueprint"
+			footer += " · o objective · k import Kiro spec · b blueprint"
 		}
 		footer += " · d decide charter"
 	}
@@ -1120,7 +1199,9 @@ func (m model) normalFooter() string {
 }
 
 func (m model) helpText() string {
-	return "p opens the project picker, even when only one project is available. Project picker and form selectors are labeled separately. Owners can add existing Conn humans, create objectives, and propose blueprints. Assigned humans decide only their own pending charters. Escape backs out of the current form or review without writing."
+	return "p opens the project picker, even when only one project is available. Project picker and form selectors are labeled separately. Owners can add existing Conn humans, create or import objectives, propose blueprints, and connect repositories. Assigned humans decide only their own pending charters. " +
+		"In Work, this app publishes, revises, and releases Intents as your CLI participant; Intents published from Kiro belong to that Kiro participant. " +
+		"In Radar, x opens a collision: c reads its context pack, p records a non-binding proposal, and d records a human decision. Binding decisions are owner-only. Escape backs out of the current form or review without writing."
 }
 
 func (m model) sectionView() string {
@@ -1131,6 +1212,8 @@ func (m model) sectionView() string {
 		return m.plan()
 	case radarSection:
 		return m.radarView()
+	case workSection:
+		return m.work()
 	case teamSection:
 		return m.team()
 	case updatesSection:
@@ -1190,7 +1273,7 @@ func (m model) plan() string {
 		}
 	}
 	if m.status.Role == protocol.RoleOwner {
-		lines = append(lines, "\nOwner actions: o create objective · b propose blueprint")
+		lines = append(lines, "\nOwner actions: o create objective · k import Kiro spec · b propose blueprint")
 	}
 	lines = append(lines, "Charter action: d review and decide your own pending charter")
 	return strings.Join(lines, "\n")

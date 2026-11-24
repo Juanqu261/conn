@@ -113,14 +113,14 @@ func registerTools(server *sdk.Server, cfg Config) {
 			"Returns {data: [events], as_of_event}.",
 		Annotations: annotations("Check updates"),
 	}, t.checkUpdates)
-	sdk.AddTool(server, &sdk.Tool{Name: "publish_intent", Description: "Publish an Intent for your authenticated Conn participant. The input cannot choose a human or participant.", Annotations: writes("Publish Intent", true)}, t.publishIntent)
-	sdk.AddTool(server, &sdk.Tool{Name: "revise_intent", Description: "Append an immutable revision to your own active Intent using expected_revision.", Annotations: writes("Revise Intent", false)}, t.reviseIntent)
+	sdk.AddTool(server, &sdk.Tool{Name: "publish_intent", Description: "Publish an Intent for your authenticated Conn participant. Omit intent.intent_id to let Conn assign a new UUIDv7; reuse a returned intent_id to retry idempotently. The input cannot choose a human or participant.", Annotations: writes("Publish Intent", true)}, t.publishIntent)
+	sdk.AddTool(server, &sdk.Tool{Name: "revise_intent", Description: "Append an immutable revision to your own active Intent using expected_revision. intent.intent_id defaults to intent_id.", Annotations: writes("Revise Intent", false)}, t.reviseIntent)
 	sdk.AddTool(server, &sdk.Tool{Name: "release_intent", Description: "Release your own active Intent without deleting its history.", Annotations: writes("Release Intent", true)}, t.releaseIntent)
 	sdk.AddTool(server, &sdk.Tool{Name: "check_collisions", Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.", Annotations: annotations("Check collisions")}, t.checkCollisions)
 	sdk.AddTool(server, &sdk.Tool{Name: "read_radar", Description: "Read the member-authorized Radar coordination snapshot. Returns {data: radar, as_of_event}.", Annotations: annotations("Read Radar")}, t.readRadar)
 	sdk.AddTool(server, &sdk.Tool{Name: "read_conflict_context", Description: "Read a bounded, source-free context pack for one collision. Returns {data: context_pack, as_of_event}.", Annotations: annotations("Read conflict context")}, t.readConflictContext)
 	sdk.AddTool(server, &sdk.Tool{Name: "propose_resolution", Description: "Record a non-binding participant resolution proposal. This cannot make a decision or change project boundaries.", Annotations: writes("Propose resolution", false)}, t.proposeResolution)
-	sdk.AddTool(server, &sdk.Tool{Name: "attach_evidence", Description: "Attach bounded reference-only evidence to your own active Intent. Conn never accepts raw logs, source, prompts, or authority fields.", Annotations: writes("Attach evidence", false)}, t.attachEvidence)
+	sdk.AddTool(server, &sdk.Tool{Name: "attach_evidence", Description: "Attach bounded reference-only evidence to your own active Intent. evidence.intent_id defaults to intent_id. Conn never accepts raw logs, source, prompts, or authority fields.", Annotations: writes("Attach evidence", false)}, t.attachEvidence)
 }
 
 type tools struct {
@@ -283,6 +283,9 @@ func (t tools) publishIntent(ctx context.Context, _ *sdk.CallToolRequest, in int
 	if err != nil {
 		return t.fail("publish_intent", err)
 	}
+	// Agents rarely produce valid UUIDv7 values, so the adapter assigns the
+	// identity when it is omitted. The reply returns it for later revisions.
+	in.Intent = withDefault(in.Intent, "intent_id", uuid.NewV7().String())
 	input, err := decodeToolDocument[protocol.IntentInput](in.Intent)
 	if err != nil {
 		return t.fail("publish_intent", err)
@@ -306,7 +309,7 @@ func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in revi
 	if err != nil {
 		return t.fail("revise_intent", err)
 	}
-	input, err := decodeToolDocument[protocol.IntentInput](in.Intent)
+	input, err := decodeToolDocument[protocol.IntentInput](withDefault(in.Intent, "intent_id", intentID.String()))
 	if err != nil {
 		return t.fail("revise_intent", err)
 	}
@@ -421,7 +424,7 @@ func (t tools) attachEvidence(ctx context.Context, _ *sdk.CallToolRequest, in ev
 	if err != nil {
 		return t.fail("attach_evidence", err)
 	}
-	evidence, err := decodeToolDocument[protocol.EvidenceAttachmentInput](in.Evidence)
+	evidence, err := decodeToolDocument[protocol.EvidenceAttachmentInput](withDefault(in.Evidence, "intent_id", intentID.String()))
 	if err != nil {
 		return t.fail("attach_evidence", err)
 	}
@@ -502,6 +505,19 @@ func describe(err error) string {
 		return "Not found, or the signed-in human is not a member of this project."
 	}
 	return err.Error()
+}
+
+// withDefault returns a copy of document with key set to value when absent.
+// It never overrides a supplied value, so mismatches are still reported.
+func withDefault(document map[string]any, key string, value any) map[string]any {
+	copied := make(map[string]any, len(document)+1)
+	for k, v := range document {
+		copied[k] = v
+	}
+	if _, ok := copied[key]; !ok {
+		copied[key] = value
+	}
+	return copied
 }
 
 func decodeToolDocument[T protocol.Document](value map[string]any) (T, error) {

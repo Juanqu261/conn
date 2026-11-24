@@ -70,6 +70,10 @@ export function analyze(request: AnalyzeRequest): AnalyzerReport {
     if (claims.size >= MAX_CLAIMS || diagnostics.length >= MAX_DIAGNOSTICS) break;
     const parsed = readConfig(configPath, diagnostics, worktree);
     if (parsed === undefined) continue;
+    // Building a program is the expensive step. With selected paths, skip a
+    // project that contains none of them, and its unrelated diagnostics.
+    if (selectedPaths.size > 0 && !includesSelectedPath(parsed.fileNames, worktree, selectedPaths))
+      continue;
     const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
     for (const diagnostic of ts.getPreEmitDiagnostics(program))
       addDiagnostic(diagnostics, diagnostic, worktree);
@@ -157,6 +161,17 @@ function readConfig(
   );
   for (const diagnostic of parsed.errors) addDiagnostic(diagnostics, diagnostic, worktree);
   return parsed;
+}
+
+function includesSelectedPath(
+  fileNames: readonly string[],
+  worktree: string,
+  selectedPaths: ReadonlySet<string>,
+): boolean {
+  return fileNames.some(
+    (fileName) =>
+      isInside(worktree, fileName) && selectedPaths.has(normalizedRelative(worktree, fileName)),
+  );
 }
 
 interface ClaimOutput {

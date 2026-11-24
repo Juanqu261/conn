@@ -1711,6 +1711,39 @@
       }
     },
     {
+      "name": "resolution proposal list accepts proposals for one collision",
+      "schema": "urn:conn:schema:v1:resolution-proposal-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "proposals": [
+          {
+            "proposal_id": "019a8f00-0017-7000-8000-000000000017",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "collision_id": "019a8f00-0016-7000-8000-000000000016",
+            "proposed_by_participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "kind": "dependency",
+            "rationale_markdown": "Depend on the retry contract proposal before changing the cache.",
+            "references": ["decision-note:retry"],
+            "created_at": "2026-11-22T09:06:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "resolution proposal list rejects a decision authority field",
+      "schema": "urn:conn:schema:v1:resolution-proposal-list",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "proposals": [],
+        "decided_by_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
       "name": "resolution decision rejects a non-binding accepted risk",
       "schema": "urn:conn:schema:v1:resolution-decision",
       "valid": false,

@@ -55,6 +55,11 @@ func (c *Client) ConflictContext(ctx context.Context, projectID, collisionID uui
 	return read[protocol.ConflictContextPack](ctx, c, fmt.Sprintf("%s/collisions/%s/context", projectPath(projectID), collisionID))
 }
 
+// ResolutionProposals lists the most recent non-binding proposals for one collision.
+func (c *Client) ResolutionProposals(ctx context.Context, projectID, collisionID uuid.UUID) (Result[protocol.ResolutionProposalList], error) {
+	return read[protocol.ResolutionProposalList](ctx, c, fmt.Sprintf("%s/collisions/%s/proposals", projectPath(projectID), collisionID))
+}
+
 // ProposeResolution records the caller's non-binding participant proposal.
 func (c *Client) ProposeResolution(ctx context.Context, projectID, collisionID uuid.UUID, input protocol.ResolutionProposalInput) (Result[protocol.ResolutionProposal], error) {
 	return post[protocol.ResolutionProposal](ctx, c, fmt.Sprintf("%s/collisions/%s/proposals", projectPath(projectID), collisionID), input)

@@ -131,6 +131,9 @@ type Tx interface {
 	InsertResolutionDecision(ctx context.Context, decision protocol.ResolutionDecision) error
 	// Proposal belongs to this collision in Project scope.
 	Proposal(ctx context.Context, projectID, collisionID, proposalID uuid.UUID) (protocol.ResolutionProposal, error)
+	// ResolutionProposals lists at most limit of the most recent proposals for
+	// one collision, oldest first.
+	ResolutionProposals(ctx context.Context, projectID, collisionID uuid.UUID, limit int) ([]protocol.ResolutionProposal, error)
 	// ResolutionDecisionRefsForCollision lists decisions already recorded for
 	// this collision in chronological order.
 	ResolutionDecisionRefsForCollision(ctx context.Context, projectID, collisionID uuid.UUID) ([]uuid.UUID, error)

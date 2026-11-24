@@ -91,6 +91,19 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/collisions/{collision_id}/proposals", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		collisionID, ok := pathID(w, r, log, "collision_id")
+		if !ok {
+			return
+		}
+		result, err := projects.ResolutionProposals(r.Context(), s.Human.HumanID, projectID, collisionID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/collisions/{collision_id}/proposals", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

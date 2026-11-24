@@ -38,6 +38,21 @@ func TestResolutionProtocol(t *testing.T) {
 	if err := store.Pool.QueryRow(ctx, `SELECT count(*) FROM resolution_decisions WHERE project_id = $1`, projectID).Scan(&decisions); err != nil || decisions != 0 {
 		t.Fatalf("proposal made decisions=%d, err=%v", decisions, err)
 	}
+	listed, err := projects.ResolutionProposals(ctx, owner, projectID, collision.CollisionID)
+	if err != nil || len(listed.Data.Proposals) != 1 || listed.Data.Proposals[0].ProposalID != proposal.Data.ProposalID ||
+		listed.Data.Proposals[0].ProposedByParticipantID == nil || len(listed.Data.Proposals[0].References) != 1 {
+		t.Fatalf("listed proposals = %#v, %v", listed.Data, err)
+	}
+	if _, err := protocol.Encode(listed.Data); err != nil {
+		t.Fatalf("proposal list does not satisfy its contract: %v", err)
+	}
+	outsiderRecord, err := (postgres.AuthStore{Pool: store.Pool}).UpsertHuman(ctx, uuid.NewV7(), 704, "resolution-outsider", time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := projects.ResolutionProposals(ctx, outsiderRecord.HumanID, projectID, collision.CollisionID); !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("outsider proposal list error = %v, want not found", err)
+	}
 
 	pack, err := projects.ConflictContext(ctx, owner, projectID, collision.CollisionID)
 	if err != nil {

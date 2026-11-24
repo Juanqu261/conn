@@ -166,6 +166,31 @@ func contextPack(collision protocol.CollisionAssessment, objective protocol.Obje
 	}
 }
 
+// maxListedProposals bounds the proposal list contract.
+const maxListedProposals = 200
+
+// ResolutionProposals lists the most recent non-binding proposals for one
+// collision to a Project member, so a human can review them before deciding.
+func (p *Projects) ResolutionProposals(ctx context.Context, actor, projectID, collisionID uuid.UUID) (Result[protocol.ResolutionProposalList], error) {
+	var result Result[protocol.ResolutionProposalList]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		if _, err := tx.CollisionAssessment(ctx, projectID, collisionID); err != nil {
+			return err
+		}
+		proposals, err := tx.ResolutionProposals(ctx, projectID, collisionID, maxListedProposals)
+		if err != nil {
+			return err
+		}
+		result.Data = protocol.ResolutionProposalList{ProjectID: projectID, CollisionID: collisionID, Proposals: proposals}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
 // ProposeResolution appends a participant-authored, non-binding proposal. A
 // proposal cannot alter collision state, project boundaries, or authority.
 func (p *Projects) ProposeResolution(ctx context.Context, actor, projectID, participantID, collisionID uuid.UUID, input protocol.ResolutionProposalInput) (Result[protocol.ResolutionProposal], error) {

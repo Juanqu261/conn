@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:resolution-proposal-list",
+  "title": "Resolution proposal list",
+  "description": "The most recent non-binding proposals for one CollisionAssessment, oldest first. Listing a proposal never makes it a decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "collision_id", "proposals"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "proposals": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "urn:conn:schema:v1:resolution-proposal" }
+    }
+  }
+}
