@@ -48,6 +48,7 @@ func TestConformance(t *testing.T) {
 		protocol.ConflictContextPackSchema:      roundTrip[protocol.ConflictContextPack],
 		protocol.ResolutionProposalSchema:       roundTrip[protocol.ResolutionProposal],
 		protocol.ResolutionProposalInputSchema:  roundTrip[protocol.ResolutionProposalInput],
+		protocol.ResolutionProposalListSchema:   roundTrip[protocol.ResolutionProposalList],
 		protocol.ResolutionDecisionSchema:       roundTrip[protocol.ResolutionDecision],
 		protocol.ResolutionDecisionInputSchema:  roundTrip[protocol.ResolutionDecisionInput],
 		protocol.EvidenceReferenceSchema:        roundTrip[protocol.EvidenceReference],

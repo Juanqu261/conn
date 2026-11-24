@@ -70,8 +70,108 @@ func newResolutionCommand(deps Dependencies, streams Streams) *cobra.Command {
 			fmt.Fprintf(out, "Recorded %s resolution decision %s for collision %s.\n", decisionKindLabel(decision), decision.DecisionID, decision.CollisionID)
 		})
 	}
-	resolution.AddCommand(decide)
+	propose := &cobra.Command{Use: "propose", Short: "Append a non-binding resolution proposal from JSON as your CLI participant", Args: cobra.NoArgs}
+	rp := newRemote(propose, deps, streams)
+	var proposeProject, proposeCollision uuid.UUID
+	var proposeFile string
+	requiredUUID(propose, &proposeProject, "project", "project ID")
+	requiredUUID(propose, &proposeCollision, "collision", "collision ID")
+	requiredString(propose, &proposeFile, "file", "resolution-proposal-input JSON document, or - for standard input")
+	propose.RunE = func(cmd *cobra.Command, _ []string) error {
+		input, err := readInput[protocol.ResolutionProposalInput](streams.In, proposeFile)
+		if err != nil {
+			return err
+		}
+		client, err := rp.client()
+		if err != nil {
+			return err
+		}
+		result, err := client.ProposeResolution(cmd.Context(), proposeProject, proposeCollision, input)
+		if err != nil {
+			return err
+		}
+		return printResult(rp, result, func(out io.Writer, proposal protocol.ResolutionProposal) {
+			fmt.Fprintf(out, "Recorded non-binding %s proposal %s for collision %s. Only a human decision can adopt it.\n", proposal.Kind, proposal.ProposalID, proposal.CollisionID)
+		})
+	}
+
+	proposals := &cobra.Command{Use: "proposals", Short: "List non-binding proposals for one collision", Args: cobra.NoArgs}
+	rl := newRemote(proposals, deps, streams)
+	var listProject, listCollision uuid.UUID
+	requiredUUID(proposals, &listProject, "project", "project ID")
+	requiredUUID(proposals, &listCollision, "collision", "collision ID")
+	proposals.RunE = func(cmd *cobra.Command, _ []string) error {
+		client, err := rl.client()
+		if err != nil {
+			return err
+		}
+		result, err := client.ResolutionProposals(cmd.Context(), listProject, listCollision)
+		if err != nil {
+			return err
+		}
+		return printResult(rl, result, func(out io.Writer, list protocol.ResolutionProposalList) {
+			if len(list.Proposals) == 0 {
+				fmt.Fprintln(out, "No resolution proposals are recorded for this collision.")
+			}
+			for _, proposal := range list.Proposals {
+				fmt.Fprintf(out, "%s  %s  non-binding  by %s  %s\n  %s\n", proposal.ProposalID, proposal.Kind, proposalAuthor(proposal), proposal.CreatedAt, clean(proposal.RationaleMarkdown))
+			}
+			fmt.Fprintf(out, "As of event %d.\n", result.AsOfEvent)
+		})
+	}
+
+	resolution.AddCommand(decide, propose, proposals)
 	return resolution
+}
+
+// proposalAuthor names the participant or human that authored a proposal.
+func proposalAuthor(proposal protocol.ResolutionProposal) string {
+	switch {
+	case proposal.ProposedByParticipantID != nil:
+		return "participant " + proposal.ProposedByParticipantID.String()
+	case proposal.ProposedByHumanID != nil:
+		return "human " + proposal.ProposedByHumanID.String()
+	}
+	return "unknown author"
+}
+
+func newEvidenceCommand(deps Dependencies, streams Streams) *cobra.Command {
+	evidence := group("evidence", "Attach reference-only evidence to your own Intents")
+	attach := &cobra.Command{
+		Use:   "attach",
+		Short: "Attach reference-only evidence from JSON to your own active Intent",
+		Long: "Attach an evidence-attachment-input document to your own active Intent as your CLI participant.\n" +
+			"Conn stores the locator, state, optional hash, and summary only, never logs or artifacts.",
+		Args: cobra.NoArgs,
+	}
+	r := newRemote(attach, deps, streams)
+	var projectID uuid.UUID
+	var file string
+	requiredUUID(attach, &projectID, "project", "project ID")
+	requiredString(attach, &file, "file", "evidence-attachment-input JSON document, or - for standard input")
+	attach.RunE = func(cmd *cobra.Command, _ []string) error {
+		input, err := readInput[protocol.EvidenceAttachmentInput](streams.In, file)
+		if err != nil {
+			return err
+		}
+		client, err := r.client()
+		if err != nil {
+			return err
+		}
+		result, err := client.AttachEvidence(cmd.Context(), projectID, input.IntentID, input)
+		if err != nil {
+			return err
+		}
+		return printResult(r, result, func(out io.Writer, item protocol.EvidenceReference) {
+			key := "no acceptance key"
+			if item.AcceptanceKey != "" {
+				key = "acceptance key " + item.AcceptanceKey
+			}
+			fmt.Fprintf(out, "Attached %s %s evidence %s to Intent %s (%s).\n", item.State, item.Kind, item.EvidenceID, input.IntentID, key)
+		})
+	}
+	evidence.AddCommand(attach)
+	return evidence
 }
 
 func decisionKindLabel(decision protocol.ResolutionDecision) string {

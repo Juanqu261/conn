@@ -20,6 +20,7 @@ import (
 
 	"github.com/Juanqu261/conn/internal/application"
 	"github.com/Juanqu261/conn/internal/httpapi"
+	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
 	"github.com/Juanqu261/conn/internal/postgres/postgrestest"
@@ -289,6 +290,15 @@ func TestMCPStdio(t *testing.T) {
 	if err != nil || proposalResult.ProposedByParticipantID == nil || proposalResult.ProposedByHumanID != nil {
 		t.Fatalf("propose_resolution: %s, %v", data, err)
 	}
+	// The human reviews the agent proposals over the HTTP API before deciding.
+	aliceHTTP, err := httpclient.New(backend.URL, backend.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposals, err := aliceHTTP.WithToken(alice.Token).ResolutionProposals(ctx, projectID, collision.CollisionID)
+	if err != nil || len(proposals.Data.Proposals) != 1 || proposals.Data.Proposals[0].ProposalID != proposalResult.ProposalID {
+		t.Fatalf("ResolutionProposals over HTTP: %+v, %v", proposals.Data, err)
+	}
 	// A human, rather than either Kiro participant, records the selected
 	// proposal as an immutable decision. The non-binding sequencing outcome
 	// deliberately keeps the collision advisory and visible on Radar.
@@ -328,6 +338,29 @@ func TestMCPStdio(t *testing.T) {
 	_, data, _ = call("read_radar", map[string]any{})
 	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 1 || len(radar.OpenCollisions) != 0 || len(radar.DecisionRefs) != 1 {
 		t.Fatalf("read_radar after release: %s, %v", data, err)
+	}
+
+	// An agent may omit intent_id: the adapter assigns a UUIDv7 and returns it,
+	// and later tools default nested intent_id values from their argument.
+	generated := map[string]any{"objective_id": objectiveID.String(), "objective_revision": 1, "summary_markdown": "Document order retries."}
+	_, data, _ = call("publish_intent", map[string]any{"intent": generated})
+	assigned, err := protocol.Decode[protocol.IntentView](data)
+	if err != nil || assigned.IntentRevision.IntentID[6]>>4 != 7 || assigned.IntentRevision.Revision != 1 {
+		t.Fatalf("publish_intent without intent_id: %s, %v", data, err)
+	}
+	assignedID := assigned.IntentRevision.IntentID.String()
+	_, data, _ = call("attach_evidence", map[string]any{"intent_id": assignedID, "evidence": map[string]any{
+		"objective_id": objectiveID.String(), "objective_revision": 1, "kind": "pull_request", "state": "unknown", "locator": "pr:docs-retries",
+	}})
+	if evidence, err := protocol.Decode[protocol.EvidenceReference](data); err != nil || evidence.IntentID == nil || evidence.IntentID.String() != assignedID {
+		t.Fatalf("attach_evidence defaulting intent_id: %s, %v", data, err)
+	}
+	_, data, _ = call("revise_intent", map[string]any{"intent_id": assignedID, "expected_revision": 1, "intent": generated})
+	if revised, err := protocol.Decode[protocol.IntentView](data); err != nil || revised.IntentRevision.Revision != 2 {
+		t.Fatalf("revise_intent defaulting intent_id: %s, %v", data, err)
+	}
+	if _, data, _ = call("release_intent", map[string]any{"intent_id": assignedID}); !strings.Contains(string(data), `"released"`) {
+		t.Fatalf("release generated Intent: %s", data)
 	}
 
 	// Authority comes only from the authenticated session. An authority field

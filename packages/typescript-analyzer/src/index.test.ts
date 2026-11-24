@@ -27,7 +27,8 @@ function worktreeWith(files: Record<string, string>): string {
   return worktree;
 }
 
-describe("analyze", () => {
+// Each case builds real TypeScript programs, which is slow on a loaded machine.
+describe("analyze", { timeout: 30_000 }, () => {
   it("uses the TypeScript compiler API for exports and resolved imports without source text", () => {
     const worktree = mkdtempSync(join(tmpdir(), "conn-ts-analyzer-"));
     writeFileSync(
@@ -176,6 +177,35 @@ describe("analyze", () => {
     );
     expect(serialized).not.toContain("outside.ts");
     expect(serialized).not.toContain("node_modules");
+  });
+
+  it("skips TypeScript projects that contain none of the selected paths", () => {
+    const projectConfig = JSON.stringify({
+      compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true },
+      include: ["*.ts"],
+    });
+    const worktree = worktreeWith({
+      "selected/tsconfig.json": projectConfig,
+      "selected/charge.ts": "export const charge = 1;\n",
+      "unrelated/tsconfig.json": projectConfig,
+      "unrelated/broken.ts": 'export const value: number = "not a number";\n',
+    });
+
+    const whole = analyze({ worktree, canonical_remote: "github.com/acme/web" });
+    const selected = analyze({
+      worktree,
+      canonical_remote: "github.com/acme/web",
+      paths: ["selected/charge.ts"],
+    });
+
+    expect(whole.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "unrelated/broken.ts" })]),
+    );
+    expect(selected.diagnostics).toEqual([]);
+    expect(selected.claims.map((claim) => claim.normalized_subject)).toEqual([
+      "contract:typescript:selected/charge.ts/charge",
+      "symbol:typescript:selected/charge.ts/charge",
+    ]);
   });
 
   it("produces a schema-valid report for this pnpm workspace", () => {

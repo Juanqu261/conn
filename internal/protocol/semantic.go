@@ -236,6 +236,16 @@ type ResolutionProposal struct {
 
 func (ResolutionProposal) SchemaID() string { return ResolutionProposalSchema }
 
+// ResolutionProposalList lists the most recent non-binding proposals for one
+// collision, oldest first, so a human can review them before deciding.
+type ResolutionProposalList struct {
+	ProjectID   uuid.UUID            `json:"project_id"`
+	CollisionID uuid.UUID            `json:"collision_id"`
+	Proposals   []ResolutionProposal `json:"proposals"`
+}
+
+func (ResolutionProposalList) SchemaID() string { return ResolutionProposalListSchema }
+
 // ResolutionDecision is an immutable human-authorized outcome.
 type ResolutionDecision struct {
 	DecisionID         uuid.UUID  `json:"decision_id"`
