@@ -101,16 +101,17 @@ type ProjectMember struct {
 
 // Objective is one immutable revision of a narrative Objective.
 type Objective struct {
-	ObjectiveID        uuid.UUID   `json:"objective_id"`
-	ProjectID          uuid.UUID   `json:"project_id"`
-	Revision           int         `json:"revision"`
-	Key                string      `json:"key,omitempty"`
-	Title              string      `json:"title"`
-	OverviewMarkdown   string      `json:"overview_markdown"`
-	AccountableHumanID uuid.UUID   `json:"accountable_human_id"`
-	SourceRefs         []SourceRef `json:"source_refs,omitempty"`
-	KeyPoints          []KeyPoint  `json:"key_points,omitempty"`
-	CreatedAt          Timestamp   `json:"created_at"`
+	ObjectiveID        uuid.UUID                  `json:"objective_id"`
+	ProjectID          uuid.UUID                  `json:"project_id"`
+	Revision           int                        `json:"revision"`
+	Key                string                     `json:"key,omitempty"`
+	Title              string                     `json:"title"`
+	OverviewMarkdown   string                     `json:"overview_markdown"`
+	AccountableHumanID uuid.UUID                  `json:"accountable_human_id"`
+	SourceRefs         []SourceRef                `json:"source_refs,omitempty"`
+	ImportProvenance   *ObjectiveImportProvenance `json:"import_provenance,omitempty"`
+	KeyPoints          []KeyPoint                 `json:"key_points,omitempty"`
+	CreatedAt          Timestamp                  `json:"created_at"`
 }
 
 func (Objective) SchemaID() string { return ObjectiveSchema }
@@ -135,7 +136,16 @@ type SourceRef struct {
 	Title string `json:"title,omitempty"`
 }
 
-// KeyPoint is an Objective statement that needs a stable reference.
+// ObjectiveImportProvenance identifies the exact local source captured by a
+// human-authorized import. It is part of the immutable Objective revision.
+type ObjectiveImportProvenance struct {
+	SourceKind        string    `json:"source_kind"`
+	SourceRef         string    `json:"source_ref"`
+	SourceRevisionRef string    `json:"source_revision_ref,omitempty"`
+	ContentHash       string    `json:"content_hash"`
+	ImportedAt        Timestamp `json:"imported_at"`
+}
+
 type KeyPoint struct {
 	Key       string       `json:"key"`
 	Kind      KeyPointKind `json:"kind"`

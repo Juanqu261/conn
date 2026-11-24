@@ -122,6 +122,14 @@ func (c *Client) CreateObjective(ctx context.Context, projectID uuid.UUID, input
 	return post[protocol.Objective](ctx, c, projectPath(projectID)+"/objectives", input)
 }
 
+// ImportKiroSpecObjective records a human-authorized snapshot from a local
+// Kiro specification. The client provides only reviewed Objective content,
+// a safe source reference, and a digest; it never uploads the source file.
+func (c *Client) ImportKiroSpecObjective(ctx context.Context, projectID uuid.UUID, expectedRevision int, input protocol.ObjectiveImportInput) (Result[protocol.Objective], error) {
+	path := fmt.Sprintf("%s/objective-imports/kiro-spec?expected_revision=%d", projectPath(projectID), expectedRevision)
+	return post[protocol.Objective](ctx, c, path, input)
+}
+
 // ReviseObjective appends the revision after expectedRevision.
 func (c *Client) ReviseObjective(ctx context.Context, projectID uuid.UUID, expectedRevision int, input protocol.ObjectiveRevisionInput) (Result[protocol.Objective], error) {
 	path := fmt.Sprintf("%s/objectives/%s/revisions?expected_revision=%d", projectPath(projectID), input.ObjectiveID, expectedRevision)

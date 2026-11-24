@@ -1748,11 +1748,13 @@
       "schema": "urn:conn:schema:v1:objective-import-input",
       "valid": true,
       "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
         "source_kind": "kiro_spec",
         "source_ref": ".kiro/specs/semantic-intent-radar/requirements.md",
         "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "title": "Semantic intent radar",
-        "overview_markdown": "Coordinate semantic change intent before implementation."
+        "overview_markdown": "Coordinate semantic change intent before implementation.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
       }
     },
     {
@@ -1869,6 +1871,36 @@
             "advisory_observations": []
           }
         ]
+      }
+    },
+    {
+      "name": "Kiro spec import accepts safe immutable provenance",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "kiro_spec",
+        "source_ref": ".kiro/specs/checkout/requirements.md",
+        "source_revision_ref": "working-tree-2026-11-21",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Review and preserve retry safety.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "Kiro spec import rejects GitHub issue until repository authorization exists",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": false,
+      "at": "/source_kind",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "github_issue",
+        "source_ref": "issues/42",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Review and preserve retry safety.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
       }
     }
   ]

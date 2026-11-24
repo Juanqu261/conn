@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { analyze, MAX_CLAIMS, MAX_DIAGNOSTICS } from "./index.js";
 
@@ -45,6 +46,34 @@ describe("analyze", () => {
     expect(serialized).not.toContain("ghp_this_is_source_and_must_not_escape");
     expect(report.claims.length).toBeLessThanOrEqual(MAX_CLAIMS);
     expect(report.diagnostics.length).toBeLessThanOrEqual(MAX_DIAGNOSTICS);
+  });
+
+  it("analyzes the two-intent fixture locally without serializing its source literal", () => {
+    const worktree = fileURLToPath(
+      new URL("../../../fixtures/semantic-intent-radar-two-intents/", import.meta.url),
+    );
+
+    const report = analyze({
+      worktree,
+      canonical_remote: "github.com/conn-fixtures/semantic-intent-radar",
+    });
+    const serialized = JSON.stringify(report);
+
+    expect(report.diagnostics).toEqual([]);
+    expect(report.claims).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          normalized_subject: "symbol:typescript:apps/gateway/src/retry.ts/shouldRetryCharge",
+        }),
+        expect.objectContaining({
+          normalized_subject: "symbol:typescript:apps/orders/src/retry.ts/shouldRetryOrder",
+        }),
+      ]),
+    );
+    expect(serialized).not.toContain("FIXTURE_SOURCE_MUST_NOT_BE_TRANSMITTED");
+    expect(serialized).not.toContain(
+      "Retry transport failures without creating more than one charge",
+    );
   });
 
   it("replaces compiler diagnostic text with a bounded code-only message", () => {

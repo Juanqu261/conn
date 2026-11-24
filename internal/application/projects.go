@@ -536,6 +536,70 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 	return result, err
 }
 
+// ImportKiroSpecObjective records a human-reviewed summary and immutable
+// provenance for a local Kiro specification. The server receives only the
+// supplied safe reference and digest, never the local source itself. Refresh
+// is an explicit optimistic-concurrency revision; no external change can
+// mutate a stored Objective.
+func (p *Projects) ImportKiroSpecObjective(ctx context.Context, actor, projectID uuid.UUID, input protocol.ObjectiveImportInput, expectedRevision int) (Result[protocol.Objective], error) {
+	if err := validateRecord(input); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+	if expectedRevision < 0 {
+		return Result[protocol.Objective]{}, &InvalidError{Message: "The expected revision cannot be negative."}
+	}
+	if input.SourceKind != "kiro_spec" {
+		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_kind", Message: "Only local Kiro specification imports are available. GitHub issue imports require a future GitHub App and repository authorization."}
+	}
+	if err := uniqueKeys(input.KeyPoints, func(k protocol.KeyPoint) string { return k.Key }, "/key_points", "Key-point"); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+	now := p.now()
+	objective := protocol.Objective{
+		ObjectiveID: input.ObjectiveID, ProjectID: projectID, Revision: expectedRevision + 1,
+		Key: input.Key, Title: input.Title, OverviewMarkdown: input.OverviewMarkdown,
+		AccountableHumanID: input.AccountableHumanID, KeyPoints: input.KeyPoints,
+		ImportProvenance: &protocol.ObjectiveImportProvenance{
+			SourceKind: input.SourceKind, SourceRef: input.SourceRef, SourceRevisionRef: input.SourceRevisionRef,
+			ContentHash: input.ContentHash, ImportedAt: protocol.NewTimestamp(now),
+		},
+		CreatedAt: protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(objective); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+
+	var result Result[protocol.Objective]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if err := requireOwner(ctx, tx, projectID, actor); err != nil {
+			return err
+		}
+		if _, err := tx.Role(ctx, projectID, input.AccountableHumanID); errors.Is(err, ErrNotFound) {
+			return &InvalidError{Pointer: "/accountable_human_id", Message: "The accountable human is not a member of this project."}
+		} else if err != nil {
+			return err
+		}
+		inserted, err := tx.InsertObjectiveRevision(ctx, objective)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			load := func(revision int) (protocol.Objective, error) {
+				return tx.ObjectiveRevision(ctx, projectID, objective.ObjectiveID, revision)
+			}
+			if result.Data, err = replay(objective.Revision, load, func(existing protocol.Objective) bool { return sameObjectiveContent(existing, objective) }); err != nil {
+				return err
+			}
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		result.Data = objective
+		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, objective.ObjectiveID, actor, now, protocol.ObjectiveImported{Revision: objective.Revision}))
+		return err
+	})
+	return result, err
+}
+
 // replay explains why inserting a revision changed nothing. load reads a
 // stored revision of the same aggregate within the Project. When the same
 // request already succeeded, replay returns the stored revision.
@@ -680,7 +744,18 @@ func sameObjectiveContent(a, b protocol.Objective) bool {
 		a.OverviewMarkdown == b.OverviewMarkdown &&
 		a.AccountableHumanID == b.AccountableHumanID &&
 		slices.Equal(a.SourceRefs, b.SourceRefs) &&
+		sameObjectiveImportProvenance(a.ImportProvenance, b.ImportProvenance) &&
 		slices.Equal(a.KeyPoints, b.KeyPoints)
+}
+
+func sameObjectiveImportProvenance(a, b *protocol.ObjectiveImportProvenance) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	// ImportedAt, like Objective.CreatedAt, is server-assigned and deliberately
+	// excluded so a retried identical import remains idempotent.
+	return a.SourceKind == b.SourceKind && a.SourceRef == b.SourceRef &&
+		a.SourceRevisionRef == b.SourceRevisionRef && a.ContentHash == b.ContentHash
 }
 
 func newEvent(projectID, entityID, actor uuid.UUID, at time.Time, payload protocol.EventPayload) protocol.EventEnvelope {

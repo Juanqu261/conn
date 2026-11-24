@@ -215,36 +215,53 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("read_my_charter after the proposal: revision %d, %q, %v", view.Revision, summary, err)
 	}
 
-	// Alice publishes an Intent outside the MCP subprocess. Bob then publishes
-	// an overlapping declared invariant through MCP, which must be attributed to
-	// Bob's session-bound participant and open an advisory collision.
-	aliceParticipant, err := projects.ResolveParticipant(ctx, alice.HumanID, projectID, "cli", "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Two independently authenticated Kiro subprocesses publish concurrent
+	// Intent declarations. Each session receives only its own Conn token and
+	// Conn must derive the participant identity from that session.
 	aliceIntentID, bobIntentID := uuid.NewV7(), uuid.NewV7()
-	claim := func() []protocol.SemanticClaimCandidate {
-		return []protocol.SemanticClaimCandidate{{
-			SubjectKind: "invariant", NormalizedSubject: "invariant:checkout-idempotency", DisplayName: "Checkout idempotency",
-			Relation: "changes", ProvenanceKind: "declared",
-		}}
-	}
-	if _, err := projects.PublishIntent(ctx, alice.HumanID, projectID, aliceParticipant.Data.ParticipantID, protocol.IntentInput{
-		IntentID: aliceIntentID, ObjectiveID: objectiveID, ObjectiveRevision: 1, SummaryMarkdown: "Update gateway retries.", DeclaredClaims: claim(),
-	}); err != nil {
-		t.Fatal(err)
-	}
 	intentArgs := func(intentID uuid.UUID, summary string) map[string]any {
 		return map[string]any{
 			"intent_id": intentID.String(), "objective_id": objectiveID.String(), "objective_revision": 1, "summary_markdown": summary,
 			"declared_claims": []any{map[string]any{
-				"subject_kind": "invariant", "normalized_subject": "invariant:checkout-idempotency", "display_name": "Checkout idempotency", "relation": "changes", "provenance_kind": "declared",
+				"subject_kind": "invariant", "normalized_subject": "invariant:checkout:one-idempotency-key-one-successful-charge", "display_name": "Checkout idempotency", "relation": "changes", "provenance_kind": "declared",
 			}},
 		}
 	}
+	var aliceStderr bytes.Buffer
+	aliceCmd := exec.Command(os.Args[0], "mcp")
+	aliceCmd.Env = append(os.Environ(), runMainEnv+"=1",
+		"CONN_SERVER_URL="+backend.URL, "CONN_TOKEN="+alice.Token.Reveal(), "CONN_PROJECT="+projectID.String())
+	aliceCmd.Stderr = &aliceStderr
+	aliceClient := sdk.NewClient(&sdk.Implementation{Name: "conn-alice-test", Version: "0"}, nil)
+	aliceSession, err := aliceClient.Connect(ctx, &sdk.CommandTransport{Command: aliceCmd}, nil)
+	if err != nil {
+		t.Fatalf("initialize Alice MCP: %v\nstderr:\n%s", err, aliceStderr.String())
+	}
+	aliceResult, err := aliceSession.CallTool(ctx, &sdk.CallToolParams{
+		Name: "publish_intent", Arguments: map[string]any{"intent": intentArgs(aliceIntentID, "Update gateway retries.")},
+	})
+	if err != nil || aliceResult.IsError {
+		t.Fatalf("Alice publish_intent: %v %s\nstderr:\n%s", err, text(aliceResult), aliceStderr.String())
+	}
+	aliceStructured, err := json.Marshal(aliceResult.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var aliceEnvelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(aliceStructured, &aliceEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	aliceIntent, err := protocol.Decode[protocol.IntentView](aliceEnvelope.Data)
+	if err != nil || aliceIntent.IntentRevision.IntentID != aliceIntentID || aliceIntent.IntentRevision.Revision != 1 {
+		t.Fatalf("Alice publish_intent: %s, %v", aliceEnvelope.Data, err)
+	}
+
 	_, data, _ = call("publish_intent", map[string]any{"intent": intentArgs(bobIntentID, "Update order retries.")})
 	bobIntent, err := protocol.Decode[protocol.IntentView](data)
-	if err != nil || bobIntent.IntentRevision.IntentID != bobIntentID || bobIntent.IntentRevision.Revision != 1 {
+	if err != nil || bobIntent.IntentRevision.IntentID != bobIntentID || bobIntent.IntentRevision.Revision != 1 ||
+		bobIntent.IntentRevision.ParticipantID == aliceIntent.IntentRevision.ParticipantID {
 		t.Fatalf("publish_intent: %s, %v", data, err)
 	}
 
@@ -254,7 +271,7 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("check_collisions: %s, %v", data, err)
 	}
 	collision, err := protocol.Decode[protocol.CollisionAssessment](collisions[0])
-	if err != nil || collision.State != "open" {
+	if err != nil || collision.State != "open" || collision.RuleID != "shared_declared_invariant" || len(collision.MatchingClaimRefs) != 2 {
 		t.Fatalf("collision: %s, %v", collisions[0], err)
 	}
 
@@ -271,6 +288,22 @@ func TestMCPStdio(t *testing.T) {
 	proposalResult, err := protocol.Decode[protocol.ResolutionProposal](data)
 	if err != nil || proposalResult.ProposedByParticipantID == nil || proposalResult.ProposedByHumanID != nil {
 		t.Fatalf("propose_resolution: %s, %v", data, err)
+	}
+	// A human, rather than either Kiro participant, records the selected
+	// proposal as an immutable decision. The non-binding sequencing outcome
+	// deliberately keeps the collision advisory and visible on Radar.
+	decision, err := projects.DecideResolution(ctx, alice.HumanID, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
+		SelectedProposalID: &proposalResult.ProposalID, Kind: "sequencing", Binding: false,
+		RationaleMarkdown: "The project owner will merge gateway retry behavior before order retry behavior.",
+		References:        []string{"meeting:fixture-retry-sequencing"},
+	})
+	if err != nil || decision.Data.DecidedByHumanID != alice.HumanID || decision.Data.SelectedProposalID == nil || *decision.Data.SelectedProposalID != proposalResult.ProposalID {
+		t.Fatalf("DecideResolution: %+v, %v", decision.Data, err)
+	}
+	_, data, _ = call("read_radar", map[string]any{})
+	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 2 || len(radar.OpenCollisions) != 1 || len(radar.DecisionRefs) != 1 ||
+		!slices.Contains(radar.KnownUnknowns, "Open collision assessments are advisory and disputed until a human records a decision.") {
+		t.Fatalf("read_radar with collision: %s, %v", data, err)
 	}
 
 	// Bounded evidence is owned by Bob's active Intent, then revisions and a
@@ -293,8 +326,8 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("release_intent: %s, %v", data, err)
 	}
 	_, data, _ = call("read_radar", map[string]any{})
-	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 1 {
-		t.Fatalf("read_radar: %s, %v", data, err)
+	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 1 || len(radar.OpenCollisions) != 0 || len(radar.DecisionRefs) != 1 {
+		t.Fatalf("read_radar after release: %s, %v", data, err)
 	}
 
 	// Authority comes only from the authenticated session. An authority field
@@ -306,6 +339,12 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("publish_intent did not reject a human_id: %s", text(impersonation))
 	}
 
+	if err := aliceSession.Close(); err != nil {
+		t.Fatalf("close Alice MCP: %v\nstderr:\n%s", err, aliceStderr.String())
+	}
+	if aliceCmd.ProcessState == nil || aliceCmd.ProcessState.ExitCode() != 0 {
+		t.Fatalf("Alice conn mcp did not exit cleanly: %v\nstderr:\n%s", aliceCmd.ProcessState, aliceStderr.String())
+	}
 	if err := session.Close(); err != nil {
 		t.Fatalf("close: %v\nstderr:\n%s", err, stderr.String())
 	}
@@ -313,7 +352,7 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("conn mcp did not exit cleanly: %v\nstderr:\n%s", cmd.ProcessState, stderr.String())
 	}
 	for _, token := range []string{alice.Token.Reveal(), bob.Token.Reveal()} {
-		if strings.Contains(stderr.String(), token) {
+		if strings.Contains(stderr.String(), token) || strings.Contains(aliceStderr.String(), token) {
 			t.Fatal("a session token appeared in conn mcp diagnostics")
 		}
 	}

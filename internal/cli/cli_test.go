@@ -113,6 +113,7 @@ func TestCLI(t *testing.T) {
 	blankName := file("blank.json", `{"project_id": "`+project+`", "name": " "}`)
 	objectiveJSON := `{"objective_id": "` + objective + `", "title": "Reliable checkout",
 		"overview_markdown": "Survive provider outages.\u001b]0;pwned\u0007", "accountable_human_id": "` + aliceID + `"}`
+	kiroSpec := file("requirements.md", "# Local source only\n\nThis source must never be uploaded to Conn.")
 	server := []string{"--server", backend.URL}
 
 	steps := []struct {
@@ -190,6 +191,14 @@ func TestCLI(t *testing.T) {
 		{name: "repository list presents member-visible scope", token: alice,
 			args:     append([]string{"repository", "list", "--project", project}, server...),
 			wantCode: cli.ExitOK, wantOut: "github.com/acme/payments"},
+		{name: "Kiro spec import hashes locally and returns immutable provenance", token: alice,
+			args: append([]string{"objective", "import-kiro-spec", "--project", project, "--objective", objective, "--accountable-human", aliceID,
+				"--source", kiroSpec, "--source-ref", ".kiro/specs/checkout/requirements.md", "--title", "Reliable checkout refreshed", "--overview", "Reviewed local specification", "--expected-revision", "1", "--json"}, server...),
+			wantCode: cli.ExitOK, wantOut: `"content_hash":"`, check: func(t *testing.T, stdout string) {
+				if strings.Contains(stdout, "This source must never be uploaded") || !strings.Contains(stdout, `"source_ref":".kiro/specs/checkout/requirements.md"`) {
+					t.Fatalf("import output leaked local source or missed provenance: %s", stdout)
+				}
+			}},
 		{name: "an unreachable server is unavailable", token: alice, args: []string{"status", "--project", project, "--server", "http://127.0.0.1:1"},
 			wantCode: cli.ExitUnavailable, wantErr: "could not be reached"},
 	}

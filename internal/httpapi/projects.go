@@ -288,6 +288,28 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
+	// GitHub issue import deliberately has no route. It must first bind a
+	// GitHub App installation to an authorized repository, then authenticate
+	// and deduplicate external deliveries. Local Kiro-spec imports below do
+	// not grant or imply that future repository authority.
+	handle("POST /v1/projects/{project_id}/objective-imports/kiro-spec", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		zero := int64(0)
+		expected, ok := queryInt(w, r, log, "expected_revision", 0, math.MaxInt32-1, &zero)
+		if !ok {
+			return
+		}
+		input, ok := readDocument[protocol.ObjectiveImportInput](w, r, log)
+		if !ok {
+			return
+		}
+		result, err := projects.ImportKiroSpecObjective(r.Context(), s.Human.HumanID, projectID, input, int(expected))
+		respond(w, log, http.StatusCreated, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/objectives", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {

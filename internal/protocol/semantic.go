@@ -313,13 +313,16 @@ type ConflictObjective struct {
 
 // ObjectiveImportInput is human-authorized imported objective content.
 type ObjectiveImportInput struct {
-	SourceKind        string     `json:"source_kind"`
-	SourceRef         string     `json:"source_ref"`
-	SourceRevisionRef string     `json:"source_revision_ref,omitempty"`
-	ContentHash       string     `json:"content_hash"`
-	Title             string     `json:"title"`
-	OverviewMarkdown  string     `json:"overview_markdown"`
-	KeyPoints         []KeyPoint `json:"key_points,omitempty"`
+	ObjectiveID        uuid.UUID  `json:"objective_id"`
+	Key                string     `json:"key,omitempty"`
+	SourceKind         string     `json:"source_kind"`
+	SourceRef          string     `json:"source_ref"`
+	SourceRevisionRef  string     `json:"source_revision_ref,omitempty"`
+	ContentHash        string     `json:"content_hash"`
+	Title              string     `json:"title"`
+	OverviewMarkdown   string     `json:"overview_markdown"`
+	AccountableHumanID uuid.UUID  `json:"accountable_human_id"`
+	KeyPoints          []KeyPoint `json:"key_points,omitempty"`
 }
 
 func (ObjectiveImportInput) SchemaID() string { return ObjectiveImportInputSchema }
