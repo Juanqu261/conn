@@ -45,9 +45,89 @@ func (c *Client) AddMember(ctx context.Context, projectID, humanID uuid.UUID) (R
 	return post[protocol.ProjectMembership](ctx, c, projectPath(projectID)+"/members", protocol.ProjectMemberAdd{HumanID: humanID})
 }
 
+// Radar reads the complete member-authorized semantic coordination snapshot at one cursor.
+func (c *Client) Radar(ctx context.Context, projectID uuid.UUID) (Result[protocol.RadarView], error) {
+	return read[protocol.RadarView](ctx, c, projectPath(projectID)+"/radar")
+}
+
+// ConflictContext reads a portable, source-free context pack for one collision.
+func (c *Client) ConflictContext(ctx context.Context, projectID, collisionID uuid.UUID) (Result[protocol.ConflictContextPack], error) {
+	return read[protocol.ConflictContextPack](ctx, c, fmt.Sprintf("%s/collisions/%s/context", projectPath(projectID), collisionID))
+}
+
+// ProposeResolution records the caller's non-binding participant proposal.
+func (c *Client) ProposeResolution(ctx context.Context, projectID, collisionID uuid.UUID, input protocol.ResolutionProposalInput) (Result[protocol.ResolutionProposal], error) {
+	return post[protocol.ResolutionProposal](ctx, c, fmt.Sprintf("%s/collisions/%s/proposals", projectPath(projectID), collisionID), input)
+}
+
+// DecideResolution records an immutable decision by the authenticated human.
+func (c *Client) DecideResolution(ctx context.Context, projectID, collisionID uuid.UUID, input protocol.ResolutionDecisionInput) (Result[protocol.ResolutionDecision], error) {
+	return post[protocol.ResolutionDecision](ctx, c, fmt.Sprintf("%s/collisions/%s/decisions", projectPath(projectID), collisionID), input)
+}
+
+// ConnectRepository connects an owner-authorized repository scope to a Project.
+func (c *Client) ConnectRepository(ctx context.Context, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
+	return post[protocol.RepositoryConnection](ctx, c, projectPath(projectID)+"/repositories", input)
+}
+
+// RepositoryConnections lists the repository scopes visible to the caller.
+func (c *Client) RepositoryConnections(ctx context.Context, projectID uuid.UUID) (Result[protocol.RepositoryConnectionList], error) {
+	return read[protocol.RepositoryConnectionList](ctx, c, projectPath(projectID)+"/repositories")
+}
+
+// PublishIntent creates the caller's default CLI-bound participant Intent.
+func (c *Client) PublishIntent(ctx context.Context, projectID uuid.UUID, input protocol.IntentInput) (Result[protocol.IntentView], error) {
+	return post[protocol.IntentView](ctx, c, projectPath(projectID)+"/intents", input)
+}
+
+// ReviseIntent appends a revision after expectedRevision for the caller's participant.
+func (c *Client) ReviseIntent(ctx context.Context, projectID, intentID uuid.UUID, expectedRevision int, input protocol.IntentInput) (Result[protocol.IntentView], error) {
+	path := fmt.Sprintf("%s/intents/%s/revisions?expected_revision=%d", projectPath(projectID), intentID, expectedRevision)
+	return post[protocol.IntentView](ctx, c, path, input)
+}
+
+// ReleaseIntent releases the caller's own active Intent.
+func (c *Client) ReleaseIntent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
+	body, err := c.send(ctx, http.MethodPost, fmt.Sprintf("%s/intents/%s/release", projectPath(projectID), intentID), c.token, nil)
+	if err != nil {
+		return Result[protocol.IntentView]{}, err
+	}
+	return decodeResult[protocol.IntentView](body)
+}
+
+// AttachEvidence attaches a bounded, reference-only evidence item to the
+// caller's own active Intent.
+func (c *Client) AttachEvidence(ctx context.Context, projectID, intentID uuid.UUID, input protocol.EvidenceAttachmentInput) (Result[protocol.EvidenceReference], error) {
+	return post[protocol.EvidenceReference](ctx, c, fmt.Sprintf("%s/intents/%s/evidence", projectPath(projectID), intentID), input)
+}
+
+// AttachStaticAnalysis attaches a validated source-free local analyzer report
+// to the caller's active Intent revision.
+func (c *Client) AttachStaticAnalysis(ctx context.Context, projectID, intentID uuid.UUID, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {
+	return post[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s/analysis", projectPath(projectID), intentID), report)
+}
+
+// Intent reads one current Intent snapshot.
+func (c *Client) Intent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
+	return read[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s", projectPath(projectID), intentID))
+}
+
+// Intents lists current snapshots, including released Intents.
+func (c *Client) Intents(ctx context.Context, projectID uuid.UUID) (Result[protocol.IntentList], error) {
+	return read[protocol.IntentList](ctx, c, projectPath(projectID)+"/intents")
+}
+
 // CreateObjective creates revision 1 of an Objective.
 func (c *Client) CreateObjective(ctx context.Context, projectID uuid.UUID, input protocol.ObjectiveRevisionInput) (Result[protocol.Objective], error) {
 	return post[protocol.Objective](ctx, c, projectPath(projectID)+"/objectives", input)
+}
+
+// ImportKiroSpecObjective records a human-authorized snapshot from a local
+// Kiro specification. The client provides only reviewed Objective content,
+// a safe source reference, and a digest; it never uploads the source file.
+func (c *Client) ImportKiroSpecObjective(ctx context.Context, projectID uuid.UUID, expectedRevision int, input protocol.ObjectiveImportInput) (Result[protocol.Objective], error) {
+	path := fmt.Sprintf("%s/objective-imports/kiro-spec?expected_revision=%d", projectPath(projectID), expectedRevision)
+	return post[protocol.Objective](ctx, c, path, input)
 }
 
 // ReviseObjective appends the revision after expectedRevision.

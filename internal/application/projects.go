@@ -76,6 +76,65 @@ type Tx interface {
 	// ProjectMembers lists every Project membership with its human identity.
 	ProjectMembers(ctx context.Context, projectID uuid.UUID) ([]protocol.ProjectMember, error)
 
+	// InsertRepositoryConnection stores a Project repository connection. It
+	// reports false, changing nothing, when any unique identity is taken.
+	InsertRepositoryConnection(ctx context.Context, repository protocol.RepositoryConnection) (bool, error)
+	RepositoryConnection(ctx context.Context, projectID, repositoryID uuid.UUID) (protocol.RepositoryConnection, error)
+	RepositoryConnectionByRemote(ctx context.Context, projectID uuid.UUID, canonicalRemote string) (protocol.RepositoryConnection, error)
+	RepositoryConnections(ctx context.Context, projectID uuid.UUID) ([]protocol.RepositoryConnection, error)
+
+	// Participant resolves a human-bound operating identity. A missing local
+	// session reference is matched as a deliberate null-equivalent value.
+	Participant(ctx context.Context, projectID, humanID uuid.UUID, adapterKind, localSessionRef string) (protocol.Participant, error)
+	ParticipantByID(ctx context.Context, projectID, participantID uuid.UUID) (protocol.Participant, error)
+	InsertParticipant(ctx context.Context, participant protocol.Participant) (bool, error)
+
+	// InsertIntentRevision atomically creates revision 1 or advances an active
+	// caller-owned Intent from revision n-1. It reports false when either
+	// expected state was no longer current.
+	InsertIntentRevision(ctx context.Context, revision protocol.IntentRevision) (bool, error)
+	Intent(ctx context.Context, projectID, intentID uuid.UUID) (protocol.IntentView, error)
+	Intents(ctx context.Context, projectID uuid.UUID) ([]protocol.IntentView, error)
+	ReleaseIntent(ctx context.Context, projectID, intentID, participantID uuid.UUID, expectedRevision int) (bool, error)
+
+	// InsertSemanticClaims records immutable claims for an exact immutable
+	// IntentRevision. Claim IDs are assigned by the application.
+	InsertSemanticClaims(ctx context.Context, claims []protocol.SemanticClaim) error
+	// AnalyzerReportAttached identifies an immutable local analysis report already
+	// attached to this exact IntentRevision.
+	AnalyzerReportAttached(ctx context.Context, projectID, intentID uuid.UUID, revision int) (bool, error)
+	// InsertAnalyzerReport records only bounded analyzer diagnostics and report
+	// metadata, never analyzer input or repository source.
+	InsertAnalyzerReport(ctx context.Context, projectID, intentID uuid.UUID, revision int, report protocol.LocalAnalyzerReport, observedAt protocol.Timestamp) error
+	// ActiveSemanticClaims returns claims belonging to each current active
+	// Intent revision in a Project.
+	ActiveSemanticClaims(ctx context.Context, projectID uuid.UUID) ([]protocol.SemanticClaim, error)
+	// StaleOpenCollisionsForIntent transitions open or under-review
+	// assessments involving this exact Intent revision to stale. It returns the
+	// affected assessment IDs for append-only lifecycle events.
+	StaleOpenCollisionsForIntent(ctx context.Context, projectID, intentID uuid.UUID, revision int, staleAt protocol.Timestamp) ([]uuid.UUID, error)
+	// InsertCollisionAssessment stores one new assessment and its immutable
+	// matching-claim references. It returns false when that exact assessment
+	// identity was already recorded.
+	InsertCollisionAssessment(ctx context.Context, assessment protocol.CollisionAssessment) (bool, error)
+
+	// CollisionAssessment returns an assessment in this Project, including
+	// historical records that are no longer open.
+	CollisionAssessment(ctx context.Context, projectID, collisionID uuid.UUID) (protocol.CollisionAssessment, error)
+	// IntentRevision returns an exact immutable Intent revision.
+	IntentRevision(ctx context.Context, projectID, intentID uuid.UUID, revision int) (protocol.IntentRevision, error)
+	// SemanticClaims returns named immutable claims in Project scope.
+	SemanticClaims(ctx context.Context, projectID uuid.UUID, claimIDs []uuid.UUID) ([]protocol.SemanticClaim, error)
+	// InsertResolutionProposal appends one non-binding participant proposal.
+	InsertResolutionProposal(ctx context.Context, proposal protocol.ResolutionProposal) error
+	// InsertResolutionDecision appends one immutable human decision.
+	InsertResolutionDecision(ctx context.Context, decision protocol.ResolutionDecision) error
+	// Proposal belongs to this collision in Project scope.
+	Proposal(ctx context.Context, projectID, collisionID, proposalID uuid.UUID) (protocol.ResolutionProposal, error)
+	// ResolutionDecisionRefsForCollision lists decisions already recorded for
+	// this collision in chronological order.
+	ResolutionDecisionRefsForCollision(ctx context.Context, projectID, collisionID uuid.UUID) ([]uuid.UUID, error)
+
 	// InsertObjectiveRevision stores objective and makes it current. Revision
 	// 1 creates the Objective; revision n requires current revision n-1 in
 	// the same Project. It reports false, changing nothing, otherwise.
@@ -118,6 +177,21 @@ type Tx interface {
 	// BlueprintSummaries lists the Project's Blueprints in creation order,
 	// each with its revisions in force and their cell decisions.
 	BlueprintSummaries(ctx context.Context, projectID uuid.UUID) ([]protocol.BlueprintSummary, error)
+
+	// CurrentObjectives returns every current immutable objective snapshot.
+	CurrentObjectives(ctx context.Context, projectID uuid.UUID) ([]protocol.Objective, error)
+	// ActiveBlueprint returns the current active blueprint revision, if any.
+	ActiveBlueprint(ctx context.Context, projectID uuid.UUID) (protocol.BlueprintRevision, error)
+	// OpenCollisions returns advisory assessments that remain open or under review.
+	OpenCollisions(ctx context.Context, projectID uuid.UUID) ([]protocol.CollisionAssessment, error)
+	// ResolutionDecisionRefs returns immutable decision identifiers visible in the Project.
+	ResolutionDecisionRefs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error)
+	// ResolutionDecisions returns immutable decisions for Radar dependency projection.
+	ResolutionDecisions(ctx context.Context, projectID uuid.UUID) ([]protocol.ResolutionDecision, error)
+	// ActiveEvidenceReferences returns evidence for current Objective revisions.
+	ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error)
+	// InsertEvidenceReference stores one immutable, participant-attributed evidence record.
+	InsertEvidenceReference(ctx context.Context, evidence protocol.EvidenceReference) error
 
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
@@ -270,6 +344,135 @@ func (p *Projects) AddMember(ctx context.Context, actor, projectID, humanID uuid
 	return result, err
 }
 
+// ConnectRepository lets a Project owner add a credential-free repository
+// scope. Repeating the same connection returns the stored record without a
+// new event. A different connection using an occupied ID or remote conflicts.
+func (p *Projects) ConnectRepository(ctx context.Context, actor, projectID uuid.UUID, input protocol.RepositoryConnectInput) (Result[protocol.RepositoryConnection], error) {
+	now := p.now()
+	repository := protocol.RepositoryConnection{
+		RepositoryID:         input.RepositoryID,
+		ProjectID:            projectID,
+		HostKind:             input.HostKind,
+		CanonicalRemote:      input.CanonicalRemote,
+		HostRepositoryNodeID: input.HostRepositoryNodeID,
+		DefaultBranch:        input.DefaultBranch,
+		AnalysisEnabled:      input.AnalysisEnabled,
+		CreatedByHumanID:     actor,
+		CreatedAt:            protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(repository); err != nil {
+		return Result[protocol.RepositoryConnection]{}, err
+	}
+
+	var result Result[protocol.RepositoryConnection]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if err := requireOwner(ctx, tx, projectID, actor); err != nil {
+			return err
+		}
+		inserted, err := tx.InsertRepositoryConnection(ctx, repository)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			existing, err := tx.RepositoryConnection(ctx, projectID, repository.RepositoryID)
+			if errors.Is(err, ErrNotFound) {
+				existing, err = tx.RepositoryConnectionByRemote(ctx, projectID, repository.CanonicalRemote)
+			}
+			if err != nil {
+				return err
+			}
+			if !sameRepositoryContent(existing, repository) {
+				return ErrConflict
+			}
+			result.Data = existing
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		result.Data = repository
+		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, repository.RepositoryID, actor, now, protocol.RepositoryConnected{}))
+		return err
+	})
+	return result, err
+}
+
+// RepositoryConnections lists the repository scopes visible to a Project
+// member. The returned cursor reflects the same database snapshot.
+func (p *Projects) RepositoryConnections(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.RepositoryConnectionList], error) {
+	var result Result[protocol.RepositoryConnectionList]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		repositories, err := tx.RepositoryConnections(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		result.Data = protocol.RepositoryConnectionList{ProjectID: projectID, Repositories: repositories}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+// ResolveParticipant returns the caller's bounded operating identity for an
+// adapter and optional opaque local-session reference. It is deliberately not
+// an HTTP authority selector: callers derive actor from the Conn session.
+func (p *Projects) ResolveParticipant(ctx context.Context, actor, projectID uuid.UUID, adapterKind, localSessionRef string) (Result[protocol.Participant], error) {
+	now := p.now()
+	participant := protocol.Participant{
+		ParticipantID:   uuid.NewV7(),
+		ProjectID:       projectID,
+		HumanID:         actor,
+		AdapterKind:     adapterKind,
+		LocalSessionRef: localSessionRef,
+		CreatedAt:       protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(participant); err != nil {
+		return Result[protocol.Participant]{}, err
+	}
+
+	var result Result[protocol.Participant]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+			return err
+		}
+		existing, err := tx.Participant(ctx, projectID, actor, adapterKind, localSessionRef)
+		if err == nil {
+			result.Data = existing
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		inserted, err := tx.InsertParticipant(ctx, participant)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			result.Data, err = tx.Participant(ctx, projectID, actor, adapterKind, localSessionRef)
+			if err != nil {
+				return err
+			}
+		} else {
+			result.Data = participant
+		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
+func sameRepositoryContent(a, b protocol.RepositoryConnection) bool {
+	return a.ProjectID == b.ProjectID &&
+		a.HostKind == b.HostKind &&
+		a.CanonicalRemote == b.CanonicalRemote &&
+		a.HostRepositoryNodeID == b.HostRepositoryNodeID &&
+		a.DefaultBranch == b.DefaultBranch &&
+		a.AnalysisEnabled == b.AnalysisEnabled &&
+		a.CreatedByHumanID == b.CreatedByHumanID
+}
+
 // CreateObjectiveRevision lets the owner append the next immutable revision
 // of an Objective. expectedRevision is the latest revision the author saw,
 // or 0 to create the Objective. A stale expectation fails with
@@ -328,6 +531,70 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 		result.Data = objective
 		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, objective.ObjectiveID, actor, now,
 			protocol.ObjectiveRevisionCreated{Revision: objective.Revision}))
+		return err
+	})
+	return result, err
+}
+
+// ImportKiroSpecObjective records a human-reviewed summary and immutable
+// provenance for a local Kiro specification. The server receives only the
+// supplied safe reference and digest, never the local source itself. Refresh
+// is an explicit optimistic-concurrency revision; no external change can
+// mutate a stored Objective.
+func (p *Projects) ImportKiroSpecObjective(ctx context.Context, actor, projectID uuid.UUID, input protocol.ObjectiveImportInput, expectedRevision int) (Result[protocol.Objective], error) {
+	if err := validateRecord(input); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+	if expectedRevision < 0 {
+		return Result[protocol.Objective]{}, &InvalidError{Message: "The expected revision cannot be negative."}
+	}
+	if input.SourceKind != "kiro_spec" {
+		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_kind", Message: "Only local Kiro specification imports are available. GitHub issue imports require a future GitHub App and repository authorization."}
+	}
+	if err := uniqueKeys(input.KeyPoints, func(k protocol.KeyPoint) string { return k.Key }, "/key_points", "Key-point"); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+	now := p.now()
+	objective := protocol.Objective{
+		ObjectiveID: input.ObjectiveID, ProjectID: projectID, Revision: expectedRevision + 1,
+		Key: input.Key, Title: input.Title, OverviewMarkdown: input.OverviewMarkdown,
+		AccountableHumanID: input.AccountableHumanID, KeyPoints: input.KeyPoints,
+		ImportProvenance: &protocol.ObjectiveImportProvenance{
+			SourceKind: input.SourceKind, SourceRef: input.SourceRef, SourceRevisionRef: input.SourceRevisionRef,
+			ContentHash: input.ContentHash, ImportedAt: protocol.NewTimestamp(now),
+		},
+		CreatedAt: protocol.NewTimestamp(now),
+	}
+	if err := validateRecord(objective); err != nil {
+		return Result[protocol.Objective]{}, err
+	}
+
+	var result Result[protocol.Objective]
+	err := p.Store.Write(ctx, func(tx Tx) error {
+		if err := requireOwner(ctx, tx, projectID, actor); err != nil {
+			return err
+		}
+		if _, err := tx.Role(ctx, projectID, input.AccountableHumanID); errors.Is(err, ErrNotFound) {
+			return &InvalidError{Pointer: "/accountable_human_id", Message: "The accountable human is not a member of this project."}
+		} else if err != nil {
+			return err
+		}
+		inserted, err := tx.InsertObjectiveRevision(ctx, objective)
+		if err != nil {
+			return err
+		}
+		if !inserted {
+			load := func(revision int) (protocol.Objective, error) {
+				return tx.ObjectiveRevision(ctx, projectID, objective.ObjectiveID, revision)
+			}
+			if result.Data, err = replay(objective.Revision, load, func(existing protocol.Objective) bool { return sameObjectiveContent(existing, objective) }); err != nil {
+				return err
+			}
+			result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+			return err
+		}
+		result.Data = objective
+		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, objective.ObjectiveID, actor, now, protocol.ObjectiveImported{Revision: objective.Revision}))
 		return err
 	})
 	return result, err
@@ -477,7 +744,18 @@ func sameObjectiveContent(a, b protocol.Objective) bool {
 		a.OverviewMarkdown == b.OverviewMarkdown &&
 		a.AccountableHumanID == b.AccountableHumanID &&
 		slices.Equal(a.SourceRefs, b.SourceRefs) &&
+		sameObjectiveImportProvenance(a.ImportProvenance, b.ImportProvenance) &&
 		slices.Equal(a.KeyPoints, b.KeyPoints)
+}
+
+func sameObjectiveImportProvenance(a, b *protocol.ObjectiveImportProvenance) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	// ImportedAt, like Objective.CreatedAt, is server-assigned and deliberately
+	// excluded so a retried identical import remains idempotent.
+	return a.SourceKind == b.SourceKind && a.SourceRef == b.SourceRef &&
+		a.SourceRevisionRef == b.SourceRevisionRef && a.ContentHash == b.ContentHash
 }
 
 func newEvent(projectID, entityID, actor uuid.UUID, at time.Time, payload protocol.EventPayload) protocol.EventEnvelope {

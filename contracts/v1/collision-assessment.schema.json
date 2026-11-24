@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:collision-assessment",
+  "title": "CollisionAssessment",
+  "description": "An advisory, explainable semantic interaction between two exact active Intent revisions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "collision_id",
+    "project_id",
+    "left_intent_id",
+    "left_intent_revision",
+    "right_intent_id",
+    "right_intent_revision",
+    "rule_id",
+    "severity",
+    "confidence",
+    "state",
+    "matching_claim_refs",
+    "explanation_markdown",
+    "created_at"
+  ],
+  "properties": {
+    "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "left_intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "left_intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "right_intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "right_intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "rule_id": {
+      "enum": [
+        "shared_declared_invariant",
+        "shared_exported_symbol",
+        "contract_producer_consumer",
+        "schema_resource_overlap"
+      ]
+    },
+    "severity": { "$ref": "urn:conn:schema:v1:common#/$defs/collisionSeverity" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "state": { "enum": ["open", "under_review", "resolved", "dismissed", "stale"] },
+    "matching_claim_refs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+    },
+    "supporting_context_refs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+    },
+    "explanation_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+    "superseded_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}

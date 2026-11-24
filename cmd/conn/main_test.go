@@ -39,12 +39,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// TestMCPStdio protects the Kiro integration contract (decision 0010,
-// requirement 7): Kiro starts `conn mcp` as a subprocess and initializes it
-// over standard input and output; only the four read-only tools exist;
-// read_my_charter returns the session human's own charter and accepts no
-// human identity as input; check_updates reports a change made elsewhere
-// after the cursor; and the process exits cleanly when Kiro disconnects.
+// TestMCPStdio protects the Kiro integration contract: Kiro starts `conn mcp`
+// as a subprocess, all MCP traffic stays on standard output, existing reads
+// remain available, mutations use the session-bound participant, and the
+// process exits cleanly when Kiro disconnects.
 func TestMCPStdio(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -132,20 +130,24 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("server name = %q, want conn", name)
 	}
 
-	// Exactly the four read-only tools are exposed.
+	// Existing read tools remain read-only. Mutating tools are explicitly
+	// marked non-destructive and cannot make binding decisions.
 	listed, err := session.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var names []string
 	for _, tool := range listed.Tools {
-		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
-			t.Fatalf("tool %s is not marked read-only", tool.Name)
+		if tool.Annotations == nil {
+			t.Fatalf("tool %s has no annotations", tool.Name)
+		}
+		if tool.Annotations.ReadOnlyHint && tool.Annotations.DestructiveHint != nil {
+			t.Fatalf("read-only tool %s declares a destructive hint", tool.Name)
 		}
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"check_updates", "read_blueprint", "read_my_charter", "read_objective"}; !slices.Equal(names, want) {
+	if want := []string{"attach_evidence", "check_collisions", "check_updates", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "release_intent", "revise_intent"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
 
@@ -213,6 +215,136 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("read_my_charter after the proposal: revision %d, %q, %v", view.Revision, summary, err)
 	}
 
+	// Two independently authenticated Kiro subprocesses publish concurrent
+	// Intent declarations. Each session receives only its own Conn token and
+	// Conn must derive the participant identity from that session.
+	aliceIntentID, bobIntentID := uuid.NewV7(), uuid.NewV7()
+	intentArgs := func(intentID uuid.UUID, summary string) map[string]any {
+		return map[string]any{
+			"intent_id": intentID.String(), "objective_id": objectiveID.String(), "objective_revision": 1, "summary_markdown": summary,
+			"declared_claims": []any{map[string]any{
+				"subject_kind": "invariant", "normalized_subject": "invariant:checkout:one-idempotency-key-one-successful-charge", "display_name": "Checkout idempotency", "relation": "changes", "provenance_kind": "declared",
+			}},
+		}
+	}
+	var aliceStderr bytes.Buffer
+	aliceCmd := exec.Command(os.Args[0], "mcp")
+	aliceCmd.Env = append(os.Environ(), runMainEnv+"=1",
+		"CONN_SERVER_URL="+backend.URL, "CONN_TOKEN="+alice.Token.Reveal(), "CONN_PROJECT="+projectID.String())
+	aliceCmd.Stderr = &aliceStderr
+	aliceClient := sdk.NewClient(&sdk.Implementation{Name: "conn-alice-test", Version: "0"}, nil)
+	aliceSession, err := aliceClient.Connect(ctx, &sdk.CommandTransport{Command: aliceCmd}, nil)
+	if err != nil {
+		t.Fatalf("initialize Alice MCP: %v\nstderr:\n%s", err, aliceStderr.String())
+	}
+	aliceResult, err := aliceSession.CallTool(ctx, &sdk.CallToolParams{
+		Name: "publish_intent", Arguments: map[string]any{"intent": intentArgs(aliceIntentID, "Update gateway retries.")},
+	})
+	if err != nil || aliceResult.IsError {
+		t.Fatalf("Alice publish_intent: %v %s\nstderr:\n%s", err, text(aliceResult), aliceStderr.String())
+	}
+	aliceStructured, err := json.Marshal(aliceResult.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var aliceEnvelope struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(aliceStructured, &aliceEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	aliceIntent, err := protocol.Decode[protocol.IntentView](aliceEnvelope.Data)
+	if err != nil || aliceIntent.IntentRevision.IntentID != aliceIntentID || aliceIntent.IntentRevision.Revision != 1 {
+		t.Fatalf("Alice publish_intent: %s, %v", aliceEnvelope.Data, err)
+	}
+
+	_, data, _ = call("publish_intent", map[string]any{"intent": intentArgs(bobIntentID, "Update order retries.")})
+	bobIntent, err := protocol.Decode[protocol.IntentView](data)
+	if err != nil || bobIntent.IntentRevision.IntentID != bobIntentID || bobIntent.IntentRevision.Revision != 1 ||
+		bobIntent.IntentRevision.ParticipantID == aliceIntent.IntentRevision.ParticipantID {
+		t.Fatalf("publish_intent: %s, %v", data, err)
+	}
+
+	_, data, _ = call("check_collisions", map[string]any{"intent_id": bobIntentID.String()})
+	var collisions []json.RawMessage
+	if err := json.Unmarshal(data, &collisions); err != nil || len(collisions) != 1 {
+		t.Fatalf("check_collisions: %s, %v", data, err)
+	}
+	collision, err := protocol.Decode[protocol.CollisionAssessment](collisions[0])
+	if err != nil || collision.State != "open" || collision.RuleID != "shared_declared_invariant" || len(collision.MatchingClaimRefs) != 2 {
+		t.Fatalf("collision: %s, %v", collisions[0], err)
+	}
+
+	// Context retrieval is a read through the authenticated HTTP client, and a
+	// proposal remains participant-authored and explicitly non-binding.
+	_, data, _ = call("read_conflict_context", map[string]any{"collision_id": collision.CollisionID.String()})
+	contextPack, err := protocol.Decode[protocol.ConflictContextPack](data)
+	if err != nil || contextPack.Collision.CollisionID != collision.CollisionID || len(contextPack.Intents) != 2 {
+		t.Fatalf("read_conflict_context: %s, %v", data, err)
+	}
+	_, data, _ = call("propose_resolution", map[string]any{
+		"collision_id": collision.CollisionID.String(), "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Complete gateway retries before order retries."},
+	})
+	proposalResult, err := protocol.Decode[protocol.ResolutionProposal](data)
+	if err != nil || proposalResult.ProposedByParticipantID == nil || proposalResult.ProposedByHumanID != nil {
+		t.Fatalf("propose_resolution: %s, %v", data, err)
+	}
+	// A human, rather than either Kiro participant, records the selected
+	// proposal as an immutable decision. The non-binding sequencing outcome
+	// deliberately keeps the collision advisory and visible on Radar.
+	decision, err := projects.DecideResolution(ctx, alice.HumanID, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
+		SelectedProposalID: &proposalResult.ProposalID, Kind: "sequencing", Binding: false,
+		RationaleMarkdown: "The project owner will merge gateway retry behavior before order retry behavior.",
+		References:        []string{"meeting:fixture-retry-sequencing"},
+	})
+	if err != nil || decision.Data.DecidedByHumanID != alice.HumanID || decision.Data.SelectedProposalID == nil || *decision.Data.SelectedProposalID != proposalResult.ProposalID {
+		t.Fatalf("DecideResolution: %+v, %v", decision.Data, err)
+	}
+	_, data, _ = call("read_radar", map[string]any{})
+	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 2 || len(radar.OpenCollisions) != 1 || len(radar.DecisionRefs) != 1 ||
+		!slices.Contains(radar.KnownUnknowns, "Open collision assessments are advisory and disputed until a human records a decision.") {
+		t.Fatalf("read_radar with collision: %s, %v", data, err)
+	}
+
+	// Bounded evidence is owned by Bob's active Intent, then revisions and a
+	// release work through the same subprocess transport.
+	_, data, _ = call("attach_evidence", map[string]any{"intent_id": bobIntentID.String(), "evidence": map[string]any{
+		"intent_id": bobIntentID.String(), "objective_id": objectiveID.String(), "objective_revision": 1, "kind": "test_case", "state": "passing", "locator": "ci:order-retries",
+	}})
+	evidence, err := protocol.Decode[protocol.EvidenceReference](data)
+	if err != nil || evidence.ProducerParticipantID == nil || evidence.IntentID == nil || *evidence.IntentID != bobIntentID {
+		t.Fatalf("attach_evidence: %s, %v", data, err)
+	}
+	_, data, _ = call("revise_intent", map[string]any{
+		"intent_id": bobIntentID.String(), "expected_revision": 1, "intent": intentArgs(bobIntentID, "Update order retries after gateway coordination."),
+	})
+	if revised, err := protocol.Decode[protocol.IntentView](data); err != nil || revised.IntentRevision.Revision != 2 {
+		t.Fatalf("revise_intent: %s, %v", data, err)
+	}
+	_, data, _ = call("release_intent", map[string]any{"intent_id": bobIntentID.String()})
+	if released, err := protocol.Decode[protocol.IntentView](data); err != nil || released.Status != "released" {
+		t.Fatalf("release_intent: %s, %v", data, err)
+	}
+	_, data, _ = call("read_radar", map[string]any{})
+	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 1 || len(radar.OpenCollisions) != 0 || len(radar.DecisionRefs) != 1 {
+		t.Fatalf("read_radar after release: %s, %v", data, err)
+	}
+
+	// Authority comes only from the authenticated session. An authority field
+	// is not part of any MCP tool input and is rejected before an HTTP call.
+	impersonation, err = session.CallTool(ctx, &sdk.CallToolParams{
+		Name: "publish_intent", Arguments: map[string]any{"human_id": alice.HumanID.String(), "intent": intentArgs(uuid.NewV7(), "Impersonate Alice.")},
+	})
+	if err == nil && (!impersonation.IsError || !strings.Contains(text(impersonation), "human_id")) {
+		t.Fatalf("publish_intent did not reject a human_id: %s", text(impersonation))
+	}
+
+	if err := aliceSession.Close(); err != nil {
+		t.Fatalf("close Alice MCP: %v\nstderr:\n%s", err, aliceStderr.String())
+	}
+	if aliceCmd.ProcessState == nil || aliceCmd.ProcessState.ExitCode() != 0 {
+		t.Fatalf("Alice conn mcp did not exit cleanly: %v\nstderr:\n%s", aliceCmd.ProcessState, aliceStderr.String())
+	}
 	if err := session.Close(); err != nil {
 		t.Fatalf("close: %v\nstderr:\n%s", err, stderr.String())
 	}
@@ -220,7 +352,7 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("conn mcp did not exit cleanly: %v\nstderr:\n%s", cmd.ProcessState, stderr.String())
 	}
 	for _, token := range []string{alice.Token.Reveal(), bob.Token.Reveal()} {
-		if strings.Contains(stderr.String(), token) {
+		if strings.Contains(stderr.String(), token) || strings.Contains(aliceStderr.String(), token) {
 			t.Fatal("a session token appeared in conn mcp diagnostics")
 		}
 	}

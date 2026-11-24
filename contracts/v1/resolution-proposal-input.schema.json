@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:resolution-proposal-input",
+  "title": "ResolutionProposalInput",
+  "description": "Participant-authored, non-binding content for a resolution proposal. Conn assigns identity, project, participant, and time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "rationale_markdown"],
+  "properties": {
+    "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+    "rationale_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/rationale" },
+    "references": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+    }
+  }
+}

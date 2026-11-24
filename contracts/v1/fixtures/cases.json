@@ -1543,6 +1543,365 @@
           }
         ]
       }
+    },
+    {
+      "name": "repository connection accepts a credential-free GitHub remote",
+      "schema": "urn:conn:schema:v1:repository-connection",
+      "valid": true,
+      "document": {
+        "repository_id": "019a8f00-0010-7000-8000-000000000010",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "host_kind": "github",
+        "canonical_remote": "github.com/acme/payments",
+        "host_repository_node_id": "R_kgDOKx",
+        "analysis_enabled": true,
+        "created_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-22T09:00:00Z"
+      }
+    },
+    {
+      "name": "repository connection rejects a credential-bearing URL",
+      "schema": "urn:conn:schema:v1:repository-connection",
+      "valid": false,
+      "at": "/canonical_remote",
+      "document": {
+        "repository_id": "019a8f00-0010-7000-8000-000000000010",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "host_kind": "github",
+        "canonical_remote": "https://token@github.com/acme/payments",
+        "analysis_enabled": true,
+        "created_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "created_at": "2026-11-22T09:00:00Z"
+      }
+    },
+    {
+      "name": "participant accepts a human-bound Kiro identity",
+      "schema": "urn:conn:schema:v1:participant",
+      "valid": true,
+      "document": {
+        "participant_id": "019a8f00-0011-7000-8000-000000000011",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "adapter_kind": "kiro",
+        "local_session_ref": "session-opaque-82",
+        "created_at": "2026-11-22T09:00:00Z"
+      }
+    },
+    {
+      "name": "intent input accepts declared invariant and contract claims",
+      "schema": "urn:conn:schema:v1:intent-input",
+      "valid": true,
+      "document": {
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "repository_id": "019a8f00-0010-7000-8000-000000000010",
+        "summary_markdown": "Update retry handling without duplicating a charge.",
+        "assumptions": ["The provider has stable recovery identifiers."],
+        "declared_claims": [
+          {
+            "subject_kind": "invariant",
+            "normalized_subject": "invariant:checkout:no-double-charge",
+            "display_name": "One successful charge per idempotency key",
+            "relation": "affects",
+            "provenance_kind": "declared"
+          }
+        ]
+      }
+    },
+    {
+      "name": "intent input rejects a non-declared claim",
+      "schema": "urn:conn:schema:v1:intent-input",
+      "valid": false,
+      "at": "/declared_claims/0/provenance_kind",
+      "document": {
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "summary_markdown": "Update retry handling.",
+        "declared_claims": [
+          {
+            "subject_kind": "code_symbol",
+            "normalized_subject": "symbol:typescript:src/payment/service.ts",
+            "display_name": "Payment service",
+            "relation": "affects",
+            "provenance_kind": "static_analysis"
+          }
+        ]
+      }
+    },
+    {
+      "name": "local analyzer report accepts static-analysis claims without source",
+      "schema": "urn:conn:schema:v1:local-analyzer-report",
+      "valid": true,
+      "document": {
+        "report_version": 1,
+        "repository": {
+          "canonical_remote": "github.com/acme/payments",
+          "head_revision_ref": "abcdef1"
+        },
+        "claims": [
+          {
+            "subject_kind": "code_symbol",
+            "normalized_subject": "symbol:typescript:src/payment/service.ts",
+            "display_name": "Payment service",
+            "relation": "affects",
+            "provenance_kind": "static_analysis",
+            "evidence_refs": [
+              {
+                "kind": "source_location",
+                "locator": "src/payment/service.ts#PaymentService.charge",
+                "path": "src/payment/service.ts",
+                "line": 44
+              }
+            ]
+          }
+        ],
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "local analyzer report rejects raw source content",
+      "schema": "urn:conn:schema:v1:local-analyzer-report",
+      "valid": false,
+      "at": "",
+      "document": {
+        "report_version": 1,
+        "repository": { "canonical_remote": "github.com/acme/payments" },
+        "claims": [],
+        "diagnostics": [],
+        "source_text": "export class PaymentService {}"
+      }
+    },
+    {
+      "name": "collision assessment accepts an explainable active interaction",
+      "schema": "urn:conn:schema:v1:collision-assessment",
+      "valid": true,
+      "document": {
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "left_intent_revision": 1,
+        "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+        "right_intent_revision": 1,
+        "rule_id": "shared_declared_invariant",
+        "severity": "amber",
+        "confidence": 1,
+        "state": "open",
+        "matching_claim_refs": [
+          "019a8f00-0014-7000-8000-000000000014",
+          "019a8f00-0015-7000-8000-000000000015"
+        ],
+        "explanation_markdown": "Both active intents affect the same checkout invariant.",
+        "created_at": "2026-11-22T09:05:00Z"
+      }
+    },
+    {
+      "name": "resolution proposal accepts an agent participant proposal",
+      "schema": "urn:conn:schema:v1:resolution-proposal",
+      "valid": true,
+      "document": {
+        "proposal_id": "019a8f00-0017-7000-8000-000000000017",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "proposed_by_participant_id": "019a8f00-0011-7000-8000-000000000011",
+        "kind": "dependency",
+        "rationale_markdown": "Depend on the retry contract proposal before changing the cache.",
+        "created_at": "2026-11-22T09:06:00Z"
+      }
+    },
+    {
+      "name": "resolution decision rejects a non-binding accepted risk",
+      "schema": "urn:conn:schema:v1:resolution-decision",
+      "valid": false,
+      "at": "/binding",
+      "document": {
+        "decision_id": "019a8f00-0018-7000-8000-000000000018",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "decided_by_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "kind": "accepted_risk",
+        "binding": false,
+        "rationale_markdown": "The release can tolerate this risk.",
+        "created_at": "2026-11-22T09:07:00Z"
+      }
+    },
+    {
+      "name": "evidence reference accepts a passing CI result",
+      "schema": "urn:conn:schema:v1:evidence-reference",
+      "valid": true,
+      "document": {
+        "evidence_id": "019a8f00-0019-7000-8000-000000000019",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "ci_run",
+        "state": "passing",
+        "locator": "github-run-12345",
+        "observed_at": "2026-11-22T09:08:00Z"
+      }
+    },
+    {
+      "name": "objective import accepts immutable Kiro-spec provenance",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "kiro_spec",
+        "source_ref": ".kiro/specs/semantic-intent-radar/requirements.md",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Semantic intent radar",
+        "overview_markdown": "Coordinate semantic change intent before implementation.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "event envelope accepts a semantic claim observation",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 9,
+        "event_id": "019a8f00-0020-7000-8000-000000000020",
+        "event_type": "claims.observed",
+        "entity_type": "semantic_claim",
+        "entity_id": "019a8f00-0014-7000-8000-000000000014",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-22T09:10:00Z",
+        "payload": {
+          "intent_id": "019a8f00-0012-7000-8000-000000000012",
+          "intent_revision": 1
+        }
+      }
+    },
+    {
+      "name": "semantic event rejects the wrong entity type",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": false,
+      "at": "/entity_type",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 9,
+        "event_id": "019a8f00-0020-7000-8000-000000000020",
+        "event_type": "claims.observed",
+        "entity_type": "intent",
+        "entity_id": "019a8f00-0014-7000-8000-000000000014",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-22T09:10:00Z",
+        "payload": {
+          "intent_id": "019a8f00-0012-7000-8000-000000000012",
+          "intent_revision": 1
+        }
+      }
+    },
+    {
+      "name": "repository connection input accepts owner-supplied repository facts",
+      "schema": "urn:conn:schema:v1:repository-connect-input",
+      "valid": true,
+      "document": {
+        "repository_id": "019a8f00-0021-7000-8000-000000000021",
+        "host_kind": "github",
+        "canonical_remote": "github.com/acme/payments",
+        "analysis_enabled": true
+      }
+    },
+    {
+      "name": "repository connection input rejects server-assigned authority",
+      "schema": "urn:conn:schema:v1:repository-connect-input",
+      "valid": false,
+      "at": "",
+      "document": {
+        "repository_id": "019a8f00-0021-7000-8000-000000000021",
+        "host_kind": "github",
+        "canonical_remote": "github.com/acme/payments",
+        "analysis_enabled": true,
+        "created_by_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "repository connection list accepts an empty project scope",
+      "schema": "urn:conn:schema:v1:repository-connection-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "repositories": []
+      }
+    },
+    {
+      "name": "intent view accepts an active immutable intent revision",
+      "schema": "urn:conn:schema:v1:intent-view",
+      "valid": true,
+      "document": {
+        "intent_revision": {
+          "intent_id": "019a8f00-0022-7000-8000-000000000022",
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "participant_id": "019a8f00-0011-7000-8000-000000000011",
+          "revision": 1,
+          "objective_id": "019a8f00-0002-7000-8000-000000000001",
+          "objective_revision": 1,
+          "summary_markdown": "Update retry behavior.",
+          "created_at": "2026-11-22T09:12:00Z"
+        },
+        "status": "active",
+        "advisory_observations": ["No accepted Charter is associated with this Intent."]
+      }
+    },
+    {
+      "name": "intent list rejects an unknown status",
+      "schema": "urn:conn:schema:v1:intent-list",
+      "valid": false,
+      "at": "/intents/0/status",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intents": [
+          {
+            "intent_revision": {
+              "intent_id": "019a8f00-0022-7000-8000-000000000022",
+              "project_id": "019a8f00-0001-7000-8000-000000000001",
+              "participant_id": "019a8f00-0011-7000-8000-000000000011",
+              "revision": 1,
+              "objective_id": "019a8f00-0002-7000-8000-000000000001",
+              "objective_revision": 1,
+              "summary_markdown": "Update retry behavior.",
+              "created_at": "2026-11-22T09:12:00Z"
+            },
+            "status": "closed",
+            "advisory_observations": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Kiro spec import accepts safe immutable provenance",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "kiro_spec",
+        "source_ref": ".kiro/specs/checkout/requirements.md",
+        "source_revision_ref": "working-tree-2026-11-21",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Review and preserve retry safety.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "Kiro spec import rejects GitHub issue until repository authorization exists",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": false,
+      "at": "/source_kind",
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "github_issue",
+        "source_ref": "issues/42",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Make checkout retries safe",
+        "overview_markdown": "Review and preserve retry safety.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
     }
   ]
 }

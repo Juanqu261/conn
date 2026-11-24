@@ -27,10 +27,9 @@ type Config struct {
 	Log            *slog.Logger
 }
 
-const instructions = "Conn tools read your team's shared Objective, the Blueprint that divides it into " +
-	"work cells, your own cell charter, and project events. Only an active blueprint revision is approved; " +
-	"treat any other revision as unratified. The tools cannot change anything: humans accept or reject " +
-	"charters themselves with the conn CLI. Your human identity comes from the Conn session, not from tool input."
+const instructions = "Conn tools read your team's shared Objective, Blueprint, charters, Intents, collision assessments, and Radar. " +
+	"They may publish, revise, or release only the signed-in human's participant-owned Intents and may attach bounded reference-only evidence or non-binding resolution proposals. " +
+	"Humans alone make binding decisions. Your human identity comes from the Conn session, not from tool input."
 
 // Serve runs one MCP session over in and out until the client disconnects or
 // ctx is cancelled. out must carry nothing but MCP messages.

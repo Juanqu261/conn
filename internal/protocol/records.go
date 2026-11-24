@@ -4,22 +4,43 @@ import "uuid"
 
 // Schema identifiers for the v1 documents mirrored by this package.
 const (
-	ProjectSchema                = "urn:conn:schema:v1:project"
-	ProjectListSchema            = "urn:conn:schema:v1:project-list"
-	ProjectCreateSchema          = "urn:conn:schema:v1:project-create"
-	ProjectMembershipSchema      = "urn:conn:schema:v1:project-membership"
-	ProjectMemberListSchema      = "urn:conn:schema:v1:project-member-list"
-	ObjectiveSchema              = "urn:conn:schema:v1:objective"
-	ObjectiveRevisionInputSchema = "urn:conn:schema:v1:objective-revision-input"
-	BlueprintRevisionSchema      = "urn:conn:schema:v1:blueprint-revision"
-	BlueprintRevisionViewSchema  = "urn:conn:schema:v1:blueprint-revision-view"
-	BlueprintProposalSchema      = "urn:conn:schema:v1:blueprint-proposal"
-	CharterDecisionSchema        = "urn:conn:schema:v1:charter-decision"
-	CharterRejectionSchema       = "urn:conn:schema:v1:charter-rejection"
-	ProjectMemberAddSchema       = "urn:conn:schema:v1:project-member-add"
-	ProjectStatusSchema          = "urn:conn:schema:v1:project-status"
-	CharterViewSchema            = "urn:conn:schema:v1:charter-view"
-	EventEnvelopeSchema          = "urn:conn:schema:v1:event-envelope"
+	ProjectSchema                  = "urn:conn:schema:v1:project"
+	ProjectListSchema              = "urn:conn:schema:v1:project-list"
+	ProjectCreateSchema            = "urn:conn:schema:v1:project-create"
+	ProjectMembershipSchema        = "urn:conn:schema:v1:project-membership"
+	ProjectMemberListSchema        = "urn:conn:schema:v1:project-member-list"
+	ObjectiveSchema                = "urn:conn:schema:v1:objective"
+	ObjectiveRevisionInputSchema   = "urn:conn:schema:v1:objective-revision-input"
+	BlueprintRevisionSchema        = "urn:conn:schema:v1:blueprint-revision"
+	BlueprintRevisionViewSchema    = "urn:conn:schema:v1:blueprint-revision-view"
+	BlueprintProposalSchema        = "urn:conn:schema:v1:blueprint-proposal"
+	CharterDecisionSchema          = "urn:conn:schema:v1:charter-decision"
+	CharterRejectionSchema         = "urn:conn:schema:v1:charter-rejection"
+	ProjectMemberAddSchema         = "urn:conn:schema:v1:project-member-add"
+	ProjectStatusSchema            = "urn:conn:schema:v1:project-status"
+	CharterViewSchema              = "urn:conn:schema:v1:charter-view"
+	EventEnvelopeSchema            = "urn:conn:schema:v1:event-envelope"
+	RepositoryConnectionSchema     = "urn:conn:schema:v1:repository-connection"
+	RepositoryConnectInputSchema   = "urn:conn:schema:v1:repository-connect-input"
+	RepositoryConnectionListSchema = "urn:conn:schema:v1:repository-connection-list"
+	ParticipantSchema              = "urn:conn:schema:v1:participant"
+	IntentInputSchema              = "urn:conn:schema:v1:intent-input"
+	IntentRevisionSchema           = "urn:conn:schema:v1:intent-revision"
+	IntentViewSchema               = "urn:conn:schema:v1:intent-view"
+	IntentListSchema               = "urn:conn:schema:v1:intent-list"
+	SemanticClaimCandidateSchema   = "urn:conn:schema:v1:semantic-claim-candidate"
+	SemanticClaimSchema            = "urn:conn:schema:v1:semantic-claim"
+	LocalAnalyzerReportSchema      = "urn:conn:schema:v1:local-analyzer-report"
+	CollisionAssessmentSchema      = "urn:conn:schema:v1:collision-assessment"
+	ConflictContextPackSchema      = "urn:conn:schema:v1:conflict-context-pack"
+	ResolutionProposalSchema       = "urn:conn:schema:v1:resolution-proposal"
+	ResolutionProposalInputSchema  = "urn:conn:schema:v1:resolution-proposal-input"
+	ResolutionDecisionSchema       = "urn:conn:schema:v1:resolution-decision"
+	ResolutionDecisionInputSchema  = "urn:conn:schema:v1:resolution-decision-input"
+	EvidenceReferenceSchema        = "urn:conn:schema:v1:evidence-reference"
+	EvidenceAttachmentInputSchema  = "urn:conn:schema:v1:evidence-attachment-input"
+	ObjectiveImportInputSchema     = "urn:conn:schema:v1:objective-import-input"
+	RadarViewSchema                = "urn:conn:schema:v1:radar-view"
 )
 
 // Project is the authorization and event-cursor boundary for one team effort.
@@ -80,16 +101,17 @@ type ProjectMember struct {
 
 // Objective is one immutable revision of a narrative Objective.
 type Objective struct {
-	ObjectiveID        uuid.UUID   `json:"objective_id"`
-	ProjectID          uuid.UUID   `json:"project_id"`
-	Revision           int         `json:"revision"`
-	Key                string      `json:"key,omitempty"`
-	Title              string      `json:"title"`
-	OverviewMarkdown   string      `json:"overview_markdown"`
-	AccountableHumanID uuid.UUID   `json:"accountable_human_id"`
-	SourceRefs         []SourceRef `json:"source_refs,omitempty"`
-	KeyPoints          []KeyPoint  `json:"key_points,omitempty"`
-	CreatedAt          Timestamp   `json:"created_at"`
+	ObjectiveID        uuid.UUID                  `json:"objective_id"`
+	ProjectID          uuid.UUID                  `json:"project_id"`
+	Revision           int                        `json:"revision"`
+	Key                string                     `json:"key,omitempty"`
+	Title              string                     `json:"title"`
+	OverviewMarkdown   string                     `json:"overview_markdown"`
+	AccountableHumanID uuid.UUID                  `json:"accountable_human_id"`
+	SourceRefs         []SourceRef                `json:"source_refs,omitempty"`
+	ImportProvenance   *ObjectiveImportProvenance `json:"import_provenance,omitempty"`
+	KeyPoints          []KeyPoint                 `json:"key_points,omitempty"`
+	CreatedAt          Timestamp                  `json:"created_at"`
 }
 
 func (Objective) SchemaID() string { return ObjectiveSchema }
@@ -114,7 +136,16 @@ type SourceRef struct {
 	Title string `json:"title,omitempty"`
 }
 
-// KeyPoint is an Objective statement that needs a stable reference.
+// ObjectiveImportProvenance identifies the exact local source captured by a
+// human-authorized import. It is part of the immutable Objective revision.
+type ObjectiveImportProvenance struct {
+	SourceKind        string    `json:"source_kind"`
+	SourceRef         string    `json:"source_ref"`
+	SourceRevisionRef string    `json:"source_revision_ref,omitempty"`
+	ContentHash       string    `json:"content_hash"`
+	ImportedAt        Timestamp `json:"imported_at"`
+}
+
 type KeyPoint struct {
 	Key       string       `json:"key"`
 	Kind      KeyPointKind `json:"kind"`

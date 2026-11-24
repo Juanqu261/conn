@@ -79,6 +79,51 @@ func newObjectiveCommand(deps Dependencies, streams Streams) *cobra.Command {
 		return printResult(rr, result, objectiveSaved)
 	}
 
+	importSpec := &cobra.Command{
+		Use:   "import-kiro-spec",
+		Short: "Import a local Kiro specification as an immutable Objective revision",
+		Long: "Hash a bounded local Kiro specification and record only its safe relative reference, digest, and your reviewed Objective summary. " +
+			"Conn never uploads or synchronizes the source. Refresh requires this command with --expected-revision. GitHub issue import remains deferred until GitHub App repository authorization exists.",
+		Args: cobra.NoArgs,
+	}
+	ri := newRemote(importSpec, deps, streams)
+	var importProject, importObjective, importAccountable uuid.UUID
+	var importKey, importSource, importSourceRef, importSourceRevision, importTitle, importOverview string
+	var importExpected int
+	requiredUUID(importSpec, &importProject, "project", "project ID")
+	requiredUUID(importSpec, &importObjective, "objective", "objective ID to create or revise")
+	requiredUUID(importSpec, &importAccountable, "accountable-human", "Conn human ID accountable for the Objective")
+	requiredString(importSpec, &importSource, "source", "local Kiro specification file to hash; it is never uploaded")
+	requiredString(importSpec, &importSourceRef, "source-ref", "safe project-relative source reference stored with the Objective")
+	requiredString(importSpec, &importTitle, "title", "reviewed Objective title")
+	requiredString(importSpec, &importOverview, "overview", "reviewed Objective summary; source content is never uploaded")
+	importSpec.Flags().IntVar(&importExpected, "expected-revision", 0, "current Objective revision for an explicit refresh; 0 creates revision 1")
+	importSpec.Flags().StringVar(&importKey, "key", "", "optional stable Objective key")
+	importSpec.Flags().StringVar(&importSourceRevision, "source-revision-ref", "", "optional opaque source revision reference")
+	importSpec.RunE = func(cmd *cobra.Command, _ []string) error {
+		if importExpected < 0 {
+			return usageError{fmt.Errorf("--expected-revision cannot be negative")}
+		}
+		sourceRef, err := safeSourceReference(importSourceRef)
+		if err != nil {
+			return err
+		}
+		hash, err := readKiroSpecHash(importSource)
+		if err != nil {
+			return err
+		}
+		input := importKiroSpecInput(importObjective, importAccountable, importKey, sourceRef, importSourceRevision, hash, importTitle, importOverview)
+		client, err := ri.client()
+		if err != nil {
+			return err
+		}
+		result, err := client.ImportKiroSpecObjective(cmd.Context(), importProject, importExpected, input)
+		if err != nil {
+			return err
+		}
+		return printResult(ri, result, objectiveSaved)
+	}
+
 	show := &cobra.Command{Use: "show", Short: "Show one objective revision", Args: cobra.NoArgs}
 	rs := newRemote(show, deps, streams)
 	var showProject, showObjective uuid.UUID
@@ -101,7 +146,7 @@ func newObjectiveCommand(deps Dependencies, streams Streams) *cobra.Command {
 		return printResult(rs, result, renderObjective)
 	}
 
-	objective.AddCommand(create, revise, show)
+	objective.AddCommand(create, revise, importSpec, show)
 	return objective
 }
 
@@ -128,6 +173,15 @@ func renderObjective(out io.Writer, o protocol.Objective) {
 		for _, s := range o.SourceRefs {
 			fmt.Fprintf(out, "  %s %s\n", clean(s.URI), clean(s.Title))
 		}
+	}
+	if p := o.ImportProvenance; p != nil {
+		fmt.Fprintln(out, "Imported source:")
+		fmt.Fprintf(out, "  %s %s\n", clean(p.SourceKind), clean(p.SourceRef))
+		fmt.Fprintf(out, "  SHA-256 %s, imported %s\n", p.ContentHash, p.ImportedAt)
+		if p.SourceRevisionRef != "" {
+			fmt.Fprintf(out, "  Source revision: %s\n", clean(p.SourceRevisionRef))
+		}
+		fmt.Fprintln(out, "  External divergence: unknown. Conn does not read or synchronize the source automatically; source changes require an explicit refresh.")
 	}
 	fmt.Fprintf(out, "\n%s\n", indent(o.OverviewMarkdown, ""))
 }

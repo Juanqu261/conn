@@ -175,6 +175,126 @@ func (t projectTx) ProjectMembers(ctx context.Context, projectID uuid.UUID) ([]p
 	return members, rows.Err()
 }
 
+func (t projectTx) InsertRepositoryConnection(ctx context.Context, repository protocol.RepositoryConnection) (bool, error) {
+	tag, err := t.tx.Exec(ctx, `
+		INSERT INTO repository_connections
+			(repository_id, project_id, host_kind, canonical_remote, host_repository_node_id,
+			 default_branch, analysis_enabled, created_by_human_id, created_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9)
+		ON CONFLICT DO NOTHING`,
+		repository.RepositoryID, repository.ProjectID, repository.HostKind, repository.CanonicalRemote,
+		repository.HostRepositoryNodeID, repository.DefaultBranch, repository.AnalysisEnabled,
+		repository.CreatedByHumanID, repository.CreatedAt.Time())
+	return err == nil && tag.RowsAffected() == 1, err
+}
+
+func (t projectTx) RepositoryConnection(ctx context.Context, projectID, repositoryID uuid.UUID) (protocol.RepositoryConnection, error) {
+	return t.repositoryConnection(ctx, `WHERE project_id = $1 AND repository_id = $2`, projectID, repositoryID)
+}
+
+func (t projectTx) RepositoryConnectionByRemote(ctx context.Context, projectID uuid.UUID, canonicalRemote string) (protocol.RepositoryConnection, error) {
+	return t.repositoryConnection(ctx, `WHERE project_id = $1 AND canonical_remote = $2`, projectID, canonicalRemote)
+}
+
+func (t projectTx) repositoryConnection(ctx context.Context, where string, args ...any) (protocol.RepositoryConnection, error) {
+	var repository protocol.RepositoryConnection
+	var hostNodeID, defaultBranch *string
+	var createdAt time.Time
+	err := t.tx.QueryRow(ctx, `
+		SELECT repository_id, project_id, host_kind, canonical_remote, host_repository_node_id,
+			default_branch, analysis_enabled, created_by_human_id, created_at
+		FROM repository_connections `+where, args...).Scan(
+		&repository.RepositoryID, &repository.ProjectID, &repository.HostKind, &repository.CanonicalRemote,
+		&hostNodeID, &defaultBranch, &repository.AnalysisEnabled, &repository.CreatedByHumanID, &createdAt)
+	if hostNodeID != nil {
+		repository.HostRepositoryNodeID = *hostNodeID
+	}
+	if defaultBranch != nil {
+		repository.DefaultBranch = *defaultBranch
+	}
+	repository.CreatedAt = protocol.NewTimestamp(createdAt)
+	return repository, notFound(err)
+}
+
+func (t projectTx) RepositoryConnections(ctx context.Context, projectID uuid.UUID) ([]protocol.RepositoryConnection, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT repository_id, project_id, host_kind, canonical_remote, host_repository_node_id,
+			default_branch, analysis_enabled, created_by_human_id, created_at
+		FROM repository_connections
+		WHERE project_id = $1
+		ORDER BY created_at, repository_id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	repositories := []protocol.RepositoryConnection{}
+	for rows.Next() {
+		var repository protocol.RepositoryConnection
+		var hostNodeID, defaultBranch *string
+		var createdAt time.Time
+		if err := rows.Scan(&repository.RepositoryID, &repository.ProjectID, &repository.HostKind,
+			&repository.CanonicalRemote, &hostNodeID, &defaultBranch, &repository.AnalysisEnabled,
+			&repository.CreatedByHumanID, &createdAt); err != nil {
+			return nil, err
+		}
+		if hostNodeID != nil {
+			repository.HostRepositoryNodeID = *hostNodeID
+		}
+		if defaultBranch != nil {
+			repository.DefaultBranch = *defaultBranch
+		}
+		repository.CreatedAt = protocol.NewTimestamp(createdAt)
+		repositories = append(repositories, repository)
+	}
+	return repositories, rows.Err()
+}
+
+func (t projectTx) Participant(ctx context.Context, projectID, humanID uuid.UUID, adapterKind, localSessionRef string) (protocol.Participant, error) {
+	var participant protocol.Participant
+	var localRef, displayLabel *string
+	var createdAt time.Time
+	var retiredAt *time.Time
+	err := t.tx.QueryRow(ctx, `
+		SELECT participant_id, project_id, human_id, adapter_kind, local_session_ref, display_label, created_at, retired_at
+		FROM participants
+		WHERE project_id = $1 AND human_id = $2 AND adapter_kind = $3
+			AND local_session_ref IS NOT DISTINCT FROM NULLIF($4, '')`,
+		projectID, humanID, adapterKind, localSessionRef).Scan(
+		&participant.ParticipantID, &participant.ProjectID, &participant.HumanID, &participant.AdapterKind,
+		&localRef, &displayLabel, &createdAt, &retiredAt)
+	if localRef != nil {
+		participant.LocalSessionRef = *localRef
+	}
+	if displayLabel != nil {
+		participant.DisplayLabel = *displayLabel
+	}
+	participant.CreatedAt = protocol.NewTimestamp(createdAt)
+	if retiredAt != nil {
+		value := protocol.NewTimestamp(*retiredAt)
+		participant.RetiredAt = &value
+	}
+	return participant, notFound(err)
+}
+
+func (t projectTx) InsertParticipant(ctx context.Context, participant protocol.Participant) (bool, error) {
+	tag, err := t.tx.Exec(ctx, `
+		INSERT INTO participants
+			(participant_id, project_id, human_id, adapter_kind, local_session_ref, display_label, created_at, retired_at)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), $7, $8)
+		ON CONFLICT DO NOTHING`,
+		participant.ParticipantID, participant.ProjectID, participant.HumanID, participant.AdapterKind,
+		participant.LocalSessionRef, participant.DisplayLabel, participant.CreatedAt.Time(), timestampOrNil(participant.RetiredAt))
+	return err == nil && tag.RowsAffected() == 1, err
+}
+
+func timestampOrNil(value *protocol.Timestamp) any {
+	if value == nil {
+		return nil
+	}
+	return value.Time()
+}
+
 func (t projectTx) InsertObjectiveRevision(ctx context.Context, o protocol.Objective) (bool, error) {
 	document, err := protocol.Encode(o)
 	if err != nil {

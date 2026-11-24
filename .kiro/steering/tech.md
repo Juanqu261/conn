@@ -29,7 +29,7 @@
 - Use PostgreSQL 18.7 through Docker Compose for local development; run `conn server` natively and never delete the named database volume through normal commands.
 - Version objectives independently; each immutable BlueprintRevision contains the complete set of CellCharter snapshots, while CharterAcceptance remains a separate append-only record.
 - Require every assigned human to accept their own charter before a BlueprintRevision becomes active; agents and other humans cannot accept on their behalf.
-- Build the first human workflow through authenticated CLI commands with JSON inputs; keep initial Kiro MCP tools read-only and defer the web application until protocol validation.
+- Build the first human workflow through authenticated CLI commands with JSON inputs. Keep initial Kiro MCP context tools read-only, then add participant-owned Intent publication and non-binding resolution proposals through the approved semantic protocol; defer the web application until protocol validation.
 - Use explicit Projects as authorization and event-cursor boundaries with only `owner` and `member` roles in the MVP; owners add already authenticated humans by immutable Conn human UUID.
 - Use Cobra only for CLI parsing and presentation; keep domain, database, and HTTP behavior outside command objects.
 - Keep Conn's own Goose migrations inside backend development and deployment automation; expose no public CLI or MCP database-migration operation and never execute migrations in customer repositories.
@@ -37,6 +37,8 @@
 - Model each CellCharter snapshot as a required Markdown overview plus optional keyed responsibilities, exclusions, deliverables, and evidence obligations; keep cross-cell dependencies as explicit cell references.
 - Run GitHub device authorization directly in `conn login`, exchange the temporary GitHub token once with the backend, and persist only the resulting Conn session token.
 - Do not add a persistent local sidecar until background behavior justifies it.
+- Store each declared or observed SemanticClaim as an immutable record attached to one exact IntentRevision. Radar views may group equivalent normalized subjects but do not create mutable or globally canonical claims in the MVP.
+- Run TypeScript repository analysis locally as a direct Node.js subprocess with versioned JSON standard input and bounded JSON standard output. The analyzer receives no Conn session token and has no database access. It uses its direct TypeScript 5.7.3 compiler API dependency while root TypeScript 7.0.2 remains workspace tooling. Defer a persistent sidecar and hosted analysis.
 - Use Biome for JavaScript, TypeScript, and JSON formatting and linting.
 - Use Vitest for fundamental Node.js and TypeScript behavior tests.
 - Start with `gofmt`, `go vet`, and `go test` for Go.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/httpclient"
@@ -67,7 +68,9 @@ func exitCode(err error, started bool) int {
 		errors.Is(err, github.ErrAccessDenied),
 		errors.Is(err, github.ErrExpired):
 		return ExitAuth
-	case errors.Is(err, httpclient.ErrUnreachable):
+	case errors.Is(err, analyzer.ErrInvalid):
+		return ExitUsage
+	case errors.Is(err, analyzer.ErrUnavailable), errors.Is(err, analyzer.ErrTimedOut), errors.Is(err, httpclient.ErrUnreachable):
 		return ExitUnavailable
 	case errors.As(err, &apiErr):
 		return apiExitCode(apiErr)

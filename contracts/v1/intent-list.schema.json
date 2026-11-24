@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:intent-list",
+  "title": "Intent list",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "intents"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "intents": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "urn:conn:schema:v1:intent-view" }
+    }
+  }
+}

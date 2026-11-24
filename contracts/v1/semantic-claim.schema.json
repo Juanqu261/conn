@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:semantic-claim",
+  "title": "SemanticClaim",
+  "description": "An attributed semantic assertion stored in Conn's Project ledger.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_id",
+    "project_id",
+    "intent_id",
+    "intent_revision",
+    "subject_kind",
+    "normalized_subject",
+    "display_name",
+    "relation",
+    "provenance_kind",
+    "observed_at"
+  ],
+  "properties": {
+    "claim_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+    "subject_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticClaimKind" },
+    "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+    "display_name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+    "relation": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticRelation" },
+    "provenance_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/claimProvenance" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:semantic-claim-candidate#/$defs/evidenceRef" }
+    },
+    "producer_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "observed_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "provenance_kind": { "const": "model_inference" } },
+        "required": ["provenance_kind"]
+      },
+      "then": {
+        "properties": { "confidence": { "type": "number", "minimum": 0, "maximum": 1 } },
+        "required": ["confidence"]
+      }
+    }
+  ]
+}

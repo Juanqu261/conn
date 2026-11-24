@@ -60,12 +60,13 @@ type section int
 const (
 	overviewSection section = iota
 	planSection
+	radarSection
 	teamSection
 	updatesSection
 	accountSection
 )
 
-var sections = []string{"Overview", "Plan", "Team", "Updates", "Account"}
+var sections = []string{"Overview", "Plan", "Radar", "Team", "Updates", "Account"}
 
 type screen int
 
@@ -89,6 +90,7 @@ const (
 	charterActionScreen
 	charterRationaleScreen
 	charterConfirmScreen
+	radarCollisionScreen
 )
 
 type projectItem struct{ entry protocol.ProjectListEntry }
@@ -141,6 +143,7 @@ type projectsLoaded struct {
 type projectLoaded struct {
 	projectID uuid.UUID
 	status    protocol.ProjectStatus
+	radar     protocol.RadarView
 	members   protocol.ProjectMemberList
 	events    []protocol.EventEnvelope
 	asOfEvent int64
@@ -182,6 +185,7 @@ type model struct {
 	projects      protocol.ProjectList
 	selected      protocol.ProjectListEntry
 	status        protocol.ProjectStatus
+	radar         protocol.RadarView
 	members       protocol.ProjectMemberList
 	events        []protocol.EventEnvelope
 	asOfEvent     int64
@@ -217,6 +221,7 @@ type model struct {
 	selectedCharter    charterItem
 	charterView        protocol.BlueprintRevisionView
 	charterOutcome     protocol.CharterOutcome
+	radarCollision     int
 	rejectionRationale string
 	createdProject     uuid.UUID
 }
@@ -272,6 +277,10 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
+		radar, err := client.Radar(ctx, projectID)
+		if err != nil {
+			return projectLoaded{projectID: projectID, err: err}
+		}
 		members, err := client.ProjectMembers(ctx, projectID)
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
@@ -281,7 +290,7 @@ func loadProject(ctx context.Context, client *httpclient.Client, projectID uuid.
 		if err != nil {
 			return projectLoaded{projectID: projectID, err: err}
 		}
-		return projectLoaded{projectID: projectID, status: status.Data, members: members.Data, events: events.Data, asOfEvent: status.AsOfEvent}
+		return projectLoaded{projectID: projectID, status: status.Data, radar: radar.Data, members: members.Data, events: events.Data, asOfEvent: status.AsOfEvent}
 	}
 }
 
@@ -548,7 +557,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case projectLoaded:
 		m.loading, m.err = false, msg.err
 		if msg.err == nil {
-			m.status, m.members, m.events, m.asOfEvent = msg.status, msg.members, msg.events, msg.asOfEvent
+			m.status, m.radar, m.members, m.events, m.asOfEvent = msg.status, msg.radar, msg.members, msg.events, msg.asOfEvent
+			// A refresh can shrink the open collision list under the drill-down.
+			m.radarCollision = max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
 		}
 		return m, nil
 	case charterLoaded:
@@ -640,10 +651,12 @@ func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "2":
 		m.section = planSection
 	case "3":
-		m.section = teamSection
+		m.section = radarSection
 	case "4":
-		m.section = updatesSection
+		m.section = teamSection
 	case "5":
+		m.section = updatesSection
+	case "6":
 		m.section = accountSection
 	case "tab", "right", "l":
 		m.section = (m.section + 1) % section(len(sections))
@@ -672,6 +685,11 @@ func (m model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		if m.section == planSection {
 			return m.startCharterDecision(), nil
+		}
+	case "x":
+		if m.section == radarSection && len(m.radar.OpenCollisions) > 0 {
+			m.radarCollision, m.screen, m.err = 0, radarCollisionScreen, nil
+			return m, nil
 		}
 	case "r", "enter":
 		m.loading, m.err = true, nil
@@ -861,6 +879,16 @@ func (m model) updateScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key == "enter" {
 			return m.submitBlueprint()
 		}
+	case radarCollisionScreen:
+		if len(m.radar.OpenCollisions) > 0 {
+			switch key {
+			case "up", "k":
+				m.radarCollision = max(0, m.radarCollision-1)
+			case "down", "j":
+				m.radarCollision = min(len(m.radar.OpenCollisions)-1, m.radarCollision+1)
+			}
+		}
+		return m, nil
 	case charterPickScreen:
 		if key == "enter" {
 			if item, ok := m.selector.SelectedItem().(charterItem); ok {
@@ -1048,6 +1076,8 @@ func (m model) formView() string {
 			body += "\n\nRationale:\n" + clean(m.rejectionRationale)
 		}
 		title, footer = "Confirm charter decision", "  Enter confirm · Esc edit"
+	case radarCollisionScreen:
+		title, body, footer = "Collision drill-down", m.radarCollisionView(), "  Up/down collision · Esc back to Radar"
 	}
 	if m.err != nil {
 		body += "\n\n" + errorStyle.Render(clean(m.err.Error()))
@@ -1074,6 +1104,9 @@ func (m model) cellStep(field string) string {
 
 func (m model) normalFooter() string {
 	footer := "  Tab sections · Enter refresh · p project picker · c new project"
+	if m.section == radarSection && len(m.radar.OpenCollisions) > 0 {
+		footer += " · x inspect collision"
+	}
 	if m.section == teamSection && m.status.Role == protocol.RoleOwner {
 		footer += " · a add member"
 	}
@@ -1096,6 +1129,8 @@ func (m model) sectionView() string {
 		return m.overview()
 	case planSection:
 		return m.plan()
+	case radarSection:
+		return m.radarView()
 	case teamSection:
 		return m.team()
 	case updatesSection:
@@ -1159,6 +1194,57 @@ func (m model) plan() string {
 	}
 	lines = append(lines, "Charter action: d review and decide your own pending charter")
 	return strings.Join(lines, "\n")
+}
+
+func (m model) radarView() string {
+	lines := []string{fmt.Sprintf("Coordination state at event %d.", m.radar.AsOfEvent)}
+	if len(m.radar.Objectives) == 0 {
+		lines = append(lines, "\nObjectives: absent")
+	} else {
+		lines = append(lines, "\nObjectives:")
+		for _, objective := range m.radar.Objectives {
+			lines = append(lines, fmt.Sprintf("  %s · revision %d · %s", objective.ObjectiveID, objective.Revision, clean(objective.Title)))
+		}
+	}
+	if m.radar.ActiveBlueprint == nil {
+		lines = append(lines, "\nActive blueprint: absent")
+	} else {
+		lines = append(lines, fmt.Sprintf("\nActive blueprint: %s revision %d", m.radar.ActiveBlueprint.BlueprintID, m.radar.ActiveBlueprint.Revision))
+	}
+	lines = append(lines, fmt.Sprintf("\nRepositories: %d\nActive Intents: %d\nClaims: %d across %d concepts\nDependencies: %d\nDecisions: %d", len(m.radar.Repositories), len(m.radar.ActiveIntents), len(m.radar.SemanticClaims), len(m.radar.SemanticConcepts), len(m.radar.Dependencies), len(m.radar.DecisionRefs)))
+	if len(m.radar.OpenCollisions) == 0 {
+		lines = append(lines, "\nOpen collisions: none reported. This does not prove there are no conflicts.")
+	} else {
+		lines = append(lines, "\nOpen collisions (advisory):")
+		for _, collision := range m.radar.OpenCollisions {
+			lines = append(lines, fmt.Sprintf("  [%s] %s · %s · confidence %.2f", collision.Severity, clean(collision.RuleID), collision.CollisionID, collision.Confidence))
+		}
+		lines = append(lines, "Press x to inspect collisions.")
+	}
+	if len(m.radar.EvidenceCoverage) == 0 {
+		lines = append(lines, "\nEvidence coverage: absent (no keyed acceptance criteria)")
+	} else {
+		lines = append(lines, "\nEvidence coverage:")
+		for _, coverage := range m.radar.EvidenceCoverage {
+			lines = append(lines, fmt.Sprintf("  [%s] %s · %d references", coverage.State, clean(coverage.AcceptanceKey), len(coverage.EvidenceRefs)))
+		}
+	}
+	if len(m.radar.KnownUnknowns) > 0 {
+		lines = append(lines, "\nKnown unknowns:")
+		for _, unknown := range m.radar.KnownUnknowns {
+			lines = append(lines, "  - "+clean(unknown))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m model) radarCollisionView() string {
+	if len(m.radar.OpenCollisions) == 0 {
+		return "No open collision assessment is available."
+	}
+	index := max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
+	collision := m.radar.OpenCollisions[index]
+	return fmt.Sprintf("Collision %d of %d\n\nID: %s\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n\nIntents: %s revision %d and %s revision %d\nMatching claims: %d\n\nExplanation:\n%s\n\nA human decision has not been recorded by this screen.", index+1, len(m.radar.OpenCollisions), collision.CollisionID, clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence, collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision, len(collision.MatchingClaimRefs), cleanBlock(collision.ExplanationMarkdown))
 }
 
 func (m model) team() string {

@@ -36,11 +36,57 @@ type updatesInput struct {
 	Limit     int    `json:"limit,omitempty" jsonschema:"Maximum events to return, from 1 to 500. Defaults to 100."`
 }
 
+type intentMutationInput struct {
+	ProjectID string         `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	Intent    map[string]any `json:"intent" jsonschema:"Intent content. Conn derives participant and human authority."`
+}
+
+type reviseIntentInput struct {
+	ProjectID        string         `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	IntentID         string         `json:"intent_id" jsonschema:"Intent UUID to revise."`
+	ExpectedRevision int            `json:"expected_revision" jsonschema:"Current Intent revision required for this append-only revision."`
+	Intent           map[string]any `json:"intent" jsonschema:"Replacement Intent content. Its intent_id must match intent_id."`
+}
+
+type intentIDInput struct {
+	ProjectID string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	IntentID  string `json:"intent_id" jsonschema:"Intent UUID."`
+}
+
+type collisionsInput struct {
+	ProjectID string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	IntentID  string `json:"intent_id,omitempty" jsonschema:"Optional Intent UUID. When present, returns only its open collision assessments."`
+}
+
+type projectInput struct {
+	ProjectID string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+}
+
+type collisionIDInput struct {
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	CollisionID string `json:"collision_id" jsonschema:"Collision assessment UUID."`
+}
+
+type proposalInput struct {
+	ProjectID   string                           `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	CollisionID string                           `json:"collision_id" jsonschema:"Collision assessment UUID."`
+	Proposal    protocol.ResolutionProposalInput `json:"proposal" jsonschema:"Non-binding resolution proposal content."`
+}
+
+type evidenceInput struct {
+	ProjectID string         `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	IntentID  string         `json:"intent_id" jsonschema:"Your active Intent UUID."`
+	Evidence  map[string]any `json:"evidence" jsonschema:"Bounded reference-only evidence. Its intent_id must match intent_id."`
+}
+
 func registerTools(server *sdk.Server, cfg Config) {
 	t := tools{cfg: cfg}
 	closed := false
 	annotations := func(title string) *sdk.ToolAnnotations {
 		return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closed}
+	}
+	writes := func(title string, idempotent bool) *sdk.ToolAnnotations {
+		return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: false, DestructiveHint: &closed, IdempotentHint: idempotent, OpenWorldHint: &closed}
 	}
 
 	sdk.AddTool(server, &sdk.Tool{
@@ -67,6 +113,14 @@ func registerTools(server *sdk.Server, cfg Config) {
 			"Returns {data: [events], as_of_event}.",
 		Annotations: annotations("Check updates"),
 	}, t.checkUpdates)
+	sdk.AddTool(server, &sdk.Tool{Name: "publish_intent", Description: "Publish an Intent for your authenticated Conn participant. The input cannot choose a human or participant.", Annotations: writes("Publish Intent", true)}, t.publishIntent)
+	sdk.AddTool(server, &sdk.Tool{Name: "revise_intent", Description: "Append an immutable revision to your own active Intent using expected_revision.", Annotations: writes("Revise Intent", false)}, t.reviseIntent)
+	sdk.AddTool(server, &sdk.Tool{Name: "release_intent", Description: "Release your own active Intent without deleting its history.", Annotations: writes("Release Intent", true)}, t.releaseIntent)
+	sdk.AddTool(server, &sdk.Tool{Name: "check_collisions", Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.", Annotations: annotations("Check collisions")}, t.checkCollisions)
+	sdk.AddTool(server, &sdk.Tool{Name: "read_radar", Description: "Read the member-authorized Radar coordination snapshot. Returns {data: radar, as_of_event}.", Annotations: annotations("Read Radar")}, t.readRadar)
+	sdk.AddTool(server, &sdk.Tool{Name: "read_conflict_context", Description: "Read a bounded, source-free context pack for one collision. Returns {data: context_pack, as_of_event}.", Annotations: annotations("Read conflict context")}, t.readConflictContext)
+	sdk.AddTool(server, &sdk.Tool{Name: "propose_resolution", Description: "Record a non-binding participant resolution proposal. This cannot make a decision or change project boundaries.", Annotations: writes("Propose resolution", false)}, t.proposeResolution)
+	sdk.AddTool(server, &sdk.Tool{Name: "attach_evidence", Description: "Attach bounded reference-only evidence to your own active Intent. Conn never accepts raw logs, source, prompts, or authority fields.", Annotations: writes("Attach evidence", false)}, t.attachEvidence)
 }
 
 type tools struct {
@@ -224,6 +278,163 @@ func (t tools) checkUpdates(ctx context.Context, _ *sdk.CallToolRequest, in upda
 	return envelope(summary, data, result.AsOfEvent)
 }
 
+func (t tools) publishIntent(ctx context.Context, _ *sdk.CallToolRequest, in intentMutationInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("publish_intent", err)
+	}
+	input, err := decodeToolDocument[protocol.IntentInput](in.Intent)
+	if err != nil {
+		return t.fail("publish_intent", err)
+	}
+	result, err := client.PublishIntent(ctx, projectID, input)
+	if err != nil {
+		return t.fail("publish_intent", err)
+	}
+	return reply(fmt.Sprintf("Published Intent %s revision %d.", result.Data.IntentRevision.IntentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+}
+
+func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in reviseIntentInput) (*sdk.CallToolResult, any, error) {
+	if in.ExpectedRevision < 1 {
+		return t.fail("revise_intent", errors.New("expected_revision must be positive"))
+	}
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("revise_intent", err)
+	}
+	intentID, err := parseID("intent_id", in.IntentID)
+	if err != nil {
+		return t.fail("revise_intent", err)
+	}
+	input, err := decodeToolDocument[protocol.IntentInput](in.Intent)
+	if err != nil {
+		return t.fail("revise_intent", err)
+	}
+	if input.IntentID != intentID {
+		return t.fail("revise_intent", errors.New("intent.intent_id must match intent_id"))
+	}
+	result, err := client.ReviseIntent(ctx, projectID, intentID, in.ExpectedRevision, input)
+	if err != nil {
+		return t.fail("revise_intent", err)
+	}
+	return reply(fmt.Sprintf("Revised Intent %s to revision %d.", intentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+}
+
+func (t tools) releaseIntent(ctx context.Context, _ *sdk.CallToolRequest, in intentIDInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("release_intent", err)
+	}
+	intentID, err := parseID("intent_id", in.IntentID)
+	if err != nil {
+		return t.fail("release_intent", err)
+	}
+	result, err := client.ReleaseIntent(ctx, projectID, intentID)
+	if err != nil {
+		return t.fail("release_intent", err)
+	}
+	return reply(fmt.Sprintf("Released Intent %s at revision %d.", intentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+}
+
+func (t tools) checkCollisions(ctx context.Context, _ *sdk.CallToolRequest, in collisionsInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("check_collisions", err)
+	}
+	var intentID uuid.UUID
+	if in.IntentID != "" {
+		if intentID, err = parseID("intent_id", in.IntentID); err != nil {
+			return t.fail("check_collisions", err)
+		}
+	}
+	radar, err := client.Radar(ctx, projectID)
+	if err != nil {
+		return t.fail("check_collisions", err)
+	}
+	collisions := make([]protocol.CollisionAssessment, 0, len(radar.Data.OpenCollisions))
+	for _, collision := range radar.Data.OpenCollisions {
+		if intentID == (uuid.UUID{}) || collision.LeftIntentID == intentID || collision.RightIntentID == intentID {
+			collisions = append(collisions, collision)
+		}
+	}
+	data, err := json.Marshal(collisions)
+	if err != nil {
+		return t.fail("check_collisions", err)
+	}
+	summary := fmt.Sprintf("%d open advisory collision assessment(s).", len(collisions))
+	if intentID != (uuid.UUID{}) {
+		summary = fmt.Sprintf("%d open advisory collision assessment(s) for Intent %s.", len(collisions), intentID)
+	}
+	return envelope(summary, data, radar.AsOfEvent)
+}
+
+func (t tools) readRadar(ctx context.Context, _ *sdk.CallToolRequest, in projectInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("read_radar", err)
+	}
+	result, err := client.Radar(ctx, projectID)
+	if err != nil {
+		return t.fail("read_radar", err)
+	}
+	return reply(fmt.Sprintf("Radar for %s: %d active Intent(s), %d open collision(s).", result.Data.Project.Name, len(result.Data.ActiveIntents), len(result.Data.OpenCollisions)), result.Data, result.AsOfEvent)
+}
+
+func (t tools) readConflictContext(ctx context.Context, _ *sdk.CallToolRequest, in collisionIDInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("read_conflict_context", err)
+	}
+	collisionID, err := parseID("collision_id", in.CollisionID)
+	if err != nil {
+		return t.fail("read_conflict_context", err)
+	}
+	result, err := client.ConflictContext(ctx, projectID, collisionID)
+	if err != nil {
+		return t.fail("read_conflict_context", err)
+	}
+	return reply(fmt.Sprintf("Conflict context for collision %s. It permits non-binding proposals only.", collisionID), result.Data, result.AsOfEvent)
+}
+
+func (t tools) proposeResolution(ctx context.Context, _ *sdk.CallToolRequest, in proposalInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("propose_resolution", err)
+	}
+	collisionID, err := parseID("collision_id", in.CollisionID)
+	if err != nil {
+		return t.fail("propose_resolution", err)
+	}
+	result, err := client.ProposeResolution(ctx, projectID, collisionID, in.Proposal)
+	if err != nil {
+		return t.fail("propose_resolution", err)
+	}
+	return reply(fmt.Sprintf("Recorded non-binding %s proposal %s.", result.Data.Kind, result.Data.ProposalID), result.Data, result.AsOfEvent)
+}
+
+func (t tools) attachEvidence(ctx context.Context, _ *sdk.CallToolRequest, in evidenceInput) (*sdk.CallToolResult, any, error) {
+	client, projectID, err := t.session(in.ProjectID)
+	if err != nil {
+		return t.fail("attach_evidence", err)
+	}
+	intentID, err := parseID("intent_id", in.IntentID)
+	if err != nil {
+		return t.fail("attach_evidence", err)
+	}
+	evidence, err := decodeToolDocument[protocol.EvidenceAttachmentInput](in.Evidence)
+	if err != nil {
+		return t.fail("attach_evidence", err)
+	}
+	if evidence.IntentID != intentID {
+		return t.fail("attach_evidence", errors.New("evidence.intent_id must match intent_id"))
+	}
+	result, err := client.AttachEvidence(ctx, projectID, intentID, evidence)
+	if err != nil {
+		return t.fail("attach_evidence", err)
+	}
+	return reply(fmt.Sprintf("Attached %s evidence %s to Intent %s.", result.Data.State, result.Data.EvidenceID, intentID), result.Data, result.AsOfEvent)
+}
+
 // session resolves the human's backend client and the selected project.
 func (t tools) session(projectInput string) (*httpclient.Client, uuid.UUID, error) {
 	raw := projectInput
@@ -238,7 +449,10 @@ func (t tools) session(projectInput string) (*httpclient.Client, uuid.UUID, erro
 		return nil, uuid.UUID{}, err
 	}
 	client, err := t.cfg.Client()
-	return client, projectID, err
+	if err != nil {
+		return nil, uuid.UUID{}, err
+	}
+	return client.WithAdapter("kiro"), projectID, nil
 }
 
 // selectRevision picks a blueprint and revision for read_blueprint. An
@@ -288,6 +502,15 @@ func describe(err error) string {
 		return "Not found, or the signed-in human is not a member of this project."
 	}
 	return err.Error()
+}
+
+func decodeToolDocument[T protocol.Document](value map[string]any) (T, error) {
+	var zero T
+	data, err := json.Marshal(value)
+	if err != nil {
+		return zero, err
+	}
+	return protocol.Decode[T](data)
 }
 
 func parseID(field, raw string) (uuid.UUID, error) {
