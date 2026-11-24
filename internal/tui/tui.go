@@ -43,7 +43,14 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.Client == nil || !isTerminal(cfg.In, cfg.Out) {
 		return ErrNotInteractive
 	}
-	program := tea.NewProgram(newModel(ctx, cfg.Client), tea.WithInput(cfg.In), tea.WithOutput(cfg.Out), tea.WithAltScreen(), tea.WithContext(ctx))
+	m := newModel(ctx, cfg.Client)
+	if output, ok := cfg.Out.(descriptor); ok {
+		m.measure = func() (int, int, bool) {
+			width, height, err := term.GetSize(output.Fd())
+			return width, height, err == nil && width > 0 && height > 0
+		}
+	}
+	program := tea.NewProgram(m, tea.WithInput(cfg.In), tea.WithOutput(cfg.Out), tea.WithAltScreen(), tea.WithContext(ctx))
 	_, err := program.Run()
 	return err
 }
@@ -137,43 +144,43 @@ const (
 
 type projectItem struct{ entry protocol.ProjectListEntry }
 
-func (p projectItem) Title() string { return clean(p.entry.Project.Name) }
-func (p projectItem) Description() string {
-	return fmt.Sprintf("%s · %s", p.entry.Role, p.entry.Project.ProjectID)
-}
-func (p projectItem) FilterValue() string {
-	return p.entry.Project.Name + " " + p.entry.Project.ProjectID.String()
-}
+func (p projectItem) Title() string       { return clean(p.entry.Project.Name) }
+func (p projectItem) Description() string { return "Your role: " + string(p.entry.Role) }
+func (p projectItem) FilterValue() string { return p.entry.Project.Name }
 
 type memberItem struct{ member protocol.ProjectMember }
 
-func (i memberItem) Title() string { return "@" + clean(i.member.Human.GitHubLogin) }
-func (i memberItem) Description() string {
-	return fmt.Sprintf("%s · %s", i.member.Membership.Role, i.member.Human.HumanID)
-}
-func (i memberItem) FilterValue() string {
-	return i.member.Human.GitHubLogin + " " + i.member.Human.HumanID.String()
+func (i memberItem) Title() string       { return "@" + clean(i.member.Human.GitHubLogin) }
+func (i memberItem) Description() string { return string(i.member.Membership.Role) }
+func (i memberItem) FilterValue() string { return i.member.Human.GitHubLogin }
+
+type objectiveItem struct {
+	objective protocol.ObjectiveSummary
+	title     string
+	blueprint bool // the Objective already has a blueprint
 }
 
-type objectiveItem struct{ objective protocol.ObjectiveSummary }
-
-func (i objectiveItem) Title() string { return fmt.Sprintf("Objective %s", i.objective.ObjectiveID) }
+func (i objectiveItem) Title() string { return i.title }
 func (i objectiveItem) Description() string {
-	return fmt.Sprintf("current revision %d", i.objective.CurrentRevision)
+	if i.blueprint {
+		return fmt.Sprintf("current revision %d · proposes the next revision of its blueprint", i.objective.CurrentRevision)
+	}
+	return fmt.Sprintf("current revision %d · no blueprint yet", i.objective.CurrentRevision)
 }
-func (i objectiveItem) FilterValue() string { return i.objective.ObjectiveID.String() }
+func (i objectiveItem) FilterValue() string { return i.title }
 
 type charterItem struct {
 	blueprintID uuid.UUID
 	revision    protocol.RevisionSummary
 	cell        protocol.CellSummary
+	objective   string // the title of the Objective the blueprint divides
 }
 
 func (i charterItem) Title() string { return clean(i.cell.Title) }
 func (i charterItem) Description() string {
-	return fmt.Sprintf("Blueprint %s · revision %d", i.blueprintID, i.revision.Revision)
+	return fmt.Sprintf("%s · revision %d", blueprintLabel(i.objective), i.revision.Revision)
 }
-func (i charterItem) FilterValue() string { return i.cell.Title + " " + i.cell.CellID.String() }
+func (i charterItem) FilterValue() string { return i.cell.Title + " " + i.objective }
 
 type projectsLoaded struct {
 	client   *httpclient.Client
@@ -249,6 +256,8 @@ type model struct {
 	formNote    string
 	width       int
 	height      int
+	scroll      int                     // first card body row on screen
+	measure     func() (int, int, bool) // the terminal window's size, when known
 
 	projectDraftID     uuid.UUID // fixed per draft, so retrying a create cannot make a second project
 	projectName        string
@@ -285,18 +294,7 @@ func newModel(ctx context.Context, clientFactory func() (*httpclient.Client, err
 	area.ShowLineNumbers = false
 	area.MaxHeight = 0 // CharLimit bounds the text, not a row count
 	m := model{ctx: ctx, clientFactory: clientFactory, projectList: projects, selector: selector, input: input, area: area, viewer: viewport.New(80, 16), loading: true, width: 80, height: 24, editingCell: -1}
-	m.sizeArea()
-	return m
-}
-
-func (m model) cardWidth() int { return min(100, max(34, m.width-6)) }
-
-// sizeArea fits the Markdown field inside a card: border and padding take
-// six columns, and the header, card title, and footer take about 14 rows.
-func (m *model) sizeArea() {
-	m.area.SetWidth(m.cardWidth() - 6)
-	m.area.SetHeight(max(3, m.height-14))
-	m.viewer.Width, m.viewer.Height = m.cardWidth()-6, max(3, m.height-14)
+	return m.fit(true)
 }
 
 func (m model) Init() tea.Cmd { return loadProjects(m.ctx, m.clientFactory) }
@@ -508,7 +506,8 @@ func (m model) startBlueprint() model {
 	m.blueprintCells, m.cell, m.editingCell, m.formNote = nil, protocol.CellCharter{}, -1, ""
 	items := make([]list.Item, 0, len(m.status.Objectives))
 	for _, objective := range m.status.Objectives {
-		items = append(items, objectiveItem{objective})
+		_, revises := blueprintFor(m.status, objective.ObjectiveID)
+		items = append(items, objectiveItem{objective, m.objectiveTitle(objective.ObjectiveID), revises})
 	}
 	m.selector.Title = "Objective selector for this blueprint"
 	m.selector.ResetFilter()
@@ -527,7 +526,7 @@ func (m model) startCharterDecision() model {
 			}
 			for _, cell := range revision.Cells {
 				if cell.AccountableHumanID == m.human.HumanID && cell.Decision == protocol.CellPending {
-					items = append(items, charterItem{blueprint.BlueprintID, revision, cell})
+					items = append(items, charterItem{blueprint.BlueprintID, revision, cell, m.objectiveTitle(revision.ObjectiveID)})
 				}
 			}
 		}
@@ -559,16 +558,6 @@ func (m model) chooseMember(next screen, title string, current uuid.UUID) model 
 	return m
 }
 
-// memberName shows a project member by GitHub login when known.
-func (m model) memberName(id uuid.UUID) string {
-	for _, member := range m.members.Members {
-		if member.Human.HumanID == id {
-			return "@" + clean(member.Human.GitHubLogin)
-		}
-	}
-	return id.String()
-}
-
 // confirm leaves a review screen to run its write. If the write fails, the
 // review reopens with the error and the draft intact.
 func (m model) confirm() model {
@@ -585,13 +574,25 @@ func (m model) failed(err error) model {
 	return m
 }
 
+// Update handles a message, then fits the result to the terminal.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	before := m.position()
+	updated, cmd := m.update(msg)
+	next := updated.(model)
+	return next.fit(next.position() != before), cmd
+}
+
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.projectList.SetSize(max(30, msg.Width-4), max(8, msg.Height-7))
-		m.selector.SetSize(max(30, msg.Width-4), max(8, msg.Height-7))
-		m.sizeArea()
+		// On Windows a resize reports the console buffer, which can be far
+		// taller than the window, so prefer the window's own size.
+		if m.measure != nil {
+			if width, height, ok := m.measure(); ok {
+				m.width, m.height = width, height
+			}
+		}
 		return m, nil
 	case projectsLoaded:
 		m.loading, m.err = false, msg.err
@@ -659,6 +660,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if m.loading {
+			return m, nil
+		}
+		if step, ok := m.scrollStep(msg.String()); ok {
+			m.scroll = max(0, m.scroll+step) // fit keeps it in range
 			return m, nil
 		}
 		if semanticScreen(m.screen) {
@@ -1057,39 +1062,41 @@ func (m model) submitCharterDecision() (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m model) View() string {
+// page is the content of the current screen.
+func (m model) page() page {
 	if m.loading {
-		return m.header() + "\n\n" + m.card("Loading", "Loading shared team state...") + "\n"
+		return page{title: "Loading", body: "Loading shared team state..."}
 	}
 	if semanticScreen(m.screen) {
-		return m.semanticFormView()
+		return m.semanticPage()
 	}
 	if m.screen != normalScreen {
-		return m.formView()
+		return m.formPage()
 	}
 	if m.err != nil {
-		return m.header() + "\n\n" + m.card("Could not complete that action", errorStyle.Render(clean(m.err.Error()))) + "\n\n" + footerStyle.Render("  Esc back · r refresh · q quit") + "\n"
+		return page{title: "Could not complete that action", body: errorStyle.Render(clean(m.err.Error())), footer: "Esc back · r refresh · q quit"}
 	}
 	if m.client == nil {
-		return m.header() + "\n\n" + m.card("Not connected", "Conn could not load your projects, so nothing can be read or changed yet.\n\nCheck the server and your session with conn doctor, then press r to try again.") + "\n\n" + footerStyle.Render("  r retry · q quit") + "\n"
+		return page{title: "Not connected", body: "Conn could not load your projects, so nothing can be read or changed yet.\n\nCheck the server and your session with conn doctor, then press r to try again.", footer: "r retry · q quit"}
 	}
 	if m.choosing {
-		return m.header() + "\n\n" + m.projectList.View() + "\n" + footerStyle.Render("  Project picker: Up/down select · / filter · Enter open · c new project · Esc back · q quit") + "\n"
+		return page{list: projectsList, footer: "Project picker: Up/down select · / filter · Enter open · c new project · Esc back · q quit"}
 	}
 	if len(m.projects.Projects) == 0 {
-		return m.header() + "\n\n" + m.card("Start your first project", "No projects are available to this Conn account.\n\nPress c or Enter to create a project here.") + "\n\n" + footerStyle.Render("  c or Enter create project · r refresh · q quit") + "\n"
+		return page{title: "Start your first project", body: "No projects are available to this Conn account.\n\nPress c or Enter to create a project here.", footer: "c or Enter create project · r refresh · q quit"}
 	}
-	body := m.card(sections[m.section], m.sectionView())
-	if m.notice != "" {
-		body += "\n\n" + helpStyle.Render(clean(m.notice))
-	}
+	// The notice and help lead the card, so they scroll with it.
+	body := m.sectionView()
 	if m.help {
-		body += "\n\n" + helpStyle.Render(m.helpText())
+		body = helpStyle.Render(m.helpText()) + "\n\n" + body
 	}
-	return m.header() + "\n\n" + body + "\n\n" + footerStyle.Render(m.normalFooter()) + "\n"
+	if m.notice != "" {
+		body = helpStyle.Render(clean(m.notice)) + "\n\n" + body
+	}
+	return page{title: sections[m.section], body: body, footer: m.normalFooter()}
 }
 
-func (m model) formView() string {
+func (m model) formPage() page {
 	title, body, footer := "", "", ""
 	switch m.screen {
 	case projectCreateScreen:
@@ -1105,13 +1112,13 @@ func (m model) formView() string {
 	case objectiveOverviewScreen:
 		title, body, footer = "Create objective: Markdown overview", m.area.View(), "  Ctrl+S choose accountable member · Enter new line · Esc back to title"
 	case objectiveMemberScreen:
-		return m.selectorView("  Form selector: Up/down select · / filter · Enter choose · Esc back to overview")
+		return page{list: selectorList, footer: "  Form selector: Up/down select · / filter · Enter choose · Esc back to overview"}
 	case objectiveConfirmScreen:
-		title, body, footer = "Create this objective?", fmt.Sprintf("Title: %s\n\nMarkdown overview:\n%s\n\nAccountable human: @%s · %s", clean(m.objective.Title), cleanBlock(m.objective.OverviewMarkdown), clean(m.objectiveMember.Human.GitHubLogin), m.objective.AccountableHumanID), "  Enter create objective · Esc edit member"
+		title, body, footer = "Create this objective?", fmt.Sprintf("Title: %s\n\nMarkdown overview:\n%s\n\nAccountable human: @%s", clean(m.objective.Title), cleanBlock(m.objective.OverviewMarkdown), clean(m.objectiveMember.Human.GitHubLogin)), "  Enter create objective · Esc edit member"
 	case blueprintObjectiveScreen:
-		return m.selectorView("  Form selector: choose current objective · Enter choose · Esc cancel")
+		return page{list: selectorList, footer: "  Form selector: choose current objective · Enter choose · Esc cancel"}
 	case cellMemberScreen:
-		return m.selectorView("  Form selector: choose accountable member · Enter choose · Esc back")
+		return page{list: selectorList, footer: "  Form selector: choose accountable member · Enter choose · Esc back"}
 	case cellTitleScreen:
 		title, body, footer = m.cellStep("title"), m.input.View(), "  Enter next · Esc back to member"
 	case cellOverviewScreen:
@@ -1132,7 +1139,7 @@ func (m model) formView() string {
 		if len(m.selector.Items()) == 0 {
 			title, body, footer = "No pending charter", "You have no assigned pending charters in a proposed blueprint.", "  Esc back"
 		} else {
-			return m.selectorView("  Charter selector: Up/down select · / filter · Enter inspect · Esc back")
+			return page{list: selectorList, footer: "  Charter selector: Up/down select · / filter · Enter inspect · Esc back"}
 		}
 	case charterActionScreen:
 		title, body, footer = "Your pending charter", m.charterReview()+"\n\nOnly you can decide this charter. A decision is final for this revision.", "  a accept · x reject · Esc back"
@@ -1152,17 +1159,7 @@ func (m model) formView() string {
 	if m.err != nil {
 		body += "\n\n" + errorStyle.Render(clean(m.err.Error()))
 	}
-	return m.header() + "\n\n" + m.card(title, body) + "\n\n" + footerStyle.Render(footer) + "\n"
-}
-
-// selectorView shows a form selector with the last error, such as a failed
-// load after a choice.
-func (m model) selectorView(footer string) string {
-	view := m.header() + "\n\n" + m.selector.View() + "\n"
-	if m.err != nil {
-		view += errorStyle.Render("  "+clean(m.err.Error())) + "\n"
-	}
-	return view + footerStyle.Render(footer) + "\n"
+	return page{title: title, body: body, footer: footer}
 }
 
 func (m model) cellStep(field string) string {
@@ -1201,7 +1198,8 @@ func (m model) normalFooter() string {
 func (m model) helpText() string {
 	return "p opens the project picker, even when only one project is available. Project picker and form selectors are labeled separately. Owners can add existing Conn humans, create or import objectives, propose blueprints, and connect repositories. Assigned humans decide only their own pending charters. " +
 		"In Work, this app publishes, revises, and releases Intents as your CLI participant; Intents published from Kiro belong to that Kiro participant. " +
-		"In Radar, x opens a collision: c reads its context pack, p records a non-binding proposal, and d records a human decision. Binding decisions are owner-only. Escape backs out of the current form or review without writing."
+		"In Radar, x opens a collision: c reads its context pack, p records a non-binding proposal, and d records a human decision. Binding decisions are owner-only. Escape backs out of the current form or review without writing. " +
+		"PgUp and PgDn scroll a screen taller than the terminal; in sections and reviews, Up and Down scroll too. Account shows your Conn human ID and the project ID for conn commands."
 }
 
 func (m model) sectionView() string {
@@ -1225,7 +1223,7 @@ func (m model) sectionView() string {
 }
 
 func (m model) overview() string {
-	project := fmt.Sprintf("Project ID: %s\nRole: %s", m.selectedProjectID(), m.selected.Role)
+	project := fmt.Sprintf("Project: %s\nYour role: %s", clean(m.selected.Project.Name), m.selected.Role)
 	if len(m.status.Blueprints) == 0 {
 		return project + "\n\nNo blueprint has been proposed for this project yet."
 	}
@@ -1243,7 +1241,8 @@ func (m model) overview() string {
 					pending++
 				}
 			}
-			lines = append(lines, fmt.Sprintf("Blueprint %s · revision %d · %s\n  %d accepted · %d pending · %d rejected", blueprint.BlueprintID, revision.Revision, revision.Status, accepted, pending, rejected))
+			lines = append(lines, fmt.Sprintf("%s · revision %d · %s\n  %d accepted · %d pending · %d rejected",
+				blueprintLabel(m.objectiveTitle(revision.ObjectiveID)), revision.Revision, revision.Status, accepted, pending, rejected))
 		}
 	}
 	return project + "\n\n" + strings.Join(lines, "\n\n") + fmt.Sprintf("\n\nProject state is current through event %d.", m.asOfEvent)
@@ -1256,7 +1255,7 @@ func (m model) plan() string {
 	} else {
 		lines = append(lines, "Objectives:")
 		for _, objective := range m.status.Objectives {
-			lines = append(lines, fmt.Sprintf("  %s · revision %d", objective.ObjectiveID, objective.CurrentRevision))
+			lines = append(lines, fmt.Sprintf("  %s · revision %d", m.objectiveTitle(objective.ObjectiveID), objective.CurrentRevision))
 		}
 	}
 	if len(m.status.Blueprints) == 0 {
@@ -1264,10 +1263,11 @@ func (m model) plan() string {
 	} else {
 		lines = append(lines, "\nBlueprints:")
 		for _, blueprint := range m.status.Blueprints {
+			lines = append(lines, "  "+m.blueprintName(blueprint.BlueprintID))
 			for _, revision := range blueprint.Revisions {
-				lines = append(lines, fmt.Sprintf("  revision %d · %s · objective revision %d", revision.Revision, revision.Status, revision.ObjectiveRevision))
+				lines = append(lines, fmt.Sprintf("    revision %d · %s · divides objective revision %d", revision.Revision, revision.Status, revision.ObjectiveRevision))
 				for _, cell := range revision.Cells {
-					lines = append(lines, fmt.Sprintf("    [%s] %s · %s", cell.Decision, clean(cell.Title), cell.AccountableHumanID))
+					lines = append(lines, fmt.Sprintf("      [%s] %s · %s", cell.Decision, clean(cell.Title), m.memberName(cell.AccountableHumanID)))
 				}
 			}
 		}
@@ -1286,13 +1286,13 @@ func (m model) radarView() string {
 	} else {
 		lines = append(lines, "\nObjectives:")
 		for _, objective := range m.radar.Objectives {
-			lines = append(lines, fmt.Sprintf("  %s · revision %d · %s", objective.ObjectiveID, objective.Revision, clean(objective.Title)))
+			lines = append(lines, fmt.Sprintf("  %s · revision %d", clean(objective.Title), objective.Revision))
 		}
 	}
 	if m.radar.ActiveBlueprint == nil {
 		lines = append(lines, "\nActive blueprint: absent")
 	} else {
-		lines = append(lines, fmt.Sprintf("\nActive blueprint: %s revision %d", m.radar.ActiveBlueprint.BlueprintID, m.radar.ActiveBlueprint.Revision))
+		lines = append(lines, fmt.Sprintf("\nActive blueprint: %s, revision %d", m.blueprintName(m.radar.ActiveBlueprint.BlueprintID), m.radar.ActiveBlueprint.Revision))
 	}
 	lines = append(lines, fmt.Sprintf("\nRepositories: %d\nActive Intents: %d\nClaims: %d across %d concepts\nDependencies: %d\nDecisions: %d", len(m.radar.Repositories), len(m.radar.ActiveIntents), len(m.radar.SemanticClaims), len(m.radar.SemanticConcepts), len(m.radar.Dependencies), len(m.radar.DecisionRefs)))
 	if len(m.radar.OpenCollisions) == 0 {
@@ -1300,7 +1300,7 @@ func (m model) radarView() string {
 	} else {
 		lines = append(lines, "\nOpen collisions (advisory):")
 		for _, collision := range m.radar.OpenCollisions {
-			lines = append(lines, fmt.Sprintf("  [%s] %s · %s · confidence %.2f", collision.Severity, clean(collision.RuleID), collision.CollisionID, collision.Confidence))
+			lines = append(lines, fmt.Sprintf("  [%s] %s · confidence %.2f", collision.Severity, m.collisionName(collision), collision.Confidence))
 		}
 		lines = append(lines, "Press x to inspect collisions.")
 	}
@@ -1309,7 +1309,7 @@ func (m model) radarView() string {
 	} else {
 		lines = append(lines, "\nEvidence coverage:")
 		for _, coverage := range m.radar.EvidenceCoverage {
-			lines = append(lines, fmt.Sprintf("  [%s] %s · %d references", coverage.State, clean(coverage.AcceptanceKey), len(coverage.EvidenceRefs)))
+			lines = append(lines, fmt.Sprintf("  [%s] %s · %s · %d references", coverage.State, clean(coverage.AcceptanceKey), m.objectiveTitle(coverage.ObjectiveID), len(coverage.EvidenceRefs)))
 		}
 	}
 	if len(m.radar.KnownUnknowns) > 0 {
@@ -1327,41 +1327,59 @@ func (m model) radarCollisionView() string {
 	}
 	index := max(0, min(m.radarCollision, len(m.radar.OpenCollisions)-1))
 	collision := m.radar.OpenCollisions[index]
-	return fmt.Sprintf("Collision %d of %d\n\nID: %s\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n\nIntents: %s revision %d and %s revision %d\nMatching claims: %d\n\nExplanation:\n%s\n\nA human decision has not been recorded by this screen.", index+1, len(m.radar.OpenCollisions), collision.CollisionID, clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence, collision.LeftIntentID, collision.LeftIntentRevision, collision.RightIntentID, collision.RightIntentRevision, len(collision.MatchingClaimRefs), cleanBlock(collision.ExplanationMarkdown))
+	return fmt.Sprintf("Collision %d of %d\n\nRule: %s\nStatus: %s (advisory)\nSeverity: %s\nConfidence: %.2f\n\nIntents:\n  %s · revision %d\n  %s · revision %d\nMatching claims: %d\n\nExplanation:\n%s\n\nA human decision has not been recorded by this screen.",
+		index+1, len(m.radar.OpenCollisions), clean(collision.RuleID), collision.State, collision.Severity, collision.Confidence,
+		m.intentName(collision.LeftIntentID), collision.LeftIntentRevision, m.intentName(collision.RightIntentID), collision.RightIntentRevision,
+		len(collision.MatchingClaimRefs), cleanBlock(collision.ExplanationMarkdown))
 }
 
 func (m model) team() string {
 	if len(m.members.Members) == 0 {
-		return "Team\n\nNo members found."
+		return "No members found."
 	}
-	lines := []string{"Team:"}
+	var lines []string
 	for _, member := range m.members.Members {
-		lines = append(lines, fmt.Sprintf("  @%s · %s · %s", clean(member.Human.GitHubLogin), member.Membership.Role, member.Human.HumanID))
+		you := ""
+		if member.Human.HumanID == m.human.HumanID {
+			you = " (you)"
+		}
+		lines = append(lines, fmt.Sprintf("@%s · %s%s", clean(member.Human.GitHubLogin), member.Membership.Role, you))
 	}
 	if m.status.Role == protocol.RoleOwner {
-		lines = append(lines, "\nOwner action: a add an already authenticated member")
+		lines = append(lines, "\nOwner action: a add an already authenticated member by their Conn human ID")
 	}
 	return strings.Join(lines, "\n")
 }
 
 func (m model) updates() string {
 	if len(m.events) == 0 {
-		return "Updates\n\nNo events have been recorded yet."
+		return "No events have been recorded yet."
 	}
-	lines := []string{fmt.Sprintf("Latest updates, oldest first (project is at event %d):", m.asOfEvent)}
+	lines := []string{"Latest updates, oldest first:"}
 	for _, event := range m.events {
-		lines = append(lines, fmt.Sprintf("  %d · %s · %s", event.EventSequence, event.EventType(), event.OccurredAt))
+		lines = append(lines, fmt.Sprintf("  %d · %s · %s · %s", event.EventSequence, m.describeEvent(event),
+			m.memberName(event.ActorHumanID), event.OccurredAt.Time().Local().Format("2006-01-02 15:04")))
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n") + fmt.Sprintf("\n\nProject state is current through event %d.", m.asOfEvent)
 }
+
+// account shows the only IDs the app displays: a person hands their human ID
+// to an owner to be added to a project, and the conn commands take the
+// project ID.
 func (m model) account() string {
-	return fmt.Sprintf("Account\n\nSigned in as @%s\nConn human ID: %s\nServer: %s\n\nRun conn doctor for detailed server and credential diagnostics.", clean(m.human.GitHubLogin), m.human.HumanID, m.client.URL())
+	text := fmt.Sprintf("Signed in as @%s\nServer: %s\n\nYour Conn human ID, for a project owner to add you:\n  %s",
+		clean(m.human.GitHubLogin), m.client.URL(), m.human.HumanID)
+	if m.selectedProjectID() != (uuid.UUID{}) {
+		text += fmt.Sprintf("\nProject ID of %s, for conn commands:\n  %s", clean(m.selected.Project.Name), m.selectedProjectID())
+	}
+	return text + "\n\nRun conn doctor for detailed server and credential diagnostics."
 }
+
 func (m model) cellsReview() string {
-	lines := []string{fmt.Sprintf("Objective: %s revision %d", m.blueprintObjective.ObjectiveID, m.blueprintObjective.CurrentRevision)}
+	lines := []string{fmt.Sprintf("Objective: %s (revision %d)", m.objectiveTitle(m.blueprintObjective.ObjectiveID), m.blueprintObjective.CurrentRevision)}
 	if m.blueprintExpected > 0 {
-		lines = append(lines, fmt.Sprintf("Revising blueprint %s: these cells replace the whole cell set of revision %d as revision %d.",
-			m.blueprintID, m.blueprintExpected, m.blueprintExpected+1))
+		lines = append(lines, fmt.Sprintf("Revising this objective's blueprint: these cells replace the whole cell set of revision %d as revision %d.",
+			m.blueprintExpected, m.blueprintExpected+1))
 	}
 	if len(m.blueprintCells) == 0 {
 		lines = append(lines, "\nNo cells yet. Press a to add one.")
@@ -1369,7 +1387,7 @@ func (m model) cellsReview() string {
 	for i, cell := range m.blueprintCells {
 		marker := "  "
 		if m.screen == cellMoreScreen && i == m.cellCursor {
-			marker = "> "
+			marker = cursorMarker
 		}
 		lines = append(lines, fmt.Sprintf("\n%sCell %d: %s\nAccountable human: %s\n%s", marker, i+1, clean(cell.Title), m.memberName(cell.AccountableHumanID), cleanBlock(cell.OverviewMarkdown)))
 		if kept := keptFields(cell); kept != "" {
@@ -1408,31 +1426,12 @@ func (m model) blueprintReview() string {
 func (m model) charterReview() string {
 	for _, charter := range m.charterView.BlueprintRevision.CellCharters {
 		if charter.CellID == m.selectedCharter.cell.CellID {
-			return fmt.Sprintf("Blueprint %s · revision %d\n\nCell: %s\n\nMarkdown overview:\n%s", m.selectedCharter.blueprintID, m.selectedCharter.revision.Revision, clean(charter.Title), cleanBlock(charter.OverviewMarkdown))
+			return fmt.Sprintf("%s · revision %d\n\nCell: %s\n\nMarkdown overview:\n%s", blueprintLabel(m.selectedCharter.objective), m.selectedCharter.revision.Revision, clean(charter.Title), cleanBlock(charter.OverviewMarkdown))
 		}
 	}
 	return "The selected charter could not be rendered."
 }
 
-func (m model) card(title, body string) string {
-	return cardStyle.Width(m.cardWidth()).Render(cardTitleStyle.Render(title) + "\n\n" + body)
-}
-func (m model) header() string {
-	project := "No project selected"
-	if m.selectedProjectID() != (uuid.UUID{}) {
-		project = clean(m.selected.Project.Name) + " · " + string(m.selected.Role)
-	}
-	tabs := make([]string, len(sections))
-	for i, name := range sections {
-		label := fmt.Sprintf("%d %s", i+1, name)
-		if section(i) == m.section {
-			tabs[i] = activeTabStyle.Render(label)
-		} else {
-			tabs[i] = tabStyle.Render(label)
-		}
-	}
-	return brandStyle.Render("CONN") + "  " + projectStyle.Render(project) + "\n" + strings.Join(tabs, " ")
-}
 func clean(value string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {

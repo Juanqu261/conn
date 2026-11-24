@@ -93,6 +93,8 @@ func semanticModel(client *httpclient.Client, role protocol.Role) model {
 	m.members.Members = []protocol.ProjectMember{{Human: human, Membership: protocol.ProjectMembership{ProjectID: projectID, HumanID: human.HumanID, Role: role}}}
 	m.radar.Objectives = []protocol.RadarObjective{{ObjectiveID: uuid.NewV7(), Revision: 1, Title: "Safe checkout retries"}}
 	m.radar.Repositories = []protocol.RepositoryConnection{{RepositoryID: uuid.NewV7(), ProjectID: projectID, HostKind: "github", CanonicalRemote: "github.com/acme/payments", AnalysisEnabled: true}}
+	// These tests read whole reviews; layout_test.go covers scrolling.
+	m.width, m.height = 100, 80
 	return m
 }
 
@@ -187,7 +189,7 @@ func TestPublishIntentSendsCharterRepositoryAssumptionsAndClaims(t *testing.T) {
 		t.Fatal("an incomplete claim line did not keep the claims form open with an error")
 	}
 	m.area.SetValue("invariant changes invariant:checkout:one-idempotency-key-one-successful-charge One key, one charge")
-	if m = pressKeys(t, m, "ctrl+s"); m.screen != intentConfirmScreen || !strings.Contains(m.View(), "One key, one charge") {
+	if m = pressKeys(t, m, "ctrl+s"); m.screen != intentConfirmScreen || !strings.Contains(m.intentReview(), "One key, one charge") {
 		t.Fatalf("claims did not open the review: screen %d\n%s", m.screen, m.View())
 	}
 
@@ -316,8 +318,9 @@ func TestDecisionFlowEnforcesOwnerAuthorityAndAdoptsAProposal(t *testing.T) {
 	owner = pressKeys(t, owner, "ctrl+s")
 	owner.input.SetValue("meeting:retry-sync, note:checkout")
 	owner = pressKeys(t, owner, "enter")
-	if owner.screen != decisionConfirmScreen || !strings.Contains(owner.View(), proposal.ProposalID.String()) {
-		t.Fatalf("decision did not reach its review:\n%s", owner.View())
+	if view := owner.View(); owner.screen != decisionConfirmScreen || !strings.Contains(view, "sequencing proposal by a participant: Land the gateway change first.") ||
+		strings.Contains(view, proposal.ProposalID.String()) {
+		t.Fatalf("decision review must name the selected proposal, not its ID:\n%s", view)
 	}
 	_, done := submit(t, owner)
 	request := fake.last(t)
