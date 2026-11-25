@@ -115,6 +115,30 @@ func (t projectTx) ResolutionDecisions(ctx context.Context, projectID uuid.UUID)
 	return decisions, rows.Err()
 }
 
+func (t projectTx) EvidenceReferences(ctx context.Context, projectID, objectiveID uuid.UUID, objectiveRevision int) ([]protocol.EvidenceReference, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT document FROM evidence_references
+		WHERE project_id = $1 AND objective_id = $2 AND objective_revision = $3
+		ORDER BY observed_at, evidence_id`, projectID, objectiveID, objectiveRevision)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	evidence := []protocol.EvidenceReference{}
+	for rows.Next() {
+		var document []byte
+		if err := rows.Scan(&document); err != nil {
+			return nil, err
+		}
+		item, err := protocol.Decode[protocol.EvidenceReference](document)
+		if err != nil {
+			return nil, fmt.Errorf("stored evidence reference: %w", err)
+		}
+		evidence = append(evidence, item)
+	}
+	return evidence, rows.Err()
+}
+
 func (t projectTx) ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error) {
 	rows, err := t.tx.Query(ctx, `
 		SELECT e.document FROM evidence_references e

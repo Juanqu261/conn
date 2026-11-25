@@ -76,6 +76,7 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		"release_intent":        {false, true, false, false},
 		"check_collisions":      {true, true, false, false},
 		"read_radar":            {true, true, false, false},
+		"read_work_context":     {true, true, false, false},
 		"read_conflict_context": {true, true, false, false},
 		"propose_resolution":    {false, false, false, false},
 		"attach_evidence":       {false, false, false, false},
@@ -147,6 +148,7 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"revise Intent with defaulted nested ID", "revise_intent", map[string]any{"intent_id": intentID, "expected_revision": 1, "intent": validIntent}},
 		{"attach evidence with defaulted nested ID", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": validEvidence}},
 		{"submit non-binding proposal", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first."}}},
+		{"read focused work context", "read_work_context", map[string]any{"project_id": "019a8f00-0001-7000-8000-000000000001", "objective_id": objectiveID, "after": 0, "limit": 100}},
 	}
 	for _, tc := range accepted {
 		t.Run("accepts "+tc.name, func(t *testing.T) {
@@ -181,6 +183,8 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"raw evidence log", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": mergeMap(validEvidence, "raw_log", "all output")}},
 		{"binding proposal field", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first.", "binding": true}}},
 		{"zero expected revision", "revise_intent", map[string]any{"intent_id": intentID, "expected_revision": 0, "intent": validIntent}},
+		{"work-context authority selector", "read_work_context", map[string]any{"human_id": intentID}},
+		{"work-context unknown field", "read_work_context", map[string]any{"diagnostics": []any{}}},
 	}
 	for _, tc := range rejected {
 		t.Run("rejects "+tc.name, func(t *testing.T) {

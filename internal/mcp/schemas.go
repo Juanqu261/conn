@@ -84,6 +84,24 @@ func collisionsToolSchema() map[string]any {
 	})
 }
 
+func workContextToolSchema() map[string]any {
+	after := canonicalDefinition("urn:conn:schema:v1:common", "eventSequence")
+	after["minimum"] = 0
+	after["description"] = "Optional last observed Project event cursor. Omit it to return no event-history page."
+	return objectSchema(nil, map[string]any{
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
+		"objective_id": idSchema("Optional Objective UUID selecting one current focus."),
+		"intent_id":    idSchema("Optional owned Intent UUID selecting its exact Objective and Blueprint revisions."),
+		"after":        after,
+		"limit": map[string]any{
+			"type":        "integer",
+			"minimum":     1,
+			"maximum":     500,
+			"description": "Maximum later Project events to return when after is supplied. Defaults to 100.",
+		},
+	})
+}
+
 func selectProjectToolSchema() map[string]any {
 	return objectSchema([]string{"project_id"}, map[string]any{
 		"project_id": idSchema("Visible Project ID to select for this MCP process."),

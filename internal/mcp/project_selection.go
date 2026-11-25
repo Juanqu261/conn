@@ -34,6 +34,7 @@ const (
 type selectedProject struct {
 	ProjectID       uuid.UUID
 	Source          selectionSource
+	RepositoryID    uuid.UUID
 	RepositoryMatch string
 	SelectedAt      time.Time
 }
@@ -48,13 +49,13 @@ func newProjectSelection() *projectSelection {
 	return &projectSelection{now: time.Now}
 }
 
-func (s *projectSelection) set(projectID uuid.UUID, source selectionSource, repositoryMatch string) selectedProject {
+func (s *projectSelection) set(projectID uuid.UUID, source selectionSource, repositoryID uuid.UUID, repositoryMatch string) selectedProject {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.selected != nil && s.selected.ProjectID == projectID && s.selected.Source == source && s.selected.RepositoryMatch == repositoryMatch {
+	if s.selected != nil && s.selected.ProjectID == projectID && s.selected.Source == source && s.selected.RepositoryID == repositoryID && s.selected.RepositoryMatch == repositoryMatch {
 		return *s.selected
 	}
-	selection := selectedProject{ProjectID: projectID, Source: source, RepositoryMatch: repositoryMatch, SelectedAt: s.now()}
+	selection := selectedProject{ProjectID: projectID, Source: source, RepositoryID: repositoryID, RepositoryMatch: repositoryMatch, SelectedAt: s.now()}
 	s.selected = &selection
 	return selection
 }
@@ -144,7 +145,7 @@ func (t tools) selectProject(ctx context.Context, _ *sdk.CallToolRequest, in sel
 	if err != nil {
 		return nil, projectSelectionOutput{}, t.toolError("select_project", err)
 	}
-	t.selection.set(projectID, selectionExplicit, "")
+	t.selection.set(projectID, selectionExplicit, uuid.UUID{}, "")
 	output := projectSelectionOutput{Selected: choices[0], Source: string(selectionExplicit)}
 	return statusResult(fmt.Sprintf("Selected Project %s (%s) for this MCP process.", output.Selected.Name, output.Selected.ProjectID)), output, nil
 }
@@ -192,7 +193,7 @@ func (t tools) resolveProject(ctx context.Context, client *httpclient.Client, ex
 		return selectedProject{}, errors.New("the signed-in Human has no Conn Projects")
 	case 1:
 		entry := projects.Projects[0]
-		return t.selection.set(entry.Project.ProjectID, selectionSoleProject, ""), nil
+		return t.selection.set(entry.Project.ProjectID, selectionSoleProject, uuid.UUID{}, ""), nil
 	}
 
 	metadata, discoverErr := t.discoverRepository(ctx)
@@ -205,10 +206,15 @@ func (t tools) resolveProject(ctx context.Context, client *httpclient.Client, ex
 			return selectedProject{}, err
 		}
 		if len(matches) == 1 {
-			return t.selection.set(matches[0].Project.ProjectID, selectionRepositoryMatch, metadata.CanonicalRemote), nil
+			match := matches[0]
+			return t.selection.set(match.Entry.Project.ProjectID, selectionRepositoryMatch, match.Repository.RepositoryID, metadata.CanonicalRemote), nil
 		}
 		if len(matches) > 1 {
-			choices, truncated, err := loadProjectChoices(ctx, client, matches)
+			entries := make([]protocol.ProjectListEntry, 0, len(matches))
+			for _, match := range matches {
+				entries = append(entries, match.Entry)
+			}
+			choices, truncated, err := loadProjectChoices(ctx, client, entries)
 			if err != nil {
 				return selectedProject{}, err
 			}
@@ -230,8 +236,13 @@ func (t tools) discoverRepository(ctx context.Context) (repositorygit.Metadata, 
 	return repositorygit.Discover(ctx, ".")
 }
 
-func matchingProjects(ctx context.Context, client *httpclient.Client, projects []protocol.ProjectListEntry, canonicalRemote string) ([]protocol.ProjectListEntry, error) {
-	matches := make([]protocol.ProjectListEntry, 0, len(projects))
+type repositoryProjectMatch struct {
+	Entry      protocol.ProjectListEntry
+	Repository protocol.RepositoryConnection
+}
+
+func matchingProjects(ctx context.Context, client *httpclient.Client, projects []protocol.ProjectListEntry, canonicalRemote string) ([]repositoryProjectMatch, error) {
+	matches := make([]repositoryProjectMatch, 0, len(projects))
 	for _, entry := range projects {
 		repositories, err := client.RepositoryConnections(ctx, entry.Project.ProjectID)
 		if err != nil {
@@ -239,7 +250,7 @@ func matchingProjects(ctx context.Context, client *httpclient.Client, projects [
 		}
 		for _, repository := range repositories.Data.Repositories {
 			if repository.CanonicalRemote == canonicalRemote {
-				matches = append(matches, entry)
+				matches = append(matches, repositoryProjectMatch{Entry: entry, Repository: repository})
 				break
 			}
 		}

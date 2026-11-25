@@ -80,7 +80,7 @@ func TestProjectSelectionPrecedence(t *testing.T) {
 			backend := newSelectionBackend(t, tc.projects, tc.repositories)
 			selection := newProjectSelection()
 			if tc.sessionProject != nil {
-				selection.set(tc.sessionProject.ProjectID, selectionExplicit, "")
+				selection.set(tc.sessionProject.ProjectID, selectionExplicit, uuid.UUID{}, "")
 			}
 			adapter := tools{
 				cfg: Config{
@@ -106,8 +106,10 @@ func TestProjectSelectionPrecedence(t *testing.T) {
 			if err != nil || resolved.Source != tc.wantSource {
 				t.Fatalf("selection = %+v, %v; want source %s", resolved, err, tc.wantSource)
 			}
-			if tc.wantSource == selectionRepositoryMatch && resolved.RepositoryMatch != tc.discoveredRemote {
-				t.Fatalf("repository match = %q, want %q", resolved.RepositoryMatch, tc.discoveredRemote)
+			if tc.wantSource == selectionRepositoryMatch {
+				if resolved.RepositoryMatch != tc.discoveredRemote || resolved.RepositoryID == (uuid.UUID{}) {
+					t.Fatalf("repository selection = %s (%s), want %q with an ID", resolved.RepositoryMatch, resolved.RepositoryID, tc.discoveredRemote)
+				}
 			}
 		})
 	}
@@ -195,7 +197,7 @@ func TestProjectSelectionPrecedence(t *testing.T) {
 			projectA.ProjectID: {}, projectB.ProjectID: {},
 		})
 		first := tools{cfg: Config{Client: func() (*httpclient.Client, error) { return backend.client, nil }}, selection: newProjectSelection()}
-		first.selection.set(projectB.ProjectID, selectionExplicit, "")
+		first.selection.set(projectB.ProjectID, selectionExplicit, uuid.UUID{}, "")
 		resolved, err := first.resolveProject(ctx, backend.client, "")
 		if err != nil || resolved.ProjectID != projectB.ProjectID {
 			t.Fatalf("first process selection = %+v, %v", resolved, err)

@@ -64,6 +64,14 @@ type projectInput struct {
 	ProjectID string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
 }
 
+type workContextInput struct {
+	ProjectID   string `json:"project_id,omitempty"`
+	ObjectiveID string `json:"objective_id,omitempty"`
+	IntentID    string `json:"intent_id,omitempty"`
+	After       *int64 `json:"after,omitempty"`
+	Limit       int    `json:"limit,omitempty"`
+}
+
 type collisionIDInput struct {
 	ProjectID   string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
 	CollisionID string `json:"collision_id" jsonschema:"Collision assessment UUID."`
@@ -151,6 +159,12 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 		InputSchema: projectToolSchema(),
 		Annotations: reads("Read Radar"),
 	}, t.readRadar)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "read_work_context",
+		Description: "Read one bounded participant-focused context with exact revisions, own Charters, owned active Intents, related collisions, evidence coverage, updates, and one authoritative event cursor.",
+		InputSchema: workContextToolSchema(),
+		Annotations: reads("Read work context"),
+	}, t.readWorkContext)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "read_conflict_context",
 		Description: "Read a bounded, source-free context pack for one collision. Returns {data: context_pack, as_of_event}.",
@@ -434,6 +448,50 @@ func (t tools) readRadar(ctx context.Context, _ *sdk.CallToolRequest, in project
 		return t.fail("read_radar", err)
 	}
 	return reply(fmt.Sprintf("Radar for %s: %d active Intent(s), %d open collision(s).", result.Data.Project.Name, len(result.Data.ActiveIntents), len(result.Data.OpenCollisions)), result.Data, result.AsOfEvent)
+}
+
+func (t tools) readWorkContext(ctx context.Context, _ *sdk.CallToolRequest, in workContextInput) (*sdk.CallToolResult, any, error) {
+	client, err := t.client()
+	if err != nil {
+		return t.fail("read_work_context", err)
+	}
+	selected, err := t.resolveProject(ctx, client, in.ProjectID)
+	if err != nil {
+		return t.fail("read_work_context", err)
+	}
+	var objectiveID, intentID uuid.UUID
+	if in.ObjectiveID != "" {
+		if objectiveID, err = parseID("objective_id", in.ObjectiveID); err != nil {
+			return t.fail("read_work_context", err)
+		}
+	}
+	if in.IntentID != "" {
+		if intentID, err = parseID("intent_id", in.IntentID); err != nil {
+			return t.fail("read_work_context", err)
+		}
+	}
+	limit := in.Limit
+	if limit == 0 {
+		limit = 100
+	}
+	result, err := client.WorkContext(ctx, selected.ProjectID, objectiveID, intentID, in.After, limit)
+	if err != nil {
+		return t.fail("read_work_context", err)
+	}
+	view := result.Data
+	view.Selection = protocol.WorkContextSelection{Source: protocol.WorkContextSelectionSource(selected.Source)}
+	if selected.Source == selectionRepositoryMatch {
+		view.Selection.RepositoryMatch = &protocol.WorkContextRepositoryMatch{
+			RepositoryID: selected.RepositoryID, CanonicalRemote: selected.RepositoryMatch,
+		}
+	}
+	summary := fmt.Sprintf("Work context for Project %s at event %d.", view.Project.Name, result.AsOfEvent)
+	if view.Focus != nil {
+		summary += fmt.Sprintf(" Objective %s revision %d is selected.", view.Focus.Objective.ObjectiveID, view.Focus.Objective.Revision)
+	} else if len(view.FocusChoices) > 0 {
+		summary += fmt.Sprintf(" Select one of %d focus choices before relying on governing context.", len(view.FocusChoices))
+	}
+	return reply(summary, view, result.AsOfEvent)
 }
 
 func (t tools) readConflictContext(ctx context.Context, _ *sdk.CallToolRequest, in collisionIDInput) (*sdk.CallToolResult, any, error) {

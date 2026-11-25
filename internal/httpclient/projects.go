@@ -50,6 +50,35 @@ func (c *Client) Radar(ctx context.Context, projectID uuid.UUID) (Result[protoco
 	return read[protocol.RadarView](ctx, c, projectPath(projectID)+"/radar")
 }
 
+// WorkContext reads one exact participant-focused coordination snapshot.
+func (c *Client) WorkContext(ctx context.Context, projectID, objectiveID, intentID uuid.UUID, after *int64, limit int) (Result[protocol.WorkContext], error) {
+	query := url.Values{}
+	if objectiveID != (uuid.UUID{}) {
+		query.Set("objective_id", objectiveID.String())
+	}
+	if intentID != (uuid.UUID{}) {
+		query.Set("intent_id", intentID.String())
+	}
+	if after != nil {
+		query.Set("after", strconv.FormatInt(*after, 10))
+	}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	path := projectPath(projectID) + "/work-context"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	result, err := read[protocol.WorkContext](ctx, c, path)
+	if err != nil {
+		return Result[protocol.WorkContext]{}, err
+	}
+	if result.Data.AsOfEvent != result.AsOfEvent {
+		return Result[protocol.WorkContext]{}, errors.New("the Conn server returned inconsistent work-context event cursors")
+	}
+	return result, nil
+}
+
 // ConflictContext reads a portable, source-free context pack for one collision.
 func (c *Client) ConflictContext(ctx context.Context, projectID, collisionID uuid.UUID) (Result[protocol.ConflictContextPack], error) {
 	return read[protocol.ConflictContextPack](ctx, c, fmt.Sprintf("%s/collisions/%s/context", projectPath(projectID), collisionID))

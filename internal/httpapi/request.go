@@ -65,6 +65,41 @@ func pathID(w http.ResponseWriter, r *http.Request, log *slog.Logger, name strin
 	return id, true
 }
 
+func queryOptionalID(w http.ResponseWriter, r *http.Request, log *slog.Logger, name string) (uuid.UUID, bool) {
+	values, present := r.URL.Query()[name]
+	if !present || len(values) == 0 || values[0] == "" {
+		return uuid.UUID{}, true
+	}
+	if len(values) != 1 {
+		writeInvalid(w, log, "The "+name+" query parameter may be supplied only once.", "")
+		return uuid.UUID{}, false
+	}
+	id, err := uuid.Parse(values[0])
+	if err != nil {
+		writeInvalid(w, log, "The "+name+" query parameter must be a UUID.", "")
+		return uuid.UUID{}, false
+	}
+	return id, true
+}
+
+func allowQueryParameters(w http.ResponseWriter, r *http.Request, log *slog.Logger, allowed ...string) bool {
+	set := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		set[name] = true
+	}
+	for name, values := range r.URL.Query() {
+		if !set[name] {
+			writeInvalid(w, log, "Unknown query parameter: "+name+".", "")
+			return false
+		}
+		if len(values) > 1 {
+			writeInvalid(w, log, "The "+name+" query parameter may be supplied only once.", "")
+			return false
+		}
+	}
+	return true
+}
+
 // pathRevision parses a positive revision path segment.
 func pathRevision(w http.ResponseWriter, r *http.Request, log *slog.Logger, name string) (int, bool) {
 	n, err := strconv.Atoi(r.PathValue(name))
