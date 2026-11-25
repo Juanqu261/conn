@@ -372,7 +372,7 @@ func elicitationResponse(req *sdk.CallToolRequest, id string) (*sdk.ElicitResult
 }
 
 func clientCapabilities(req *sdk.CallToolRequest) clientCapabilityStatus {
-	status := clientCapabilityStatus{StructuredResult: true}
+	status := clientCapabilityStatus{StructuredResult: true, Prompts: true, ResourceTemplates: true}
 	if req == nil || req.Session == nil {
 		return status
 	}

@@ -88,7 +88,8 @@ func TestMCPAccountLifecycle(t *testing.T) {
 
 	status := callAccountTool[sessionStatusOutput](t, ctx, session, "session_status", nil)
 	if status.Human != nil || status.Credential.Valid || status.Server.URL != backend.server.URL || !status.Server.Reachable || !status.Server.Ready ||
-		status.ProjectSelection.Source != "env" || !status.Analyzer.Available || !status.Capabilities.InteractiveLogin || !status.Capabilities.ConfirmedLogout {
+		status.ProjectSelection.Source != "env" || !status.Analyzer.Available || !status.Capabilities.InteractiveLogin || !status.Capabilities.ConfirmedLogout ||
+		!status.Capabilities.Prompts || !status.Capabilities.ResourceTemplates {
 		t.Fatalf("initial session_status = %+v", status)
 	}
 

@@ -51,6 +51,7 @@ func Serve(ctx context.Context, in io.ReadCloser, out io.WriteCloser, cfg Config
 		Logger:       cfg.Log,
 	})
 	interactions := registerTools(server, cfg)
+	registerWorkflows(server, cfg)
 	defer interactions.clear()
 
 	err := server.Run(ctx, &sdk.IOTransport{Reader: in, Writer: out})

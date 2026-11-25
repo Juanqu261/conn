@@ -153,6 +153,30 @@ func TestMCPStdio(t *testing.T) {
 	if want := []string{"attach_evidence", "check_collisions", "check_updates", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
+	listedPrompts, err := session.ListPrompts(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var promptNames []string
+	for _, prompt := range listedPrompts.Prompts {
+		promptNames = append(promptNames, prompt.Name)
+	}
+	slices.Sort(promptNames)
+	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
+		t.Fatalf("prompts %v, want %v", promptNames, want)
+	}
+	listedTemplates, err := session.ListResourceTemplates(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var templateNames []string
+	for _, template := range listedTemplates.ResourceTemplates {
+		templateNames = append(templateNames, template.Name)
+	}
+	slices.Sort(templateNames)
+	if want := []string{"conn-collision-context", "conn-intent-handoff", "conn-work-context"}; !slices.Equal(templateNames, want) {
+		t.Fatalf("resource templates %v, want %v", templateNames, want)
+	}
 
 	call := func(name string, args map[string]any) (summary string, data json.RawMessage, asOf int64) {
 		t.Helper()
@@ -315,6 +339,27 @@ func TestMCPStdio(t *testing.T) {
 	_ = response.Body.Close()
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("work-context authority query status = %d, want 422", response.StatusCode)
+	}
+	workResourceURI := "conn://projects/" + projectID.String() + "/work-context?intent_id=" + bobIntentID.String()
+	workResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: workResourceURI})
+	if err != nil || len(workResource.Contents) != 1 || workResource.Contents[0].Meta["safe_handling_note"] == nil {
+		t.Fatalf("work-context resource: %+v, %v", workResource, err)
+	}
+	if resourceWork, err := protocol.Decode[protocol.WorkContext]([]byte(workResource.Contents[0].Text)); err != nil || resourceWork.Focus == nil {
+		t.Fatalf("work-context resource document: %v", err)
+	}
+	collisionResourceURI := "conn://projects/" + projectID.String() + "/collisions/" + collision.CollisionID.String() + "/context"
+	collisionResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: collisionResourceURI})
+	if err != nil || len(collisionResource.Contents) != 1 {
+		t.Fatalf("collision resource: %+v, %v", collisionResource, err)
+	}
+	if resourceContext, err := protocol.Decode[protocol.ConflictContextPack]([]byte(collisionResource.Contents[0].Text)); err != nil || resourceContext.Collision.CollisionID != collision.CollisionID || resourceContext.SafeHandlingNote == "" {
+		t.Fatalf("collision resource document: %v", err)
+	}
+	handoffResourceURI := "conn://projects/" + projectID.String() + "/intents/" + bobIntentID.String() + "/handoff"
+	handoffResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: handoffResourceURI})
+	if err != nil || len(handoffResource.Contents) != 1 || !strings.Contains(handoffResource.Contents[0].Text, "Safe handling") {
+		t.Fatalf("handoff resource: %+v, %v", handoffResource, err)
 	}
 
 	// Context retrieval is a read through the authenticated HTTP client, and a
