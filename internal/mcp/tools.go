@@ -16,7 +16,9 @@ import (
 )
 
 // Tool inputs select what to read. None of them names a human: authority
-// always comes from the Conn session. Unknown properties are rejected.
+// always comes from the Conn session. Unknown properties are rejected. Maps
+// for canonical nested documents exist only between SDK schema validation and
+// protocol.Decode, which runs before HTTP transmission.
 
 type objectiveInput struct {
 	ProjectID   string `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
@@ -68,9 +70,9 @@ type collisionIDInput struct {
 }
 
 type proposalInput struct {
-	ProjectID   string                           `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
-	CollisionID string                           `json:"collision_id" jsonschema:"Collision assessment UUID."`
-	Proposal    protocol.ResolutionProposalInput `json:"proposal" jsonschema:"Non-binding resolution proposal content."`
+	ProjectID   string         `json:"project_id,omitempty" jsonschema:"Project ID. Defaults to CONN_PROJECT."`
+	CollisionID string         `json:"collision_id" jsonschema:"Collision assessment UUID."`
+	Proposal    map[string]any `json:"proposal" jsonschema:"Non-binding resolution proposal content."`
 }
 
 type evidenceInput struct {
@@ -82,7 +84,7 @@ type evidenceInput struct {
 func registerTools(server *sdk.Server, cfg Config) {
 	t := tools{cfg: cfg}
 	closed := false
-	annotations := func(title string) *sdk.ToolAnnotations {
+	reads := func(title string) *sdk.ToolAnnotations {
 		return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closed}
 	}
 	writes := func(title string, idempotent bool) *sdk.ToolAnnotations {
@@ -92,35 +94,79 @@ func registerTools(server *sdk.Server, cfg Config) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "read_objective",
 		Description: "Read one immutable Objective revision: the narrative overview and its keyed points. Returns {data: objective, as_of_event}.",
-		Annotations: annotations("Read objective"),
+		InputSchema: objectiveToolSchema(),
+		Annotations: reads("Read objective"),
 	}, t.readObjective)
 	sdk.AddTool(server, &sdk.Tool{
 		Name: "read_blueprint",
 		Description: "Read one BlueprintRevision with every cell charter and its status. Only an active revision is approved. " +
 			"Returns {data: {blueprint_revision, status}, as_of_event}.",
-		Annotations: annotations("Read blueprint"),
+		InputSchema: blueprintToolSchema(),
+		Annotations: reads("Read blueprint"),
 	}, t.readBlueprint)
 	sdk.AddTool(server, &sdk.Tool{
 		Name: "read_my_charter",
 		Description: "Read the charters you are accountable for in a blueprint revision in force, with each decision. " +
 			"You are the human signed in to Conn; this tool cannot read as anyone else. " +
 			"Returns {data: {human_id, blueprint_id, revision, status, objective_id, objective_revision, charters}, as_of_event}.",
-		Annotations: annotations("Read my charter"),
+		InputSchema: blueprintToolSchema(),
+		Annotations: reads("Read my charter"),
 	}, t.readMyCharter)
 	sdk.AddTool(server, &sdk.Tool{
 		Name: "check_updates",
 		Description: "List committed project events after a cursor, oldest first. Pass the as_of_event from your last Conn read. " +
 			"Returns {data: [events], as_of_event}.",
-		Annotations: annotations("Check updates"),
+		InputSchema: updatesToolSchema(),
+		Annotations: reads("Check updates"),
 	}, t.checkUpdates)
-	sdk.AddTool(server, &sdk.Tool{Name: "publish_intent", Description: "Publish an Intent for your authenticated Conn participant. Omit intent.intent_id to let Conn assign a new UUIDv7; reuse a returned intent_id to retry idempotently. The input cannot choose a human or participant.", Annotations: writes("Publish Intent", true)}, t.publishIntent)
-	sdk.AddTool(server, &sdk.Tool{Name: "revise_intent", Description: "Append an immutable revision to your own active Intent using expected_revision. intent.intent_id defaults to intent_id.", Annotations: writes("Revise Intent", false)}, t.reviseIntent)
-	sdk.AddTool(server, &sdk.Tool{Name: "release_intent", Description: "Release your own active Intent without deleting its history.", Annotations: writes("Release Intent", true)}, t.releaseIntent)
-	sdk.AddTool(server, &sdk.Tool{Name: "check_collisions", Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.", Annotations: annotations("Check collisions")}, t.checkCollisions)
-	sdk.AddTool(server, &sdk.Tool{Name: "read_radar", Description: "Read the member-authorized Radar coordination snapshot. Returns {data: radar, as_of_event}.", Annotations: annotations("Read Radar")}, t.readRadar)
-	sdk.AddTool(server, &sdk.Tool{Name: "read_conflict_context", Description: "Read a bounded, source-free context pack for one collision. Returns {data: context_pack, as_of_event}.", Annotations: annotations("Read conflict context")}, t.readConflictContext)
-	sdk.AddTool(server, &sdk.Tool{Name: "propose_resolution", Description: "Record a non-binding participant resolution proposal. This cannot make a decision or change project boundaries.", Annotations: writes("Propose resolution", false)}, t.proposeResolution)
-	sdk.AddTool(server, &sdk.Tool{Name: "attach_evidence", Description: "Attach bounded reference-only evidence to your own active Intent. evidence.intent_id defaults to intent_id. Conn never accepts raw logs, source, prompts, or authority fields.", Annotations: writes("Attach evidence", false)}, t.attachEvidence)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "publish_intent",
+		Description: "Publish an Intent for your authenticated Conn participant. Omit intent.intent_id to let Conn assign a new UUIDv7; reuse a returned intent_id to retry idempotently. The input cannot choose a human or participant.",
+		InputSchema: publishIntentToolSchema(),
+		Annotations: writes("Publish Intent", false),
+	}, t.publishIntent)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "revise_intent",
+		Description: "Append an immutable revision to your own active Intent using expected_revision. intent.intent_id defaults to intent_id.",
+		InputSchema: reviseIntentToolSchema(),
+		Annotations: writes("Revise Intent", true),
+	}, t.reviseIntent)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "release_intent",
+		Description: "Release your own active Intent without deleting its history.",
+		InputSchema: intentIDToolSchema("Owned active Intent UUID to release."),
+		Annotations: writes("Release Intent", true),
+	}, t.releaseIntent)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "check_collisions",
+		Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.",
+		InputSchema: collisionsToolSchema(),
+		Annotations: reads("Check collisions"),
+	}, t.checkCollisions)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "read_radar",
+		Description: "Read the member-authorized Radar coordination snapshot. Returns {data: radar, as_of_event}.",
+		InputSchema: projectToolSchema(),
+		Annotations: reads("Read Radar"),
+	}, t.readRadar)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "read_conflict_context",
+		Description: "Read a bounded, source-free context pack for one collision. Returns {data: context_pack, as_of_event}.",
+		InputSchema: collisionIDToolSchema(),
+		Annotations: reads("Read conflict context"),
+	}, t.readConflictContext)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "propose_resolution",
+		Description: "Record a non-binding participant resolution proposal. This cannot make a decision or change project boundaries.",
+		InputSchema: proposalToolSchema(),
+		Annotations: writes("Propose resolution", false),
+	}, t.proposeResolution)
+	sdk.AddTool(server, &sdk.Tool{
+		Name:        "attach_evidence",
+		Description: "Attach bounded reference-only evidence to your own active Intent. evidence.intent_id defaults to intent_id. Conn never accepts raw logs, source, prompts, or authority fields.",
+		InputSchema: evidenceToolSchema(),
+		Annotations: writes("Attach evidence", false),
+	}, t.attachEvidence)
 }
 
 type tools struct {
@@ -408,7 +454,11 @@ func (t tools) proposeResolution(ctx context.Context, _ *sdk.CallToolRequest, in
 	if err != nil {
 		return t.fail("propose_resolution", err)
 	}
-	result, err := client.ProposeResolution(ctx, projectID, collisionID, in.Proposal)
+	proposal, err := decodeToolDocument[protocol.ResolutionProposalInput](in.Proposal)
+	if err != nil {
+		return t.fail("propose_resolution", err)
+	}
+	result, err := client.ProposeResolution(ctx, projectID, collisionID, proposal)
 	if err != nil {
 		return t.fail("propose_resolution", err)
 	}
