@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 
@@ -57,10 +58,12 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 			protocolOut := os.Stdout
 			os.Stdout = os.Stderr
 			return mcp.Serve(ctx, os.Stdin, protocolOut, mcp.Config{
-				Version:        version,
-				Client:         service.Client,
-				DefaultProject: cfg.DefaultProject,
-				Log:            log,
+				Version:           version,
+				Account:           service,
+				Client:            service.Client,
+				DefaultProject:    cfg.DefaultProject,
+				AnalyzerAvailable: localAnalyzerAvailable,
+				Log:               log,
 			})
 		},
 		Account: accountService,
@@ -88,6 +91,14 @@ func accountService(serverURL string) (*account.Service, error) {
 		GitHub:    github.Production,
 		HTTP:      httpClient,
 	}, nil
+}
+
+func localAnalyzerAvailable() bool {
+	if _, err := exec.LookPath("node"); err != nil {
+		return false
+	}
+	info, err := os.Stat("packages/typescript-analyzer/dist/cli.js")
+	return err == nil && !info.IsDir()
 }
 
 func loadDevSettings() *devenv.Result {

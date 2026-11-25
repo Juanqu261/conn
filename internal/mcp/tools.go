@@ -81,8 +81,9 @@ type evidenceInput struct {
 	Evidence  map[string]any `json:"evidence" jsonschema:"Bounded reference-only evidence. Its intent_id must match intent_id."`
 }
 
-func registerTools(server *sdk.Server, cfg Config) {
-	t := tools{cfg: cfg}
+func registerTools(server *sdk.Server, cfg Config) *interactionStore {
+	interactions := newInteractionStore(cfg.Account)
+	t := tools{cfg: cfg, interactions: interactions}
 	closed := false
 	reads := func(title string) *sdk.ToolAnnotations {
 		return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closed}
@@ -167,10 +168,13 @@ func registerTools(server *sdk.Server, cfg Config) {
 		InputSchema: evidenceToolSchema(),
 		Annotations: writes("Attach evidence", false),
 	}, t.attachEvidence)
+	registerAccountTools(server, t)
+	return interactions
 }
 
 type tools struct {
-	cfg Config
+	cfg          Config
+	interactions *interactionStore
 }
 
 func (t tools) readObjective(ctx context.Context, _ *sdk.CallToolRequest, in objectiveInput) (*sdk.CallToolResult, any, error) {

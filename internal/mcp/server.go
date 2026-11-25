@@ -1,6 +1,7 @@
 // Package mcp adapts Conn to Kiro through the official MCP Go SDK. It
-// exposes only read-only tools, which call the same authenticated backend
-// client as the CLI and never touch the database.
+// exposes authenticated coordination tools and direct account interactions
+// over stdio, calls the same backend and account boundaries as the CLI, and
+// never touches the database.
 package mcp
 
 import (
@@ -11,20 +12,27 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Juanqu261/conn/internal/account"
 	"github.com/Juanqu261/conn/internal/httpclient"
 )
 
 // Config holds what the tools need.
 type Config struct {
 	Version string
+	// Account owns authentication, credential precedence, keyring access, and
+	// logout behavior used by interactive MCP account tools.
+	Account *account.Service
 	// Client returns a backend client authenticated with the human's Conn
-	// session. It is called for every tool call, so a `conn login` during
-	// the Kiro session takes effect without a restart.
+	// session. It is called for every tool call, so a login during the Kiro
+	// session takes effect without a restart.
 	Client func() (*httpclient.Client, error)
 	// DefaultProject is CONN_PROJECT from the Kiro MCP configuration. Tool
 	// input may select another project the human belongs to.
 	DefaultProject string
-	Log            *slog.Logger
+	// AnalyzerAvailable reports whether the local Node.js analyzer artifact is
+	// available. It performs no analysis and reads no credential.
+	AnalyzerAvailable func() bool
+	Log               *slog.Logger
 }
 
 const instructions = "Conn tools read your team's shared Objective, Blueprint, charters, Intents, collision assessments, and Radar. " +
@@ -38,7 +46,8 @@ func Serve(ctx context.Context, in io.ReadCloser, out io.WriteCloser, cfg Config
 		Instructions: instructions,
 		Logger:       cfg.Log,
 	})
-	registerTools(server, cfg)
+	interactions := registerTools(server, cfg)
+	defer interactions.clear()
 
 	err := server.Run(ctx, &sdk.IOTransport{Reader: in, Writer: out})
 	if err == nil || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {

@@ -62,21 +62,26 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 	}
 
 	wantAnnotations := map[string]struct {
-		readOnly   bool
-		idempotent bool
+		readOnly    bool
+		idempotent  bool
+		destructive bool
+		openWorld   bool
 	}{
-		"read_objective":        {true, true},
-		"read_blueprint":        {true, true},
-		"read_my_charter":       {true, true},
-		"check_updates":         {true, true},
-		"publish_intent":        {false, false},
-		"revise_intent":         {false, true},
-		"release_intent":        {false, true},
-		"check_collisions":      {true, true},
-		"read_radar":            {true, true},
-		"read_conflict_context": {true, true},
-		"propose_resolution":    {false, false},
-		"attach_evidence":       {false, false},
+		"read_objective":        {true, true, false, false},
+		"read_blueprint":        {true, true, false, false},
+		"read_my_charter":       {true, true, false, false},
+		"check_updates":         {true, true, false, false},
+		"publish_intent":        {false, false, false, false},
+		"revise_intent":         {false, true, false, false},
+		"release_intent":        {false, true, false, false},
+		"check_collisions":      {true, true, false, false},
+		"read_radar":            {true, true, false, false},
+		"read_conflict_context": {true, true, false, false},
+		"propose_resolution":    {false, false, false, false},
+		"attach_evidence":       {false, false, false, false},
+		"session_status":        {true, true, false, false},
+		"login":                 {false, false, false, true},
+		"logout":                {false, true, true, false},
 	}
 	for name, want := range wantAnnotations {
 		tool := tools[name]
@@ -87,15 +92,15 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		if annotations.ReadOnlyHint != want.readOnly || annotations.IdempotentHint != want.idempotent {
 			t.Errorf("tool %s annotations = readOnly %t, idempotent %t", name, annotations.ReadOnlyHint, annotations.IdempotentHint)
 		}
-		if annotations.OpenWorldHint == nil || *annotations.OpenWorldHint {
-			t.Errorf("tool %s must describe Conn as a closed-world service", name)
+		if annotations.OpenWorldHint == nil || *annotations.OpenWorldHint != want.openWorld {
+			t.Errorf("tool %s openWorldHint = %v, want %t", name, annotations.OpenWorldHint, want.openWorld)
 		}
 		if want.readOnly {
 			if annotations.DestructiveHint != nil {
 				t.Errorf("read-only tool %s declares destructiveHint", name)
 			}
-		} else if annotations.DestructiveHint == nil || *annotations.DestructiveHint {
-			t.Errorf("additive write tool %s must set destructiveHint false", name)
+		} else if annotations.DestructiveHint == nil || *annotations.DestructiveHint != want.destructive {
+			t.Errorf("tool %s destructiveHint = %v, want %t", name, annotations.DestructiveHint, want.destructive)
 		}
 	}
 
