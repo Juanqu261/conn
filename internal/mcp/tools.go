@@ -83,7 +83,8 @@ type evidenceInput struct {
 
 func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	interactions := newInteractionStore(cfg.Account)
-	t := tools{cfg: cfg, interactions: interactions}
+	selection := newProjectSelection()
+	t := tools{cfg: cfg, interactions: interactions, selection: selection}
 	closed := false
 	reads := func(title string) *sdk.ToolAnnotations {
 		return &sdk.ToolAnnotations{Title: title, ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closed}
@@ -169,16 +170,18 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 		Annotations: writes("Attach evidence", false),
 	}, t.attachEvidence)
 	registerAccountTools(server, t)
+	registerProjectTools(server, t)
 	return interactions
 }
 
 type tools struct {
 	cfg          Config
 	interactions *interactionStore
+	selection    *projectSelection
 }
 
 func (t tools) readObjective(ctx context.Context, _ *sdk.CallToolRequest, in objectiveInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("read_objective", err)
 	}
@@ -211,7 +214,7 @@ func (t tools) readObjective(ctx context.Context, _ *sdk.CallToolRequest, in obj
 }
 
 func (t tools) readBlueprint(ctx context.Context, _ *sdk.CallToolRequest, in blueprintInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("read_blueprint", err)
 	}
@@ -230,7 +233,7 @@ func (t tools) readBlueprint(ctx context.Context, _ *sdk.CallToolRequest, in blu
 }
 
 func (t tools) readMyCharter(ctx context.Context, _ *sdk.CallToolRequest, in blueprintInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("read_my_charter", err)
 	}
@@ -295,7 +298,7 @@ func (t tools) checkUpdates(ctx context.Context, _ *sdk.CallToolRequest, in upda
 	if in.After < 0 || limit < 1 || limit > 500 {
 		return t.fail("check_updates", errors.New("after must be at least 0 and limit from 1 to 500"))
 	}
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("check_updates", err)
 	}
@@ -329,7 +332,7 @@ func (t tools) checkUpdates(ctx context.Context, _ *sdk.CallToolRequest, in upda
 }
 
 func (t tools) publishIntent(ctx context.Context, _ *sdk.CallToolRequest, in intentMutationInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("publish_intent", err)
 	}
@@ -351,7 +354,7 @@ func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in revi
 	if in.ExpectedRevision < 1 {
 		return t.fail("revise_intent", errors.New("expected_revision must be positive"))
 	}
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("revise_intent", err)
 	}
@@ -374,7 +377,7 @@ func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in revi
 }
 
 func (t tools) releaseIntent(ctx context.Context, _ *sdk.CallToolRequest, in intentIDInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("release_intent", err)
 	}
@@ -390,7 +393,7 @@ func (t tools) releaseIntent(ctx context.Context, _ *sdk.CallToolRequest, in int
 }
 
 func (t tools) checkCollisions(ctx context.Context, _ *sdk.CallToolRequest, in collisionsInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("check_collisions", err)
 	}
@@ -422,7 +425,7 @@ func (t tools) checkCollisions(ctx context.Context, _ *sdk.CallToolRequest, in c
 }
 
 func (t tools) readRadar(ctx context.Context, _ *sdk.CallToolRequest, in projectInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("read_radar", err)
 	}
@@ -434,7 +437,7 @@ func (t tools) readRadar(ctx context.Context, _ *sdk.CallToolRequest, in project
 }
 
 func (t tools) readConflictContext(ctx context.Context, _ *sdk.CallToolRequest, in collisionIDInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("read_conflict_context", err)
 	}
@@ -450,7 +453,7 @@ func (t tools) readConflictContext(ctx context.Context, _ *sdk.CallToolRequest, 
 }
 
 func (t tools) proposeResolution(ctx context.Context, _ *sdk.CallToolRequest, in proposalInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("propose_resolution", err)
 	}
@@ -470,7 +473,7 @@ func (t tools) proposeResolution(ctx context.Context, _ *sdk.CallToolRequest, in
 }
 
 func (t tools) attachEvidence(ctx context.Context, _ *sdk.CallToolRequest, in evidenceInput) (*sdk.CallToolResult, any, error) {
-	client, projectID, err := t.session(in.ProjectID)
+	client, projectID, err := t.session(ctx, in.ProjectID)
 	if err != nil {
 		return t.fail("attach_evidence", err)
 	}
@@ -492,24 +495,18 @@ func (t tools) attachEvidence(ctx context.Context, _ *sdk.CallToolRequest, in ev
 	return reply(fmt.Sprintf("Attached %s evidence %s to Intent %s.", result.Data.State, result.Data.EvidenceID, intentID), result.Data, result.AsOfEvent)
 }
 
-// session resolves the human's backend client and the selected project.
-func (t tools) session(projectInput string) (*httpclient.Client, uuid.UUID, error) {
-	raw := projectInput
-	if raw == "" {
-		raw = t.cfg.DefaultProject
-	}
-	if raw == "" {
-		return nil, uuid.UUID{}, errors.New("no project selected. Pass project_id, or ask the human to set CONN_PROJECT in the Kiro MCP configuration")
-	}
-	projectID, err := parseID("project_id", raw)
+// session resolves the backend client and deterministic process-local Project
+// context. Backend authorization remains authoritative for the operation.
+func (t tools) session(ctx context.Context, projectInput string) (*httpclient.Client, uuid.UUID, error) {
+	client, err := t.client()
 	if err != nil {
 		return nil, uuid.UUID{}, err
 	}
-	client, err := t.cfg.Client()
+	selected, err := t.resolveProject(ctx, client, projectInput)
 	if err != nil {
 		return nil, uuid.UUID{}, err
 	}
-	return client.WithAdapter("kiro"), projectID, nil
+	return client, selected.ProjectID, nil
 }
 
 // selectRevision picks a blueprint and revision for read_blueprint. An
@@ -535,11 +532,15 @@ func (t tools) selectRevision(ctx context.Context, client *httpclient.Client, pr
 // fail reports err as a tool error the agent can act on. Internal details
 // stay in the log on standard error.
 func (t tools) fail(tool string, err error) (*sdk.CallToolResult, any, error) {
+	return nil, nil, t.toolError(tool, err)
+}
+
+func (t tools) toolError(tool string, err error) error {
 	message := describe(err)
 	if t.cfg.Log != nil {
 		t.cfg.Log.Warn("tool failed", "tool", tool, "error", err)
 	}
-	return nil, nil, errors.New(message)
+	return errors.New(message)
 }
 
 // describe turns an error into a message that tells the agent what the

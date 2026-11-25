@@ -80,6 +80,8 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		"propose_resolution":    {false, false, false, false},
 		"attach_evidence":       {false, false, false, false},
 		"session_status":        {true, true, false, false},
+		"list_projects":         {true, true, false, false},
+		"select_project":        {false, true, false, false},
 		"login":                 {false, false, false, true},
 		"logout":                {false, true, true, false},
 	}

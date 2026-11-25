@@ -49,9 +49,10 @@ type sessionCredentialStatus struct {
 }
 
 type projectSelectionStatus struct {
-	State     string `json:"state"`
-	Source    string `json:"source,omitempty"`
-	ProjectID string `json:"project_id,omitempty"`
+	State           string `json:"state"`
+	Source          string `json:"source,omitempty"`
+	ProjectID       string `json:"project_id,omitempty"`
+	RepositoryMatch string `json:"repository_match,omitempty"`
 }
 
 type analyzerStatus struct {
@@ -132,7 +133,14 @@ func (t tools) sessionStatus(ctx context.Context, req *sdk.CallToolRequest, _ st
 	}
 	output.Human = sessionHuman(status.Human)
 	output.Problems = append(output.Problems, status.Problems...)
-	if t.cfg.DefaultProject != "" {
+	if selected, ok := t.selection.get(); ok {
+		output.ProjectSelection = projectSelectionStatus{
+			State:           "selected",
+			Source:          string(selected.Source),
+			ProjectID:       selected.ProjectID.String(),
+			RepositoryMatch: selected.RepositoryMatch,
+		}
+	} else if t.cfg.DefaultProject != "" {
 		output.ProjectSelection = projectSelectionStatus{State: "configured", Source: "env", ProjectID: t.cfg.DefaultProject}
 		if _, err := parseID("CONN_PROJECT", t.cfg.DefaultProject); err != nil {
 			output.ProjectSelection.State = "invalid"

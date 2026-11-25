@@ -14,6 +14,7 @@ import (
 
 	"github.com/Juanqu261/conn/internal/account"
 	"github.com/Juanqu261/conn/internal/httpclient"
+	"github.com/Juanqu261/conn/internal/repositorygit"
 )
 
 // Config holds what the tools need.
@@ -32,7 +33,10 @@ type Config struct {
 	// AnalyzerAvailable reports whether the local Node.js analyzer artifact is
 	// available. It performs no analysis and reads no credential.
 	AnalyzerAvailable func() bool
-	Log               *slog.Logger
+	// DiscoverRepository reads only normalized, credential-free local Git
+	// identity for Project matching. Nil uses the current worktree.
+	DiscoverRepository func(context.Context) (repositorygit.Metadata, error)
+	Log                *slog.Logger
 }
 
 const instructions = "Conn tools read your team's shared Objective, Blueprint, charters, Intents, collision assessments, and Radar. " +

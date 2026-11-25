@@ -17,7 +17,7 @@ var canonicalSchemas = sync.OnceValues(loadCanonicalSchemas)
 // or defaults before decoding through protocol.Decode.
 func objectiveToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
-		"project_id":   idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"objective_id": idSchema("Objective ID. Optional when the Project has one Objective."),
 		"revision":     revisionSchema("Objective revision. Defaults to the latest."),
 	})
@@ -25,7 +25,7 @@ func objectiveToolSchema() map[string]any {
 
 func blueprintToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"blueprint_id": idSchema("Blueprint ID. Optional when the Project has one Blueprint, or when the signed-in Human " +
 			"has Charters in only one Blueprint."),
 		"revision": revisionSchema("Blueprint revision. Defaults to the active revision, or the latest when none is active."),
@@ -37,7 +37,7 @@ func updatesToolSchema() map[string]any {
 	after["minimum"] = 0
 	after["description"] = "The as_of_event value from the last Conn read, or 0 for the full history."
 	return objectSchema([]string{"after"}, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"after":      after,
 		"limit": map[string]any{
 			"type":        "integer",
@@ -53,7 +53,7 @@ func publishIntentToolSchema() map[string]any {
 	removeRequired(intent, "intent_id")
 	intent["description"] = "Participant-authored Intent content. Omit intent_id to let Conn assign a UUIDv7. Conn derives Human and Participant authority."
 	return objectSchema([]string{"intent"}, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"intent":     intent,
 	})
 }
@@ -63,7 +63,7 @@ func reviseIntentToolSchema() map[string]any {
 	removeRequired(intent, "intent_id")
 	intent["description"] = "Complete replacement Intent content. Omitted intent_id defaults to the top-level intent_id; a supplied value must match it."
 	return objectSchema([]string{"intent_id", "expected_revision", "intent"}, map[string]any{
-		"project_id":        idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id":        idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"intent_id":         idSchema("Owned active Intent UUID to revise."),
 		"expected_revision": revisionSchema("Current Intent revision required for optimistic concurrency."),
 		"intent":            intent,
@@ -72,27 +72,33 @@ func reviseIntentToolSchema() map[string]any {
 
 func intentIDToolSchema(description string) map[string]any {
 	return objectSchema([]string{"intent_id"}, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"intent_id":  idSchema(description),
 	})
 }
 
 func collisionsToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"intent_id":  idSchema("Optional Intent UUID. When present, return only its open collision assessments."),
+	})
+}
+
+func selectProjectToolSchema() map[string]any {
+	return objectSchema([]string{"project_id"}, map[string]any{
+		"project_id": idSchema("Visible Project ID to select for this MCP process."),
 	})
 }
 
 func projectToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 	})
 }
 
 func collisionIDToolSchema() map[string]any {
 	return objectSchema([]string{"collision_id"}, map[string]any{
-		"project_id":   idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"collision_id": idSchema("Collision assessment UUID."),
 	})
 }
@@ -101,7 +107,7 @@ func proposalToolSchema() map[string]any {
 	proposal := canonicalRecord("urn:conn:schema:v1:resolution-proposal-input")
 	proposal["description"] = "Non-binding participant resolution proposal content. It cannot carry decision authority."
 	return objectSchema([]string{"collision_id", "proposal"}, map[string]any{
-		"project_id":   idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"collision_id": idSchema("Collision assessment UUID."),
 		"proposal":     proposal,
 	})
@@ -112,7 +118,7 @@ func evidenceToolSchema() map[string]any {
 	removeRequired(evidence, "intent_id")
 	evidence["description"] = "Bounded reference-only evidence. Omitted intent_id defaults to the top-level intent_id; a supplied value must match it."
 	return objectSchema([]string{"intent_id", "evidence"}, map[string]any{
-		"project_id": idSchema("Project ID. Defaults to CONN_PROJECT."),
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
 		"intent_id":  idSchema("Owned active Intent UUID."),
 		"evidence":   evidence,
 	})
