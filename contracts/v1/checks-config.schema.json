@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:checks-config",
+  "title": "Repository check configuration",
+  "description": "The committed .conn/checks.json file. Each check is a reviewed command, run as an argument array without a shell by `conn evidence run`, that proves zero or more acceptance criteria. Values are repository content, never secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "checks"],
+  "properties": {
+    "version": { "const": 1 },
+    "checks": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 50,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/check" }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "timeout_seconds"],
+      "properties": {
+        "command": {
+          "description": "Program and arguments. The first item is the program; no shell interprets any item.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\x00]*$"
+          }
+        },
+        "working_directory": {
+          "description": "Repository-relative directory. Absolute paths and parent segments are rejected; the CLI also rejects symlink escapes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\x00\\r\\n]*$",
+          "not": { "pattern": "^[/\\\\]|^[A-Za-z]:|(^|[/\\\\])\\.\\.([/\\\\]|$)" }
+        },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "acceptance_keys": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/key" }
+        },
+        "env": {
+          "description": "Literal environment values added to the run. Names starting with CONN_ are reserved and rejected.",
+          "type": "object",
+          "maxProperties": 50,
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Z_][A-Z0-9_]*$",
+            "not": { "pattern": "^CONN_" }
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024,
+            "pattern": "^[^\\x00]*$"
+          }
+        }
+      }
+    }
+  }
+}

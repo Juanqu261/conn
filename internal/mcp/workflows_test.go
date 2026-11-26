@@ -82,7 +82,7 @@ func TestWorkflowDiscoveryAndFocusedResourceFallbacks(t *testing.T) {
 		}
 	}
 	slices.Sort(promptNames)
-	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
+	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-review", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
 		t.Fatalf("prompts = %v, want %v", promptNames, want)
 	}
 	if !promptArgumentRequired(prompts["conn-sync"], "last_event") || !promptArgumentRequired(prompts["conn-resolve"], "collision_id") {
@@ -119,9 +119,16 @@ func TestWorkflowDiscoveryAndFocusedResourceFallbacks(t *testing.T) {
 		t.Error("conn-resolve omitted proposal authority or safe handling")
 	}
 	finish := promptText("conn-finish", nil)
-	assertOrdered(t, finish, "read_work_context", "analyze_intent", "check_collisions", "attach_evidence")
-	if !strings.Contains(finish, "Intent release does not prove Objective") || !strings.Contains(finish, "If analyze_intent is present") || !strings.Contains(finish, "without paths") {
-		t.Error("conn-finish omitted completion boundary, analyzer capability check, or diff-based analysis")
+	assertOrdered(t, finish, "read_work_context", "revise_intent", "head_revision_ref", "analyze_intent", "check_collisions", "conn evidence run", "attach_evidence", "read_review_packet")
+	for _, phrase := range []string{"Intent release does not prove Objective", "If analyze_intent is present", "without paths", "Ask the human before running each one", "commit_trailer", "never run checks through MCP tools"} {
+		if !strings.Contains(finish, phrase) {
+			t.Errorf("conn-finish omitted %q", phrase)
+		}
+	}
+	reviewPrompt := promptText("conn-review", map[string]string{"output": "review.md"})
+	assertOrdered(t, reviewPrompt, "read_work_context", "analyze_intent", "check_collisions", "read_review_packet", "gh pr create --body-file")
+	if !strings.Contains(reviewPrompt, "ask the Human for approval") || !strings.Contains(reviewPrompt, "never runs analysis or checks") {
+		t.Error("conn-review omitted analysis approval or the read-only packet boundary")
 	}
 	handoff := promptText("conn-handoff", map[string]string{"output": "markdown"})
 	if !strings.Contains(handoff, "Exclude raw source") || !strings.Contains(handoff, "continuation cursor") || !strings.Contains(handoff, "without persisting") {

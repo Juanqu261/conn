@@ -27,7 +27,7 @@ func TestBundleTemplatesAreWarnOnlyCommandHooks(t *testing.T) {
 		contents[filepath.ToSlash(artifact.RelativePath)] = string(artifact.Content)
 	}
 	steering := contents[".kiro/steering/conn-work-loop.md"]
-	for _, phrase := range []string{"inclusion: always", "/conn-start", "list_concepts", "suggest_claims", "/conn-sync", "/conn-finish", "Do not start background polling", "only warn", "optional planning context", "not Charter acceptance"} {
+	for _, phrase := range []string{"inclusion: always", "/conn-start", "list_concepts", "suggest_claims", "/conn-sync", "/conn-finish", "/conn-review", "conn evidence run", "Conn-Intent: <intent-id>@<revision>", "commit_trailer", "not independent CI proof", "Do not start background polling", "only warn", "optional planning context", "not Charter acceptance"} {
 		if !strings.Contains(steering, phrase) {
 			t.Errorf("steering omitted %q", phrase)
 		}

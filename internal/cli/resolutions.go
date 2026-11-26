@@ -136,12 +136,14 @@ func proposalAuthor(proposal protocol.ResolutionProposal) string {
 }
 
 func newEvidenceCommand(deps Dependencies, streams Streams) *cobra.Command {
-	evidence := group("evidence", "Attach reference-only evidence to your own Intents")
+	evidence := group("evidence", "Run reviewed checks and attach reference-only evidence to your Intents")
 	attach := &cobra.Command{
 		Use:   "attach",
-		Short: "Attach reference-only evidence from JSON to your own active Intent",
-		Long: "Attach an evidence-attachment-input document to your own active Intent as your CLI participant.\n" +
-			"Conn stores the locator, state, optional hash, and summary only, never logs or artifacts.",
+		Short: "Attach reference-only evidence from JSON to an active Intent of yours",
+		Long: "Attach an evidence-attachment-input document to an active Intent owned by any of your\n" +
+			"Participants, recorded as your CLI participant. Conn stores the locator, state, optional\n" +
+			"hash, and summary only, never logs or artifacts. Evidence without an observation is labelled\n" +
+			"reported; use `conn evidence run` for observed check runs.",
 		Args: cobra.NoArgs,
 	}
 	r := newRemote(attach, deps, streams)
@@ -170,7 +172,7 @@ func newEvidenceCommand(deps Dependencies, streams Streams) *cobra.Command {
 			fmt.Fprintf(out, "Attached %s %s evidence %s to Intent %s (%s).\n", item.State, item.Kind, item.EvidenceID, input.IntentID, key)
 		})
 	}
-	evidence.AddCommand(attach)
+	evidence.AddCommand(attach, newEvidenceRunCommand(deps, streams))
 	return evidence
 }
 

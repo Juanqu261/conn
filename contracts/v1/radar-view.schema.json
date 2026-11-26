@@ -149,6 +149,12 @@
             "type": "array",
             "maxItems": 50,
             "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+          },
+          "provenance": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceProvenance" },
+          "commit": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+          "stale": {
+            "description": "True when the latest evidence was observed at a commit other than its Intent's recorded head revision.",
+            "type": "boolean"
           }
         }
       }

@@ -16,6 +16,7 @@ import (
 	"github.com/Juanqu261/conn/internal/preedit"
 	"github.com/Juanqu261/conn/internal/protocol"
 	"github.com/Juanqu261/conn/internal/repositorygit"
+	"github.com/Juanqu261/conn/internal/review"
 )
 
 type analyzeIntentInput struct {
@@ -208,14 +209,7 @@ func analysisRepository(repositories []protocol.RepositoryConnection, repository
 }
 
 func intentCollisions(collisions []protocol.CollisionAssessment, intentID uuid.UUID, revision int) []protocol.CollisionAssessment {
-	result := make([]protocol.CollisionAssessment, 0, len(collisions))
-	for _, collision := range collisions {
-		if (collision.LeftIntentID == intentID && collision.LeftIntentRevision == revision) ||
-			(collision.RightIntentID == intentID && collision.RightIntentRevision == revision) {
-			result = append(result, collision)
-		}
-	}
-	return result
+	return review.IntentCollisions(collisions, intentID, revision)
 }
 
 func (t tools) discoverAnalysisRepository(ctx context.Context, worktree string) (repositorygit.Metadata, error) {

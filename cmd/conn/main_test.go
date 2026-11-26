@@ -150,7 +150,7 @@ func TestMCPStdio(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_concepts", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status", "suggest_claims"}; !slices.Equal(names, want) {
+	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_concepts", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_review_packet", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status", "suggest_claims"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
 	listedPrompts, err := session.ListPrompts(ctx, nil)
@@ -162,7 +162,7 @@ func TestMCPStdio(t *testing.T) {
 		promptNames = append(promptNames, prompt.Name)
 	}
 	slices.Sort(promptNames)
-	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
+	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-review", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
 		t.Fatalf("prompts %v, want %v", promptNames, want)
 	}
 	listedTemplates, err := session.ListResourceTemplates(ctx, nil)

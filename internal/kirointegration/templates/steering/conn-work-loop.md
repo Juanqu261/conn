@@ -20,8 +20,10 @@ Conn warns you before you edit when other in-progress work changes the same beha
 
 ## Finishing
 
-- Use `/conn-finish` only when the human asks to finish or release work. It analyzes the diff against the Intent base and rechecks collisions. Keep missing evidence and unresolved collisions explicit.
-- Use `/conn-handoff` for a bounded generated handoff. Exclude source, diffs, prompts, transcripts, credentials, and unbounded logs.
+- Use `/conn-finish` only when the human asks to finish or release work. It records the current commit as the Intent's `head_revision_ref`, analyzes that revision against the Intent base, rechecks collisions, offers the checks in `.conn/checks.json`, and generates the review packet. Keep missing evidence and unresolved collisions explicit.
+- Commits name their Intent with the trailer `Conn-Intent: <intent-id>@<revision>`. When the Conn Git hook is not installed, pass the `focus.commit_trailer` value from work context: `git commit --trailer "<commit_trailer>"`.
+- Observed evidence comes only from `conn evidence run <check-key>` in the shell, for checks defined in `.conn/checks.json`. Ask the human before each run, never edit `.conn/checks.json` to make a check pass, and remember that a local run is observed on this machine, not independent CI proof.
+- Use `/conn-review` for a pull-request description built from `read_review_packet`. Use `/conn-handoff` for a bounded generated handoff. Exclude source, diffs, prompts, transcripts, credentials, and unbounded logs.
 - Intent release does not prove Objective, Charter, pull-request, deployment, or Project completion.
 
 ## Authority

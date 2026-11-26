@@ -176,6 +176,19 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 			if len(view.OwnedActiveIntents) == 0 {
 				view.KnownUnknowns = append(view.KnownUnknowns, "No owned active Intent is published for this focus. This is absence of reported work, not completion.")
 			}
+			if focus.SelectedIntent != nil {
+				selected := *focus.SelectedIntent
+				for _, intent := range intents {
+					if intent.IntentRevision.IntentID == selected.IntentID && intent.Status == "active" {
+						focus.CommitTrailer = protocol.CommitTrailer(selected.IntentID, selected.Revision)
+					}
+				}
+				if analysis, err := tx.LatestAnalysis(ctx, projectID, selected.IntentID, selected.Revision); err == nil {
+					focus.Analysis = &analysis
+				} else if !errors.Is(err, ErrNotFound) {
+					return err
+				}
+			}
 
 			ownedIDs := make(map[uuid.UUID]bool, len(view.OwnedActiveIntents))
 			for _, intent := range view.OwnedActiveIntents {
@@ -216,17 +229,19 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 				return err
 			}
 			truncatedCoverage := false
+			heads := intentHeads(intents)
 			for _, point := range selectedObjective.KeyPoints {
 				if point.Kind != protocol.KeyPointAcceptanceCriterion {
 					continue
 				}
-				coverage, truncated := coverageFor(*selectedObjective, point.Key, evidence)
+				coverage, truncated := coverageFor(*selectedObjective, point.Key, evidence, heads)
 				truncatedCoverage = truncatedCoverage || truncated
 				view.AcceptanceEvidenceCoverage = append(view.AcceptanceEvidenceCoverage, coverage)
 			}
 			if truncatedCoverage {
 				view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Some acceptance criteria have more than %d evidence references; only the most recent are included.", maxRadarCoverageRefs))
 			}
+			view.KnownUnknowns = append(view.KnownUnknowns, coverageNotes(view.AcceptanceEvidenceCoverage)...)
 			if len(view.AcceptanceEvidenceCoverage) == 0 {
 				view.KnownUnknowns = append(view.KnownUnknowns, "This Objective revision has no keyed acceptance criteria available for evidence coverage.")
 			}
@@ -275,8 +290,17 @@ func selectWorkFocus(ctx context.Context, tx Tx, projectID, humanID uuid.UUID, p
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
+		// Any Participant of the signed-in Human may focus the Human's
+		// Intent, so terminal check runs and review packets can address an
+		// Intent that the Human's Kiro participant owns.
 		if participant == nil || intent.IntentRevision.ParticipantID != participant.ParticipantID {
-			return nil, nil, nil, false, ErrNotFound
+			owner, err := tx.ParticipantByID(ctx, projectID, intent.IntentRevision.ParticipantID)
+			if err != nil {
+				return nil, nil, nil, false, err
+			}
+			if owner.HumanID != humanID {
+				return nil, nil, nil, false, ErrNotFound
+			}
 		}
 		if query.ObjectiveID != (uuid.UUID{}) && intent.IntentRevision.ObjectiveID != query.ObjectiveID {
 			return nil, nil, nil, false, &InvalidError{Message: "The selected Intent belongs to a different Objective."}

@@ -57,6 +57,7 @@ const instructions = "Conn tells you, before you edit, when other in-progress wo
 	"Before editing, call list_concepts and suggest_claims for the planned paths, publish or revise your Intent with the chosen claims, and call check_collisions. " +
 	"Tools read your team's Objectives, optional Blueprints and Charters, Intents, collision assessments, and Radar. " +
 	"They may publish, revise, or release only the signed-in human's participant-owned Intents and may attach bounded reference-only evidence or non-binding resolution proposals. " +
+	"Before review, read_review_packet states what the change intended, touched, and verified; observed check runs come only from `conn evidence run` in the shell, with the human's approval. " +
 	"Humans alone make binding decisions. Your human identity comes from the Conn session, not from tool input."
 
 // Serve runs one MCP session over in and out until the client disconnects or

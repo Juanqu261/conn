@@ -56,12 +56,22 @@ func registerWorkflowPrompts(server *sdk.Server) {
 	server.AddPrompt(&sdk.Prompt{
 		Name:        "conn-finish",
 		Title:       "Finish Conn work",
-		Description: "Verify exact revisions, analyze the diff against the Intent base, recheck collisions, and attach evidence before revising or releasing an owned Intent.",
+		Description: "Record the head revision, analyze that revision against the Intent base, recheck collisions, offer human-approved check runs, attach supplied evidence, and generate the review packet before releasing an owned Intent.",
 		Arguments: []*sdk.PromptArgument{
 			{Name: "intent_id", Title: "Intent ID", Description: "Optional owned Intent UUID. Require an explicit choice when context is ambiguous."},
 			{Name: "evidence_locators", Title: "Evidence locators", Description: "Optional human-supplied bounded references, not raw logs or source."},
 		},
 	}, workflowPrompt(finishWorkflow))
+
+	server.AddPrompt(&sdk.Prompt{
+		Name:        "conn-review",
+		Title:       "Generate the Conn review packet",
+		Description: "Analyze with approval, recheck collisions, and produce the review packet as a pull-request description.",
+		Arguments: []*sdk.PromptArgument{
+			{Name: "intent_id", Title: "Intent ID", Description: "Optional Intent UUID. Defaults to the Intent focused in this worktree."},
+			{Name: "output", Title: "Output file", Description: "Optional repository-relative file for the Markdown packet, for gh pr create --body-file."},
+		},
+	}, workflowPrompt(reviewWorkflow))
 
 	server.AddPrompt(&sdk.Prompt{
 		Name:        "conn-handoff",
@@ -127,15 +137,24 @@ const resolveWorkflow = `Review one advisory Conn collision:
 4. If useful, call propose_resolution with a non-binding proposal owned by the authenticated Participant.
 5. Report that only a Human-authoritative surface can record a binding ResolutionDecision or accepted risk. Never simulate that decision.` + workflowBoundary
 
-const finishWorkflow = `Evaluate whether to revise, release, or hand off one owned Intent:
-1. Call read_work_context with intent_id when supplied. Stop on focus ambiguity or stale exact revisions.
-2. Compare the exact Objective, repository, and current Intent revisions, and the optional Blueprint and own Charter when present. A proposed, rejected, superseded, pending, or missing Charter is not an accepted boundary, and Charters remain optional.
-3. If analyze_intent is present in the discovered tool list and the repository is eligible, call it with intent_id and expected_intent_revision from the exact focused Intent and without paths, so observed analysis uses the diff between the Intent base revision and the working tree. Each Intent revision accepts one analysis. Otherwise report local analysis as unavailable and continue with declared claims.
+const finishWorkflow = `Finish one owned Intent in this order, so the review packet describes exactly what was analyzed and verified:
+1. Call read_work_context with intent_id when supplied. Stop on focus ambiguity or stale exact revisions. Compare the exact Objective, repository, and current Intent revisions, and the optional Blueprint and own Charter when present; Charters remain optional.
+2. When the agent's changes are committed, call revise_intent with the complete current content and head_revision_ref set to the current commit (git rev-parse HEAD). Each Intent revision accepts one analysis, so record the head before analyzing. Commit with the focus.commit_trailer value from work context (git commit --trailer "<commit_trailer>") when the Conn Git hook is not installed.
+3. If analyze_intent is present in the discovered tool list and the repository is eligible, call it with intent_id and expected_intent_revision from the revision you just recorded and without paths, so observed analysis uses the diff between the Intent base revision and the working tree. Otherwise report local analysis as unavailable and continue with declared claims.
 4. Call check_collisions after analysis and keep every collision that needs attention explicit.
-5. Map only bounded reference-first evidence to the exact acceptance keys. Call attach_evidence only for references the Human supplied or explicitly approved; never attach raw logs, source, diffs, prompts, transcripts, or credentials.
-6. Reread work context after writes. Identify missing, stale, inaccessible, failing, or unknown evidence. Do not infer that unrelated tests prove an acceptance criterion.
-7. Revise or release only the authenticated Participant's own Intent when appropriate, using the exact current revision. Reread focused context after the mutation and report its authoritative cursor.
-8. State explicitly that Intent release does not prove Objective, Charter, pull-request, deployment, or Project completion.` + workflowBoundary
+5. Read .conn/checks.json when it exists and list the checks whose acceptance_keys map to the Objective's acceptance criteria. Ask the human before running each one, then run it through the shell as: conn evidence run <check-key>. Never run a check without approval, never edit .conn/checks.json to make a check pass, and never run checks through MCP tools.
+6. Call attach_evidence only for reported references the Human supplied or explicitly approved; never attach raw logs, source, diffs, prompts, transcripts, or credentials. attach_evidence cannot record observed runs.
+7. Call read_review_packet and present scope drift, stale or uncommitted evidence, reported evidence, the checks-configuration flag, and open collisions. Do not infer that unrelated tests prove an acceptance criterion. Further changes after analysis need a new Intent revision before analysis can run again.
+8. Release only when the Human asks, using the exact current revision of the authenticated Participant's own Intent, and reread focused context after the mutation.
+9. State explicitly that Intent release does not prove Objective, Charter, pull-request, deployment, or Project completion.` + workflowBoundary
+
+const reviewWorkflow = `Produce the Conn review packet for one Intent as a pull-request description:
+1. Call read_work_context with intent_id when supplied, or without it to use the focused Intent. Stop on focus ambiguity.
+2. If analyze_intent is present and the current Intent revision has no observed analysis (focus.analysis is absent or names an earlier revision), ask the Human for approval, then call it with the exact current revision and without paths. Analysis is a write; skip it when the Human declines and let the packet report drift as not analyzed.
+3. Call check_collisions for the Intent.
+4. Call read_review_packet with format markdown. It is read-only and never runs analysis or checks.
+5. Present the packet without rewording its facts. Offer to write the Markdown to the requested output file, or to a file the Human names, for gh pr create --body-file <file>. Write the file only after approval and never commit it unless asked.
+6. Point out integrity notes, stale or reported evidence, drift, and open collisions that the reviewer should check. Never present the packet as approval, CI proof, or completion.` + workflowBoundary
 
 const handoffWorkflow = `Generate a bounded handoff without persisting a new handoff record:
 1. Call read_work_context with intent_id when supplied. Stop on ambiguity and require one exact focus.

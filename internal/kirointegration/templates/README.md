@@ -8,6 +8,8 @@ This directory contains the versioned source for Conn's optional Kiro-specific g
 
 The bundle is not required for Conn. MCP tools and prompts remain the complete integration core when these files are absent.
 
+The steering also describes the review-proof loop: `Conn-Intent` commit trailers, `conn evidence run` for checks in `.conn/checks.json`, and `/conn-review`. The commit-trailer Git hook is not part of this bundle; install it separately with `conn git-hook install`.
+
 ## Inspect-first workflow
 
 Preview a workspace installation without writing:

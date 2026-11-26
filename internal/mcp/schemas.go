@@ -196,11 +196,39 @@ func proposalToolSchema() map[string]any {
 func evidenceToolSchema() map[string]any {
 	evidence := canonicalRecord("urn:conn:schema:v1:evidence-attachment-input")
 	removeRequired(evidence, "intent_id")
-	evidence["description"] = "Bounded reference-only evidence. Omitted intent_id defaults to the top-level intent_id; a supplied value must match it."
+	// Only `conn evidence run` records observed check runs. The MCP adapter
+	// attaches reported evidence, so it neither offers nor accepts an
+	// observation or the check_run kind that requires one.
+	properties, _ := evidence["properties"].(map[string]any)
+	delete(properties, "observation")
+	delete(evidence, "allOf")
+	if kind, ok := properties["kind"].(map[string]any); ok {
+		if values, ok := kind["enum"].([]any); ok {
+			reported := make([]any, 0, len(values))
+			for _, value := range values {
+				if value != "check_run" {
+					reported = append(reported, value)
+				}
+			}
+			kind["enum"] = reported
+		}
+	}
+	evidence["description"] = "Bounded reference-only reported evidence. Omitted intent_id defaults to the top-level intent_id; a supplied value must match it. Observed check runs come only from `conn evidence run`."
 	return objectSchema([]string{"intent_id", "evidence"}, map[string]any{
 		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
-		"intent_id":  idSchema("Owned active Intent UUID."),
+		"intent_id":  idSchema("Active Intent UUID owned by any Participant of the signed-in Human."),
 		"evidence":   evidence,
+	})
+}
+
+func reviewPacketToolSchema() map[string]any {
+	return objectSchema(nil, map[string]any{
+		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
+		"intent_id":  idSchema("Intent UUID of the signed-in Human. Defaults to the Intent focused in the trusted worktree."),
+		"format": map[string]any{
+			"enum":        []any{"markdown", "json"},
+			"description": "markdown renders a pull-request-ready description under 60,000 characters; json returns the versioned review-packet document. Defaults to markdown.",
+		},
 	})
 }
 

@@ -314,6 +314,32 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/intents/{intent_id}/evidence", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		intentID, ok := pathID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		result, err := projects.IntentEvidence(r.Context(), s.Human.HumanID, projectID, intentID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/decisions/{decision_id}", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok {
+			return
+		}
+		decisionID, ok := pathID(w, r, log, "decision_id")
+		if !ok {
+			return
+		}
+		result, err := projects.ResolutionDecision(r.Context(), s.Human.HumanID, projectID, decisionID)
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("POST /v1/projects/{project_id}/intents/{intent_id}/evidence", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
