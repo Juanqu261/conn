@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,12 +33,25 @@ var (
 )
 
 // Request is the source-free, credential-free subprocess input contract.
+// Planned requests name the paths a participant intends to change; observed
+// requests compare BaseRevisionRef with the worktree. BaseRevisionRef is sent
+// only in observed mode and Symbols only in planned mode.
 type Request struct {
-	Worktree        string   `json:"worktree"`
-	CanonicalRemote string   `json:"canonical_remote"`
-	TSConfigPath    string   `json:"tsconfig_path,omitempty"`
-	Paths           []string `json:"paths,omitempty"`
+	RequestVersion  int                 `json:"request_version"`
+	Mode            string              `json:"mode"`
+	Worktree        string              `json:"worktree"`
+	CanonicalRemote string              `json:"canonical_remote"`
+	TSConfigPath    string              `json:"tsconfig_path,omitempty"`
+	Paths           []string            `json:"paths,omitempty"`
+	Symbols         map[string][]string `json:"symbols,omitempty"`
+	BaseRevisionRef string              `json:"base_revision_ref,omitempty"`
 }
+
+// Planned and observed request bounds.
+const (
+	MaxPlannedPaths  = 50
+	MaxObservedPaths = 500
+)
 
 // Config locates the Node executable and built analyzer program.
 type Config struct {
@@ -59,7 +73,25 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 	// The child's stderr is never surfaced, so diagnose the most common
 	// setup failure here rather than as an opaque process failure.
 	if info, err := os.Stat(cfg.AnalyzerPath); err != nil || info.IsDir() {
-		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: analyzer script %q was not found; build it with `pnpm build` or pass --analyzer-script", ErrUnavailable, cfg.AnalyzerPath)
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: analyzer script %q was not found; build it with `pnpm build`, set %s, or pass --analyzer-script", ErrUnavailable, cfg.AnalyzerPath, AnalyzerPathEnv)
+	}
+	request.RequestVersion = protocol.AnalyzerReportVersion
+	switch request.Mode {
+	case protocol.AnalyzerModePlanned:
+		if len(request.Paths) == 0 || len(request.Paths) > MaxPlannedPaths {
+			return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: planned analysis needs 1 to %d paths", ErrInvalid, MaxPlannedPaths)
+		}
+		request.BaseRevisionRef = ""
+	case protocol.AnalyzerModeObserved:
+		if len(request.Paths) > MaxObservedPaths {
+			return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: observed analysis accepts at most %d paths", ErrInvalid, MaxObservedPaths)
+		}
+		if request.BaseRevisionRef != "" && !ValidRevisionRef(request.BaseRevisionRef) {
+			return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: the base revision reference is not a commit or safe ref name", ErrInvalid)
+		}
+		request.Symbols = nil
+	default:
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: mode must be planned or observed", ErrInvalid)
 	}
 	input, err := json.Marshal(request)
 	if err != nil || len(input) > MaxInputBytes {
@@ -68,6 +100,10 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 	worktree, err := filepath.Abs(request.Worktree)
 	if err != nil {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: resolve worktree", ErrInvalid)
+	}
+	request.Worktree = worktree
+	if input, err = json.Marshal(request); err != nil || len(input) > MaxInputBytes {
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: request exceeds %d bytes", ErrInvalid, MaxInputBytes)
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -106,11 +142,43 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 	if err := ValidateReport(report); err != nil {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
+	if report.Mode != request.Mode {
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: report mode %q does not match the requested mode", ErrInvalid, report.Mode)
+	}
 	return report, nil
 }
 
+// HasDiagnostic reports whether report carries the diagnostic code.
+func HasDiagnostic(report protocol.LocalAnalyzerReport, code string) bool {
+	for _, diagnostic := range report.Diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// Diagnostic codes the Go adapter acts on.
+const (
+	DiagnosticBaseUnavailable = "conn-base-unavailable"
+	DiagnosticPlannedPathNew  = "conn-planned-path-new"
+)
+
+var (
+	commitPattern  = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
+	refNamePattern = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,256}$`)
+)
+
+// ValidRevisionRef accepts an abbreviated or full commit ID, or a ref name
+// that cannot be read as a Git option.
+func ValidRevisionRef(ref string) bool {
+	return commitPattern.MatchString(ref) || (refNamePattern.MatchString(ref) && !strings.HasPrefix(ref, "-") && !strings.Contains(ref, ".."))
+}
+
 func localEnvironment() []string {
-	allow := map[string]bool{"PATH": true, "SYSTEMROOT": true, "COMSPEC": true, "TEMP": true, "TMP": true}
+	// HOME and USERPROFILE let the analyzer's read-only Git calls find the
+	// user's safe.directory configuration. No CONN_ variable is ever passed.
+	allow := map[string]bool{"PATH": true, "SYSTEMROOT": true, "COMSPEC": true, "TEMP": true, "TMP": true, "HOME": true, "USERPROFILE": true}
 	env := make([]string, 0, len(allow))
 	for _, item := range os.Environ() {
 		key, _, _ := strings.Cut(item, "=")
@@ -125,8 +193,11 @@ func localEnvironment() []string {
 // schema. HTTP callers use it too, so bypassing the local CLI cannot persist a
 // credential-shaped analyzer report.
 func ValidateReport(report protocol.LocalAnalyzerReport) error {
-	if report.ReportVersion != 1 || len(report.Claims) > 500 || len(report.Diagnostics) > 100 {
+	if report.ReportVersion != protocol.AnalyzerReportVersion || len(report.Claims) > 500 || len(report.Diagnostics) > 100 {
 		return errors.New("report exceeds a fixed contract bound")
+	}
+	if report.Mode != protocol.AnalyzerModePlanned && report.Mode != protocol.AnalyzerModeObserved {
+		return errors.New("report mode is not planned or observed")
 	}
 	for _, claim := range report.Claims {
 		if claim.ProvenanceKind != "static_analysis" || hasSensitiveValue(claim.DisplayName) || hasSensitiveValue(claim.NormalizedSubject) {

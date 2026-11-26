@@ -304,11 +304,13 @@ func (s *Service) SessionStatus(ctx context.Context) Status {
 	return status
 }
 
-// Check is one diagnostic result.
+// Check is one diagnostic result. An optional check that fails is reported
+// as a warning and does not make the diagnosis unhealthy.
 type Check struct {
-	Name   string
-	OK     bool
-	Detail string
+	Name     string
+	OK       bool
+	Optional bool
+	Detail   string
 }
 
 // Doctor checks the server, the credential store, and the session without

@@ -4,27 +4,35 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Juanqu261/conn/internal/kirointegration"
 )
 
-func newKiroCommand(streams Streams) *cobra.Command {
+func newKiroCommand(deps Dependencies, streams Streams) *cobra.Command {
 	var rawScope, root string
+	var commandOnPath bool
 	cmd := &cobra.Command{
 		Use:   "kiro",
 		Short: "Manage optional, inspectable Kiro integration guidance",
-		Long: "Preview, install, or remove Conn's optional Kiro steering and lifecycle prompt hooks.\n\n" +
+		Long: "Preview, install, or remove Conn's optional Kiro steering and warn-only command hooks.\n\n" +
 			"These commands never edit MCP settings, agents, skills, or authoritative Conn state.\n" +
 			"Installation refuses to overwrite an existing target file and preserves every unrelated entry.",
 		Args: cobra.NoArgs,
 	}
 	integration := &cobra.Command{
 		Use:   "integration",
-		Short: "Manage optional Conn steering and lifecycle hooks",
-		Args:  cobra.NoArgs,
+		Short: "Manage optional Conn steering and command hooks",
+		Long: "Manage optional Conn steering and four warn-only command hooks: SessionStart,\n" +
+			"UserPromptSubmit, PreToolUse on writes, and PostToolUse on writes. The hooks run this conn\n" +
+			"executable by absolute path, or `conn` from PATH with --command-on-path. An unchanged\n" +
+			"version 1 agent-prompt hook file is removed during installation; a modified one is\n" +
+			"preserved and reported as a conflict.",
+		Args: cobra.NoArgs,
 	}
 	integration.PersistentFlags().StringVar(&rawScope, "scope", string(kirointegration.ScopeWorkspace), "configuration scope: workspace or user")
 	integration.PersistentFlags().StringVar(&root, "root", "", "explicit workspace root or user home override")
@@ -34,7 +42,13 @@ func newKiroCommand(streams Streams) *cobra.Command {
 		if err != nil {
 			return kirointegration.Plan{}, usageError{err}
 		}
-		return kirointegration.Preview(scope, root, mode)
+		command := kirointegration.PathCommand
+		if mode == kirointegration.ModeInstall && !commandOnPath {
+			if command, err = executableCommand(deps, streams.Err); err != nil {
+				return kirointegration.Plan{}, err
+			}
+		}
+		return kirointegration.Preview(scope, root, mode, command)
 	}
 	preview := &cobra.Command{
 		Use:   "preview",
@@ -45,9 +59,7 @@ func newKiroCommand(streams Streams) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := renderKiroPlan(streams.Out, proposed); err != nil {
-				return err
-			}
+			renderKiroPlan(streams.Out, proposed)
 			fmt.Fprintln(streams.Out, "No files changed.")
 			return nil
 		},
@@ -61,11 +73,9 @@ func newKiroCommand(streams Streams) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := renderKiroPlan(streams.Out, proposed); err != nil {
-				return err
-			}
+			renderKiroPlan(streams.Out, proposed)
 			if proposed.HasConflicts() {
-				return errors.New("installation stopped: a Conn target already contains different content; inspect it and choose a different root or remove it manually")
+				return errors.New("installation stopped: a Conn target already contains different content, or a modified version 1 hook file needs manual review; inspect it and choose a different root or remove it manually")
 			}
 			if err := kirointegration.Apply(proposed); err != nil {
 				return err
@@ -73,6 +83,9 @@ func newKiroCommand(streams Streams) *cobra.Command {
 			fmt.Fprintln(streams.Out, "Installed the optional Conn Kiro integration. Remove it with `conn kiro integration remove`.")
 			return nil
 		},
+	}
+	for _, command := range []*cobra.Command{preview, install} {
+		command.Flags().BoolVar(&commandOnPath, "command-on-path", false, "render hooks as `conn` from PATH instead of this executable's absolute path")
 	}
 	remove := &cobra.Command{
 		Use:   "remove",
@@ -83,9 +96,7 @@ func newKiroCommand(streams Streams) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := renderKiroPlan(streams.Out, proposed); err != nil {
-				return err
-			}
+			renderKiroPlan(streams.Out, proposed)
 			if proposed.HasConflicts() {
 				return errors.New("removal stopped: a Conn target was modified; it was preserved for manual review")
 			}
@@ -101,6 +112,28 @@ func newKiroCommand(streams Streams) *cobra.Command {
 	return cmd
 }
 
+// executableCommand renders the absolute path of the running conn
+// executable. A temporary `go run` binary would disappear, so it warns.
+func executableCommand(deps Dependencies, diagnostics io.Writer) (string, error) {
+	resolve := deps.Executable
+	if resolve == nil {
+		resolve = os.Executable
+	}
+	executable, err := resolve()
+	if err != nil || executable == "" {
+		return "", errors.New("the conn executable path is unavailable; pass --command-on-path to run conn from PATH")
+	}
+	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
+		executable = resolved
+	}
+	if temp, err := filepath.EvalSymlinks(os.TempDir()); err == nil {
+		if relative, err := filepath.Rel(temp, executable); err == nil && !strings.HasPrefix(relative, "..") {
+			fmt.Fprintln(diagnostics, "Note: this conn executable is in a temporary directory, which go run deletes. Build conn first or pass --command-on-path.")
+		}
+	}
+	return kirointegration.RenderCommand(executable), nil
+}
+
 func parseKiroScope(value string) (kirointegration.Scope, error) {
 	scope := kirointegration.Scope(value)
 	if scope != kirointegration.ScopeWorkspace && scope != kirointegration.ScopeUser {
@@ -109,24 +142,28 @@ func parseKiroScope(value string) (kirointegration.Scope, error) {
 	return scope, nil
 }
 
-func renderKiroPlan(out io.Writer, plan kirointegration.Plan) error {
+func renderKiroPlan(out io.Writer, plan kirointegration.Plan) {
 	fmt.Fprintf(out, "Conn Kiro integration %s plan for %s scope at %s:\n", plan.Mode, plan.Scope, plan.Root)
-	artifacts, err := kirointegration.Artifacts()
-	if err != nil {
-		return err
-	}
-	content := make(map[string][]byte, len(artifacts))
-	for _, artifact := range artifacts {
-		content[filepath.Clean(artifact.RelativePath)] = artifact.Content
+	if plan.Mode == kirointegration.ModeInstall {
+		fmt.Fprintf(out, "  hook command: %s\n", plan.Command)
 	}
 	for _, change := range plan.Changes {
 		fmt.Fprintf(out, "  %-9s %s\n", change.Action, filepath.ToSlash(change.RelativePath))
 		if plan.Mode == kirointegration.ModeInstall && (change.Action == kirointegration.ActionCreate || change.Action == kirointegration.ActionConflict) {
-			fmt.Fprintf(out, "--- proposed %s ---\n%s--- end proposed %s ---\n", filepath.ToSlash(change.RelativePath), content[filepath.Clean(change.RelativePath)], filepath.ToSlash(change.RelativePath))
+			if content := plan.Content(change.RelativePath); content != nil {
+				fmt.Fprintf(out, "--- proposed %s ---\n%s--- end proposed %s ---\n", filepath.ToSlash(change.RelativePath), content, filepath.ToSlash(change.RelativePath))
+			}
+		}
+		if filepath.Clean(change.RelativePath) == filepath.Clean(kirointegration.LegacyHooksTarget) {
+			switch change.Action {
+			case kirointegration.ActionRemove:
+				fmt.Fprintln(out, "            (unchanged version 1 agent-prompt hooks; replaced by command hooks)")
+			case kirointegration.ActionConflict:
+				fmt.Fprintln(out, "            (modified version 1 agent-prompt hooks; preserved for manual review)")
+			}
 		}
 	}
 	for _, preserved := range plan.Preserved {
 		fmt.Fprintf(out, "  preserve  %s\n", filepath.ToSlash(preserved))
 	}
-	return nil
 }

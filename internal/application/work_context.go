@@ -118,7 +118,7 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 			focus.Blueprint, focus.OwnCharters = blueprint, ownCharters
 			blueprintAligned := blueprint != nil && blueprint.ObjectiveID == selectedObjective.ObjectiveID && blueprint.ObjectiveRevision == selectedObjective.Revision
 			if blueprint == nil {
-				view.KnownUnknowns = append(view.KnownUnknowns, "No Blueprint revision is available for this exact Objective revision; work boundaries are not ratified.")
+				view.KnownUnknowns = append(view.KnownUnknowns, "No Blueprint revision is available for this exact Objective revision. Blueprints and Charters are optional planning context; collision warnings and evidence work without them.")
 			} else if !blueprintAligned {
 				view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Blueprint %s revision %d belongs to Objective %s revision %d, not the selected Objective revision; its Charters are not governing boundaries for this focus.", blueprint.BlueprintID, blueprint.Revision, blueprint.ObjectiveID, blueprint.ObjectiveRevision))
 			} else if blueprint.Status != protocol.BlueprintActive {
@@ -142,8 +142,8 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 					acceptedCharter = true
 				}
 			}
-			if !acceptedCharter {
-				view.KnownUnknowns = append(view.KnownUnknowns, "No accepted active Charter governs the signed-in Human for this focus.")
+			if !acceptedCharter && blueprint != nil {
+				view.KnownUnknowns = append(view.KnownUnknowns, "No accepted active Charter governs the signed-in Human for this focus. Charters are optional planning context.")
 			}
 
 			if selectedIntent != nil {
@@ -181,17 +181,34 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 			for _, intent := range view.OwnedActiveIntents {
 				ownedIDs[intent.IntentID] = true
 			}
+			// The focused Intent's current revision shows every state, so a
+			// participant sees decided and stale collisions as well as open
+			// ones. Other owned Intents contribute collisions needing attention.
+			included := map[uuid.UUID]bool{}
+			if focus.SelectedIntent != nil {
+				focused, err := tx.CollisionsForIntentRevision(ctx, projectID, focus.SelectedIntent.IntentID, focus.SelectedIntent.Revision)
+				if err != nil {
+					return err
+				}
+				for _, collision := range focused {
+					included[collision.CollisionID] = true
+					view.RelatedCollisions = append(view.RelatedCollisions, collision)
+				}
+			}
 			for _, collision := range collisions {
-				if ownedIDs[collision.LeftIntentID] || ownedIDs[collision.RightIntentID] {
+				if !included[collision.CollisionID] && (ownedIDs[collision.LeftIntentID] || ownedIDs[collision.RightIntentID]) {
 					view.RelatedCollisions = append(view.RelatedCollisions, collision)
 				}
 			}
 			if len(view.RelatedCollisions) > maxWorkContextCollisions {
-				view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only %d of %d related open collisions are included.", maxWorkContextCollisions, len(view.RelatedCollisions)))
+				view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only %d of %d related collisions are included.", maxWorkContextCollisions, len(view.RelatedCollisions)))
 				view.RelatedCollisions = view.RelatedCollisions[:maxWorkContextCollisions]
 			}
-			if len(view.RelatedCollisions) > 0 {
-				view.KnownUnknowns = append(view.KnownUnknowns, "Related collision assessments are advisory until a Human records a decision.")
+			for _, collision := range view.RelatedCollisions {
+				if collision.State == protocol.CollisionOpen || collision.State == protocol.CollisionUnderReview {
+					view.KnownUnknowns = append(view.KnownUnknowns, "Related collision assessments are advisory until a Human records a decision.")
+					break
+				}
 			}
 
 			evidence, err := tx.EvidenceReferences(ctx, projectID, selectedObjective.ObjectiveID, selectedObjective.Revision)

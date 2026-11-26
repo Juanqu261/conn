@@ -1,10 +1,17 @@
 // Package kirointegration manages Conn's optional, inspectable Kiro guidance
 // bundle. It never edits MCP settings, agents, skills, or authoritative state.
+//
+// Bundle version 2 contains warn-only command hooks and steering. The hook
+// file renders the conn command into each hook. Removal recognizes Conn
+// content by re-rendering the template with the command found in the
+// installed file. An unchanged version 1 agent-prompt hook file is migrated
+// away; a modified one is preserved for manual review.
 package kirointegration
 
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -43,7 +50,26 @@ var (
 	ErrUnsafe   = errors.New("the Conn Kiro integration target is unsafe")
 )
 
-//go:embed templates/steering/conn-work-loop.md templates/hooks/conn-lifecycle.json
+// CommandPlaceholder marks where the rendered conn command goes.
+const CommandPlaceholder = "{{CONN_COMMAND}}"
+
+// PathCommand runs conn from PATH.
+const PathCommand = "conn"
+
+const (
+	steeringTemplate = "templates/steering/conn-work-loop.md"
+	hooksTemplate    = "templates/hooks/conn-hooks.json"
+	legacyTemplate   = "templates/legacy/conn-lifecycle.v1.json"
+)
+
+var (
+	steeringTarget = filepath.Join(".kiro", "steering", "conn-work-loop.md")
+	hooksTarget    = filepath.Join(".kiro", "hooks", "conn-hooks.json")
+	// LegacyHooksTarget is the version 1 agent-prompt hook file.
+	LegacyHooksTarget = filepath.Join(".kiro", "hooks", "conn-lifecycle.json")
+)
+
+//go:embed templates/steering/conn-work-loop.md templates/hooks/conn-hooks.json templates/legacy/conn-lifecycle.v1.json
 var templateFiles embed.FS
 
 type Artifact struct {
@@ -60,6 +86,8 @@ type Plan struct {
 	Scope     Scope
 	Root      string
 	Mode      Mode
+	Command   string
+	Artifacts []Artifact
 	Changes   []Change
 	Preserved []string
 }
@@ -71,6 +99,28 @@ func (p Plan) HasConflicts() bool {
 		}
 	}
 	return false
+}
+
+// Content returns the rendered artifact content for a planned path.
+func (p Plan) Content(relativePath string) []byte {
+	for _, artifact := range p.Artifacts {
+		if filepath.Clean(artifact.RelativePath) == filepath.Clean(relativePath) {
+			return artifact.Content
+		}
+	}
+	return nil
+}
+
+// RenderCommand returns the shell command that runs the executable. A path
+// with whitespace or shell metacharacters is double-quoted.
+func RenderCommand(executable string) string {
+	if executable == "" {
+		return PathCommand
+	}
+	if strings.ContainsAny(executable, " \t&|<>^\"'();%!$`*?[]{}#~=,") {
+		return `"` + executable + `"`
+	}
+	return executable
 }
 
 // ResolveRoot resolves the configuration root without creating it. Workspace
@@ -111,30 +161,77 @@ func ResolveRoot(scope Scope, override string) (string, error) {
 	return resolved, nil
 }
 
-// Artifacts returns copies of the exact versioned files in the optional
-// bundle. Callers cannot alter the embedded source through the returned bytes.
-func Artifacts() ([]Artifact, error) {
-	definitions := []struct {
-		template string
-		target   string
-	}{
-		{"templates/steering/conn-work-loop.md", filepath.Join(".kiro", "steering", "conn-work-loop.md")},
-		{"templates/hooks/conn-lifecycle.json", filepath.Join(".kiro", "hooks", "conn-lifecycle.json")},
+// Artifacts returns the bundle rendered with command. Callers cannot alter
+// the embedded source through the returned bytes.
+func Artifacts(command string) ([]Artifact, error) {
+	if command == "" || strings.ContainsAny(command, "\r\n\x00") {
+		return nil, errors.New("the hook command must be one non-empty line")
 	}
-	result := make([]Artifact, 0, len(definitions))
-	for _, definition := range definitions {
-		content, err := fs.ReadFile(templateFiles, definition.template)
-		if err != nil {
-			return nil, err
+	steering, err := fs.ReadFile(templateFiles, steeringTemplate)
+	if err != nil {
+		return nil, err
+	}
+	hooks, err := renderHooks(command)
+	if err != nil {
+		return nil, err
+	}
+	return []Artifact{
+		{RelativePath: steeringTarget, Content: append([]byte(nil), steering...)},
+		{RelativePath: hooksTarget, Content: hooks},
+	}, nil
+}
+
+// LegacyArtifact returns the exact version 1 hook file.
+func LegacyArtifact() (Artifact, error) {
+	content, err := fs.ReadFile(templateFiles, legacyTemplate)
+	if err != nil {
+		return Artifact{}, err
+	}
+	return Artifact{RelativePath: LegacyHooksTarget, Content: append([]byte(nil), content...)}, nil
+}
+
+func renderHooks(command string) ([]byte, error) {
+	template, err := fs.ReadFile(templateFiles, hooksTemplate)
+	if err != nil {
+		return nil, err
+	}
+	// The placeholder sits inside a JSON string, so the command is escaped
+	// as JSON string content.
+	quoted, err := json.Marshal(command)
+	if err != nil {
+		return nil, err
+	}
+	escaped := string(quoted[1 : len(quoted)-1])
+	return []byte(strings.ReplaceAll(string(template), CommandPlaceholder, escaped)), nil
+}
+
+// installedCommand reads the conn command from an installed version 2 hook
+// file, or reports false when the file is not a recognizable Conn file.
+func installedCommand(content []byte) (string, bool) {
+	var document struct {
+		Hooks []struct {
+			Name   string `json:"name"`
+			Action struct {
+				Command string `json:"command"`
+			} `json:"action"`
+		} `json:"hooks"`
+	}
+	if json.Unmarshal(content, &document) != nil {
+		return "", false
+	}
+	for _, hook := range document.Hooks {
+		if hook.Name == "conn-session-start" {
+			command, found := strings.CutSuffix(hook.Action.Command, " hook session-start")
+			return command, found && command != ""
 		}
-		result = append(result, Artifact{RelativePath: definition.target, Content: append([]byte(nil), content...)})
 	}
-	return result, nil
+	return "", false
 }
 
 // Preview reads the exact target files and inventories unrelated steering and
-// hook entries. It never creates a directory or writes a file.
-func Preview(scope Scope, root string, mode Mode) (Plan, error) {
+// hook entries. It never creates a directory or writes a file. In remove
+// mode the command is detected from the installed hook file.
+func Preview(scope Scope, root string, mode Mode, command string) (Plan, error) {
 	if scope != ScopeWorkspace && scope != ScopeUser {
 		return Plan{}, errors.New("scope must be workspace or user")
 	}
@@ -145,19 +242,29 @@ func Preview(scope Scope, root string, mode Mode) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	artifacts, err := Artifacts()
+	if mode == ModeRemove {
+		command = PathCommand
+		if target, err := safeTarget(resolvedRoot, hooksTarget); err == nil {
+			if content, err := readExistingTarget(target); err == nil {
+				if detected, ok := installedCommand(content); ok {
+					command = detected
+				}
+			}
+		}
+	}
+	artifacts, err := Artifacts(command)
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Plan{Scope: scope, Root: resolvedRoot, Mode: mode, Changes: make([]Change, 0, len(artifacts))}
-	targets := make(map[string]bool, len(artifacts))
+	legacy, err := LegacyArtifact()
+	if err != nil {
+		return Plan{}, err
+	}
+	plan := Plan{Scope: scope, Root: resolvedRoot, Mode: mode, Command: command, Artifacts: artifacts, Changes: make([]Change, 0, len(artifacts)+1)}
+	targets := map[string]bool{filepath.Clean(legacy.RelativePath): true}
 	for _, artifact := range artifacts {
 		targets[filepath.Clean(artifact.RelativePath)] = true
-		target, err := safeTarget(resolvedRoot, artifact.RelativePath)
-		if err != nil {
-			return Plan{}, err
-		}
-		content, err := readExistingTarget(target)
+		content, err := targetContent(resolvedRoot, artifact.RelativePath)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			action := ActionCreate
@@ -177,6 +284,17 @@ func Preview(scope Scope, root string, mode Mode) (Plan, error) {
 			plan.Changes = append(plan.Changes, Change{RelativePath: artifact.RelativePath, Action: ActionConflict})
 		}
 	}
+	// Both installation and removal retire an unchanged version 1 file. A
+	// modified one is preserved and reported as a conflict for review.
+	switch content, err := targetContent(resolvedRoot, legacy.RelativePath); {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return Plan{}, err
+	case bytes.Equal(content, legacy.Content):
+		plan.Changes = append(plan.Changes, Change{RelativePath: legacy.RelativePath, Action: ActionRemove})
+	default:
+		plan.Changes = append(plan.Changes, Change{RelativePath: legacy.RelativePath, Action: ActionConflict})
+	}
 	plan.Preserved, err = inventoryUnrelated(resolvedRoot, targets)
 	if err != nil {
 		return Plan{}, err
@@ -184,32 +302,51 @@ func Preview(scope Scope, root string, mode Mode) (Plan, error) {
 	return plan, nil
 }
 
+func targetContent(root, relative string) ([]byte, error) {
+	target, err := safeTarget(root, relative)
+	if err != nil {
+		return nil, err
+	}
+	return readExistingTarget(target)
+}
+
 // Apply re-reads every target before changing anything. Modified target files
 // cause the whole operation to stop. Installation uses exclusive creation and
 // removal deletes only byte-for-byte Conn artifacts.
 func Apply(plan Plan) error {
-	current, err := Preview(plan.Scope, plan.Root, plan.Mode)
+	current, err := Preview(plan.Scope, plan.Root, plan.Mode, plan.Command)
 	if err != nil {
 		return err
 	}
 	if current.HasConflicts() {
 		return ErrConflict
 	}
-	artifacts, err := Artifacts()
+	legacy, err := LegacyArtifact()
 	if err != nil {
 		return err
 	}
-	byPath := make(map[string]Artifact, len(artifacts))
-	for _, artifact := range artifacts {
+	byPath := make(map[string]Artifact, len(current.Artifacts)+1)
+	for _, artifact := range current.Artifacts {
 		byPath[filepath.Clean(artifact.RelativePath)] = artifact
 	}
+	byPath[filepath.Clean(legacy.RelativePath)] = legacy
 	if plan.Mode == ModeInstall {
-		return install(current.Root, current.Changes, byPath)
+		created, err := install(current.Root, current.Changes, byPath)
+		if err != nil {
+			return err
+		}
+		if err := remove(current.Root, current.Changes, byPath, false); err != nil {
+			for i := len(created) - 1; i >= 0; i-- {
+				_ = os.Remove(created[i])
+			}
+			return err
+		}
+		return nil
 	}
-	return remove(current.Root, current.Changes, byPath)
+	return remove(current.Root, current.Changes, byPath, true)
 }
 
-func install(root string, changes []Change, artifacts map[string]Artifact) error {
+func install(root string, changes []Change, artifacts map[string]Artifact) ([]string, error) {
 	created := make([]string, 0, len(changes))
 	rollback := func() {
 		for i := len(created) - 1; i >= 0; i-- {
@@ -224,23 +361,23 @@ func install(root string, changes []Change, artifacts map[string]Artifact) error
 		target, err := safeTarget(root, artifact.RelativePath)
 		if err != nil {
 			rollback()
-			return err
+			return nil, err
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			rollback()
-			return err
+			return nil, err
 		}
 		if _, err := safeTarget(root, artifact.RelativePath); err != nil {
 			rollback()
-			return err
+			return nil, err
 		}
 		file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			rollback()
 			if errors.Is(err, fs.ErrExist) {
-				return ErrConflict
+				return nil, ErrConflict
 			}
-			return err
+			return nil, err
 		}
 		_, writeErr := file.Write(artifact.Content)
 		closeErr := file.Close()
@@ -248,16 +385,16 @@ func install(root string, changes []Change, artifacts map[string]Artifact) error
 			_ = os.Remove(target)
 			rollback()
 			if writeErr != nil {
-				return writeErr
+				return nil, writeErr
 			}
-			return closeErr
+			return nil, closeErr
 		}
 		created = append(created, target)
 	}
-	return nil
+	return created, nil
 }
 
-func remove(root string, changes []Change, artifacts map[string]Artifact) error {
+func remove(root string, changes []Change, artifacts map[string]Artifact, pruneDirectories bool) error {
 	removed := make([]Artifact, 0, len(changes))
 	rollback := func() {
 		for _, artifact := range removed {
@@ -294,6 +431,9 @@ func remove(root string, changes []Change, artifacts map[string]Artifact) error 
 			return err
 		}
 		removed = append(removed, artifact)
+	}
+	if !pruneDirectories {
+		return nil
 	}
 	for _, directory := range []string{
 		filepath.Join(root, ".kiro", "hooks"),

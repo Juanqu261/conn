@@ -12,6 +12,7 @@ import (
 
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/httpclient"
+	"github.com/Juanqu261/conn/internal/preedit"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
@@ -131,13 +132,13 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	}, t.checkUpdates)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "publish_intent",
-		Description: "Publish an Intent for your authenticated Conn participant. Omit intent.intent_id to let Conn assign a new UUIDv7; reuse a returned intent_id to retry idempotently. The input cannot choose a human or participant.",
+		Description: "Publish an Intent for your authenticated Conn participant. Omit intent.intent_id to let Conn assign a new UUIDv7; reuse a returned intent_id to retry idempotently. Conn fills missing repository_id, branch_ref, and base_revision_ref from the trusted worktree and reports filled_fields. The input cannot choose a human or participant.",
 		InputSchema: publishIntentToolSchema(),
 		Annotations: writes("Publish Intent", false),
 	}, t.publishIntent)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "revise_intent",
-		Description: "Append an immutable revision to your own active Intent using expected_revision. intent.intent_id defaults to intent_id.",
+		Description: "Append an immutable revision to your own active Intent using expected_revision. intent.intent_id defaults to intent_id. Missing Git context is filled from the trusted worktree.",
 		InputSchema: reviseIntentToolSchema(),
 		Annotations: writes("Revise Intent", true),
 	}, t.reviseIntent)
@@ -149,13 +150,13 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	}, t.releaseIntent)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "analyze_intent",
-		Description: "Run bounded local TypeScript analysis for your exact active Intent revision, attach only validated source-free observed claims, reassess collisions, and return the post-commit event cursor.",
+		Description: "Run bounded local TypeScript analysis of the diff between your exact active Intent revision's base and the working tree, attach only validated source-free observed claims (changes, removes, produces, consumes), reassess collisions, and return the post-commit event cursor. Each Intent revision accepts one analysis.",
 		InputSchema: analyzeIntentToolSchema(),
 		Annotations: writes("Analyze Intent locally", true),
 	}, t.analyzeIntent)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "check_collisions",
-		Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.",
+		Description: "Read advisory collision assessments grouped into needs_attention (open, under review) and decided (resolved, dismissed, with decision_ref), optionally limited to one Intent. Returns {data: {needs_attention, decided}, as_of_event}.",
 		InputSchema: collisionsToolSchema(),
 		Annotations: reads("Check collisions"),
 	}, t.checkCollisions)
@@ -191,6 +192,7 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	}, t.attachEvidence)
 	registerAccountTools(server, t)
 	registerProjectTools(server, t)
+	registerPreEditTools(server, t)
 	return interactions
 }
 
@@ -363,11 +365,13 @@ func (t tools) publishIntent(ctx context.Context, _ *sdk.CallToolRequest, in int
 	if err != nil {
 		return t.fail("publish_intent", err)
 	}
+	git := t.fillGitContext(ctx, client, projectID, &input)
 	result, err := client.PublishIntent(ctx, projectID, input)
 	if err != nil {
 		return t.fail("publish_intent", err)
 	}
-	return reply(fmt.Sprintf("Published Intent %s revision %d.", result.Data.IntentRevision.IntentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+	t.rememberFocus(ctx, client, projectID, result.Data.IntentRevision, git.Repository, nil, result.AsOfEvent, false)
+	return intentReply(fmt.Sprintf("Published Intent %s revision %d.", result.Data.IntentRevision.IntentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent, git)
 }
 
 func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in reviseIntentInput) (*sdk.CallToolResult, any, error) {
@@ -389,11 +393,34 @@ func (t tools) reviseIntent(ctx context.Context, _ *sdk.CallToolRequest, in revi
 	if input.IntentID != intentID {
 		return t.fail("revise_intent", errors.New("intent.intent_id must match intent_id"))
 	}
+	git := t.fillGitContext(ctx, client, projectID, &input)
 	result, err := client.ReviseIntent(ctx, projectID, intentID, in.ExpectedRevision, input)
 	if err != nil {
 		return t.fail("revise_intent", err)
 	}
-	return reply(fmt.Sprintf("Revised Intent %s to revision %d.", intentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+	t.rememberFocus(ctx, client, projectID, result.Data.IntentRevision, git.Repository, nil, result.AsOfEvent, false)
+	return intentReply(fmt.Sprintf("Revised Intent %s to revision %d.", intentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent, git)
+}
+
+// intentReply adds the filled Git context and near-match advice to an
+// Intent write result.
+func intentReply(summary string, view protocol.IntentView, asOf int64, git preedit.GitContext) (*sdk.CallToolResult, any, error) {
+	data, err := protocol.Encode(view)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, field := range git.Filled {
+		summary += fmt.Sprintf(" Filled %s=%s from the worktree.", field.Field, field.Value)
+	}
+	for _, note := range git.Notes {
+		summary += " " + note
+	}
+	for _, observation := range view.AdvisoryObservations {
+		if strings.HasPrefix(observation, "Near match:") {
+			summary += " " + observation
+		}
+	}
+	return envelopeWith(summary, data, asOf, map[string]any{"filled_fields": git.Filled, "git_context_notes": git.Notes})
 }
 
 func (t tools) releaseIntent(ctx context.Context, _ *sdk.CallToolRequest, in intentIDInput) (*sdk.CallToolResult, any, error) {
@@ -409,7 +436,15 @@ func (t tools) releaseIntent(ctx context.Context, _ *sdk.CallToolRequest, in int
 	if err != nil {
 		return t.fail("release_intent", err)
 	}
+	t.forgetFocus(ctx, intentID)
 	return reply(fmt.Sprintf("Released Intent %s at revision %d.", intentID, result.Data.IntentRevision.Revision), result.Data, result.AsOfEvent)
+}
+
+// collisionGroups is the check_collisions result: collisions that need
+// attention and decided collisions with their decision references.
+type collisionGroups struct {
+	NeedsAttention []protocol.CollisionAssessment `json:"needs_attention"`
+	Decided        []protocol.CollisionAssessment `json:"decided"`
 }
 
 func (t tools) checkCollisions(ctx context.Context, _ *sdk.CallToolRequest, in collisionsInput) (*sdk.CallToolResult, any, error) {
@@ -427,19 +462,30 @@ func (t tools) checkCollisions(ctx context.Context, _ *sdk.CallToolRequest, in c
 	if err != nil {
 		return t.fail("check_collisions", err)
 	}
-	collisions := make([]protocol.CollisionAssessment, 0, len(radar.Data.OpenCollisions))
+	involves := func(collision protocol.CollisionAssessment) bool {
+		return intentID == (uuid.UUID{}) || collision.LeftIntentID == intentID || collision.RightIntentID == intentID
+	}
+	groups := collisionGroups{NeedsAttention: []protocol.CollisionAssessment{}, Decided: []protocol.CollisionAssessment{}}
 	for _, collision := range radar.Data.OpenCollisions {
-		if intentID == (uuid.UUID{}) || collision.LeftIntentID == intentID || collision.RightIntentID == intentID {
-			collisions = append(collisions, collision)
+		if involves(collision) {
+			groups.NeedsAttention = append(groups.NeedsAttention, collision)
 		}
 	}
-	data, err := json.Marshal(collisions)
+	for _, collision := range radar.Data.DecidedCollisions {
+		if involves(collision) {
+			groups.Decided = append(groups.Decided, collision)
+		}
+	}
+	data, err := json.Marshal(groups)
 	if err != nil {
 		return t.fail("check_collisions", err)
 	}
-	summary := fmt.Sprintf("%d open advisory collision assessment(s).", len(collisions))
+	summary := fmt.Sprintf("%d advisory collision(s) need attention; %d decided.", len(groups.NeedsAttention), len(groups.Decided))
 	if intentID != (uuid.UUID{}) {
-		summary = fmt.Sprintf("%d open advisory collision assessment(s) for Intent %s.", len(collisions), intentID)
+		summary = fmt.Sprintf("Intent %s: %d advisory collision(s) need attention; %d decided.", intentID, len(groups.NeedsAttention), len(groups.Decided))
+	}
+	if len(groups.NeedsAttention) > 0 {
+		summary += " Collisions are advisory warnings, not blocks; review them with /conn-resolve <collision_id>."
 	}
 	return envelope(summary, data, radar.AsOfEvent)
 }
@@ -453,7 +499,7 @@ func (t tools) readRadar(ctx context.Context, _ *sdk.CallToolRequest, in project
 	if err != nil {
 		return t.fail("read_radar", err)
 	}
-	return reply(fmt.Sprintf("Radar for %s: %d active Intent(s), %d open collision(s).", result.Data.Project.Name, len(result.Data.ActiveIntents), len(result.Data.OpenCollisions)), result.Data, result.AsOfEvent)
+	return reply(fmt.Sprintf("Radar for %s: %d active Intent(s), %d collision(s) need attention, %d decided.", result.Data.Project.Name, len(result.Data.ActiveIntents), len(result.Data.OpenCollisions), len(result.Data.DecidedCollisions)), result.Data, result.AsOfEvent)
 }
 
 func (t tools) readWorkContext(ctx context.Context, _ *sdk.CallToolRequest, in workContextInput) (*sdk.CallToolResult, any, error) {
@@ -496,6 +542,15 @@ func (t tools) readWorkContext(ctx context.Context, _ *sdk.CallToolRequest, in w
 		summary += fmt.Sprintf(" Objective %s revision %d is selected.", view.Focus.Objective.ObjectiveID, view.Focus.Objective.Revision)
 	} else if len(view.FocusChoices) > 0 {
 		summary += fmt.Sprintf(" Select one of %d focus choices before relying on governing context.", len(view.FocusChoices))
+	}
+	// An exact focus on an owned active Intent tells the optional hooks which
+	// Intent belongs to this worktree.
+	if intentID != (uuid.UUID{}) && view.Focus != nil && view.Focus.SelectedIntent != nil {
+		for _, owned := range view.OwnedActiveIntents {
+			if owned.IntentID == intentID {
+				t.rememberFocus(ctx, client, selected.ProjectID, owned, nil, view.RelatedCollisions, result.AsOfEvent, true)
+			}
+		}
 	}
 	return reply(summary, view, result.AsOfEvent)
 }

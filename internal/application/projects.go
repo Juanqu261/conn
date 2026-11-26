@@ -117,6 +117,19 @@ type Tx interface {
 	// matching-claim references. It returns false when that exact assessment
 	// identity was already recorded.
 	InsertCollisionAssessment(ctx context.Context, assessment protocol.CollisionAssessment) (bool, error)
+	// LatestDecidedCollision returns the most recent resolved or dismissed
+	// assessment for one ordered Intent pair and rule, across revisions, or
+	// ErrNotFound.
+	LatestDecidedCollision(ctx context.Context, projectID, leftIntentID, rightIntentID uuid.UUID, ruleID string) (protocol.CollisionAssessment, error)
+	// SetCollisionDecision records the state a human decision sets and the
+	// decision reference on one assessment.
+	SetCollisionDecision(ctx context.Context, projectID, collisionID uuid.UUID, state string, decisionID uuid.UUID) error
+	// DecidedCollisions returns at most limit of the most recent resolved or
+	// dismissed assessments whose two Intent revisions are both current and active.
+	DecidedCollisions(ctx context.Context, projectID uuid.UUID, limit int) ([]protocol.CollisionAssessment, error)
+	// CollisionsForIntentRevision returns every assessment, in any state, that
+	// involves one exact Intent revision.
+	CollisionsForIntentRevision(ctx context.Context, projectID, intentID uuid.UUID, revision int) ([]protocol.CollisionAssessment, error)
 
 	// CollisionAssessment returns an assessment in this Project, including
 	// historical records that are no longer open.

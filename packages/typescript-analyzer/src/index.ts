@@ -1,24 +1,53 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import ts from "typescript";
+import { type ExportFingerprint, exportFingerprints, parseSource } from "./fingerprint.js";
+import { baseFile, changedPaths, headCommit, resolveCommit } from "./git.js";
+import {
+  type AnalyzeMode,
+  type AnalyzeRequest,
+  isAcceptablePath,
+  isInside,
+  normalizedRelative,
+  type ValidatedRequest,
+  validateRequest,
+} from "./request.js";
+
+export { type AnalyzeMode, type AnalyzeRequest, AnalyzerRequestError } from "./request.js";
 
 export const MAX_CLAIMS = 500;
 export const MAX_DIAGNOSTICS = 100;
 const MAX_PROJECTS = 25;
+const MAX_OBSERVED_FILES = 500;
 // Conn contract bounds: semanticSubject, opaqueReference, relativePath, title.
 const MAX_SUBJECT_LENGTH = 512;
 const MAX_LOCATOR_LENGTH = 256;
 const MAX_PATH_LENGTH = 1024;
 const MAX_DISPLAY_NAME_LENGTH = 200;
-const SKIPPED_CLAIM_CODE = "conn-claim-skipped";
+const TYPESCRIPT_SOURCE = /\.(?:ts|tsx|mts|cts)$/;
+const DECLARATION_FILE = /\.d(?:\.[^./]+)?\.(?:ts|mts|cts)$/;
 
-export interface AnalyzeRequest {
-  worktree: string;
-  canonical_remote: string;
-  tsconfig_path?: string;
-  paths?: string[];
-}
+export type ClaimRelation = "removes" | "changes" | "consumes" | "produces";
+
+/** When claims exceed MAX_CLAIMS, lower values are kept first. */
+const RELATION_PRIORITY: Record<ClaimRelation, number> = {
+  removes: 0,
+  changes: 1,
+  consumes: 2,
+  produces: 3,
+};
+
+export const DIAGNOSTIC_CODES = {
+  plannedPathNew: "conn-planned-path-new",
+  plannedPathUnanalyzed: "conn-planned-path-unanalyzed",
+  observedPathUnanalyzed: "conn-observed-path-unanalyzed",
+  baseUnavailable: "conn-base-unavailable",
+  changedPathsUnavailable: "conn-changed-paths-unavailable",
+  changedPathsTruncated: "conn-changed-paths-truncated",
+  claimsTruncated: "conn-claims-truncated",
+  claimSkipped: "conn-claim-skipped",
+} as const;
 
 export interface EvidenceRef {
   kind: "source_location";
@@ -32,7 +61,7 @@ export interface Claim {
   subject_kind: "code_symbol" | "contract";
   normalized_subject: string;
   display_name: string;
-  relation: "affects" | "produces" | "consumes";
+  relation: ClaimRelation;
   provenance_kind: "static_analysis";
   evidence_refs: EvidenceRef[];
 }
@@ -44,88 +73,231 @@ export interface Diagnostic {
   line?: number;
 }
 
+export interface AnalyzerRepository {
+  canonical_remote: string;
+  /** Observed mode: the resolved full commit ID of the Intent base. */
+  base_revision_ref?: string;
+  /** Observed mode: the full commit ID of HEAD, when it exists. */
+  head_revision_ref?: string;
+}
+
 export interface AnalyzerReport {
-  report_version: 1;
-  repository: { canonical_remote: string };
+  report_version: 2;
+  mode: AnalyzeMode;
+  repository: AnalyzerRepository;
   claims: Claim[];
   diagnostics: Diagnostic[];
 }
 
+interface Context {
+  request: ValidatedRequest;
+  claims: Map<string, Claim>;
+  /** Analyzer diagnostics; kept ahead of compiler diagnostics at the bound. */
+  own: Diagnostic[];
+  compiler: Diagnostic[];
+  /** SHA-256 of file bytes by absolute file name. */
+  hashes: Map<string, string>;
+}
+
 /**
- * Analyze configured TypeScript projects locally. The returned report contains
- * identifiers, paths, hashes, and compiler status only. It never includes
- * source text, source excerpts, prompt content, or compiler message text.
+ * Analyze TypeScript files locally. Planned mode describes files a participant
+ * intends to change. Observed mode compares the Intent base revision with the
+ * working tree. The report contains identifiers, paths, line numbers, hashes,
+ * and diagnostic codes only. It never includes source text, base file content,
+ * source excerpts, prompt content, or compiler message text.
  */
 export function analyze(request: AnalyzeRequest): AnalyzerReport {
-  validateRequest(request);
-  const worktree = resolve(request.worktree);
-  const selectedPaths = new Set(
-    (request.paths ?? []).map((path) => normalizedRelative(worktree, path)),
-  );
-  const diagnostics: Diagnostic[] = [];
-  const claims = new Map<string, Claim>();
-  const configs = projectConfigs(worktree, request.tsconfig_path);
+  const validated = validateRequest(request);
+  const context: Context = {
+    request: validated,
+    claims: new Map(),
+    own: [],
+    compiler: [],
+    hashes: new Map(),
+  };
+  const repository: AnalyzerRepository = { canonical_remote: validated.canonicalRemote };
+  if (validated.mode === "planned") analyzePlanned(context);
+  else analyzeObserved(context, repository);
+  return report(context, repository);
+}
 
-  for (const configPath of configs) {
-    if (claims.size >= MAX_CLAIMS || diagnostics.length >= MAX_DIAGNOSTICS) break;
-    const parsed = readConfig(configPath, diagnostics, worktree);
-    if (parsed === undefined) continue;
-    // Building a program is the expensive step. With selected paths, skip a
-    // project that contains none of them, and its unrelated diagnostics.
-    if (selectedPaths.size > 0 && !includesSelectedPath(parsed.fileNames, worktree, selectedPaths))
+function analyzePlanned(context: Context): void {
+  const { request } = context;
+  const existing: string[] = [];
+  const readable = new Set<string>();
+  for (const path of request.paths) {
+    const { state } = worktreeFile(request, path);
+    if (state === "missing")
+      addOwn(context, {
+        code: DIAGNOSTIC_CODES.plannedPathNew,
+        message: "Planned path does not exist yet; no claims were derived.",
+        path,
+      });
+    else existing.push(path);
+    // A directory or a link that leaves the worktree is never analyzed.
+    if (state === "file") readable.add(path);
+  }
+  const analyzed = visitProgramFiles(context, readable, (program, sourceFile, path) => {
+    collectExports(context, program, sourceFile, path, request.symbols?.get(path));
+    collectImports(context, program, sourceFile, path);
+  });
+  for (const path of existing)
+    if (!analyzed.has(path))
+      addOwn(context, {
+        code: DIAGNOSTIC_CODES.plannedPathUnanalyzed,
+        message:
+          "No discovered TypeScript program includes the planned path; no claims were derived.",
+        path,
+      });
+}
+
+function analyzeObserved(context: Context, repository: AnalyzerRepository): void {
+  const { request } = context;
+  const reference = request.baseRevisionRef;
+  const base = reference === undefined ? undefined : resolveCommit(request.worktree, reference);
+  if (base === undefined) {
+    addOwn(context, {
+      code: DIAGNOSTIC_CODES.baseUnavailable,
+      message: "The Intent base revision is unavailable, so no observed claims were derived.",
+    });
+    return;
+  }
+  repository.base_revision_ref = base;
+  const head = headCommit(request.worktree);
+  if (head !== undefined) repository.head_revision_ref = head;
+
+  let candidates = request.paths;
+  if (candidates.length === 0) {
+    const listed = changedPaths(request.worktree, base);
+    if (listed === undefined) {
+      addOwn(context, {
+        code: DIAGNOSTIC_CODES.changedPathsUnavailable,
+        message: "Git could not list the changed files, so no observed claims were derived.",
+      });
+      return;
+    }
+    candidates = listed
+      .filter(isAcceptablePath)
+      .map((path) => normalizedRelative(request.worktree, path));
+  }
+  const selected = [...new Set(candidates)].filter(isTypeScriptSource).sort(compareText);
+  if (selected.length > MAX_OBSERVED_FILES) {
+    addOwn(context, {
+      code: DIAGNOSTIC_CODES.changedPathsTruncated,
+      message: `Analyzed ${MAX_OBSERVED_FILES} of ${selected.length} changed TypeScript files; omitted ${selected.length - MAX_OBSERVED_FILES}.`,
+    });
+    selected.length = MAX_OBSERVED_FILES;
+  }
+
+  const present = new Set<string>();
+  for (const path of selected) {
+    const current = readWorktreeFile(request, path);
+    const previous = current === "unreadable" ? undefined : baseFile(request.worktree, base, path);
+    if (current === "unreadable" || previous?.state === "unreadable") {
+      addOwn(context, {
+        code: DIAGNOSTIC_CODES.observedPathUnanalyzed,
+        message: "The changed file could not be read safely; no claims were derived for it.",
+        path,
+      });
+      continue;
+    }
+    if (current !== undefined) present.add(path);
+    compareExports(
+      context,
+      path,
+      previous?.state === "found" ? previous.content : undefined,
+      current,
+    );
+  }
+  visitProgramFiles(context, present, (program, sourceFile, path) =>
+    collectImports(context, program, sourceFile, path),
+  );
+}
+
+/**
+ * Emits `changes` for an export whose fingerprint differs, `removes` for an
+ * export missing from the working tree, and `produces` (contract only) for a
+ * new export. Unchanged exports emit nothing. Base content is parsed in memory
+ * and only its hash and line numbers reach the report.
+ */
+function compareExports(
+  context: Context,
+  path: string,
+  baseContent: Buffer | undefined,
+  currentContent: Buffer | undefined,
+): void {
+  const before: Map<string, ExportFingerprint> =
+    baseContent === undefined ? new Map() : exportFingerprints(parseSource(path, baseContent));
+  const after: Map<string, ExportFingerprint> =
+    currentContent === undefined
+      ? new Map()
+      : exportFingerprints(parseSource(path, currentContent));
+  if (currentContent !== undefined) {
+    const hash = sha256(currentContent);
+    // Import evidence for this file then cites the same bytes.
+    context.hashes.set(resolve(context.request.worktree, path), hash);
+    for (const [name, current] of after) {
+      const previous = before.get(name);
+      if (previous !== undefined && previous.fingerprint === current.fingerprint) continue;
+      addExportClaims(
+        context,
+        path,
+        name,
+        previous === undefined ? "produces" : "changes",
+        sourceEvidence(path, name, current.line, hash),
+      );
+    }
+  }
+  if (baseContent === undefined) return;
+  const baseHash = sha256(baseContent);
+  for (const [name, previous] of before)
+    if (!after.has(name))
+      addExportClaims(
+        context,
+        path,
+        name,
+        "removes",
+        sourceEvidence(path, name, previous.line, baseHash),
+      );
+}
+
+/**
+ * Builds each discovered TypeScript program that includes a selected path not
+ * yet visited, and calls `visit` once per selected repository source file.
+ * Returns the visited paths.
+ */
+function visitProgramFiles(
+  context: Context,
+  paths: ReadonlySet<string>,
+  visit: (program: ts.Program, sourceFile: ts.SourceFile, path: string) => void,
+): Set<string> {
+  const { worktree, tsconfigPath } = context.request;
+  const visited = new Set<string>();
+  if (paths.size === 0) return visited;
+  for (const configPath of projectConfigs(worktree, tsconfigPath)) {
+    const pending = new Set([...paths].filter((path) => !visited.has(path)));
+    if (pending.size === 0) break;
+    const parsed = readConfig(context, configPath);
+    // Building a program is the expensive step. Skip a project that contains
+    // none of the pending paths, and its unrelated diagnostics.
+    if (parsed === undefined || !includesSelectedPath(parsed.fileNames, worktree, pending))
       continue;
     const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
-    for (const diagnostic of ts.getPreEmitDiagnostics(program))
-      addDiagnostic(diagnostics, diagnostic, worktree);
-
-    const output: ClaimOutput = { claims, diagnostics };
+    for (const diagnostic of ts.getPreEmitDiagnostics(program)) addCompiler(context, diagnostic);
     for (const sourceFile of program.getSourceFiles()) {
       if (sourceFile.isDeclarationFile || !isRepositorySource(program, worktree, sourceFile))
         continue;
       const path = normalizedRelative(worktree, sourceFile.fileName);
-      if (selectedPaths.size > 0 && !selectedPaths.has(path)) continue;
-      collectExports(program, sourceFile, path, worktree, output);
-      collectImports(program, sourceFile, path, worktree, output);
-      if (claims.size >= MAX_CLAIMS) break;
+      if (!pending.has(path)) continue;
+      visited.add(path);
+      visit(program, sourceFile, path);
     }
   }
-
-  return {
-    report_version: 1,
-    repository: { canonical_remote: request.canonical_remote },
-    claims: [...claims.values()].sort((left, right) =>
-      left.normalized_subject.localeCompare(right.normalized_subject),
-    ),
-    diagnostics: diagnostics.sort((left, right) =>
-      `${left.code}:${left.path ?? ""}:${left.line ?? 0}`.localeCompare(
-        `${right.code}:${right.path ?? ""}:${right.line ?? 0}`,
-      ),
-    ),
-  };
+  return visited;
 }
 
-function validateRequest(request: AnalyzeRequest): void {
-  if (!request || typeof request.worktree !== "string" || request.worktree.length === 0)
-    throw new Error("worktree is required");
-  if (!/^[a-z0-9][a-z0-9.-]*(\/[A-Za-z0-9._~-]+)+$/.test(request.canonical_remote))
-    throw new Error("canonical_remote must be a normalized credential-free Git remote");
-  if (
-    request.paths !== undefined &&
-    (request.paths.length > 500 ||
-      request.paths.some(
-        (path) => typeof path !== "string" || path.length === 0 || path.length > 1024,
-      ))
-  )
-    throw new Error("paths must contain at most 500 bounded paths");
-}
-
-function projectConfigs(worktree: string, configured?: string): string[] {
-  if (configured !== undefined) {
-    const path = resolve(worktree, configured);
-    if (!isInside(worktree, path) || !existsSync(path))
-      throw new Error("tsconfig_path must name a file inside the worktree");
-    return [path];
-  }
+function projectConfigs(worktree: string, configured: string | undefined): string[] {
+  if (configured !== undefined) return [configured];
   const configs: string[] = [];
   const visit = (directory: string, depth: number): void => {
     if (configs.length >= MAX_PROJECTS || depth > 5) return;
@@ -138,18 +310,13 @@ function projectConfigs(worktree: string, configured?: string): string[] {
     }
   };
   visit(worktree, 0);
-  if (configs.length === 0) throw new Error("no tsconfig.json was found in the worktree");
   return configs.sort();
 }
 
-function readConfig(
-  configPath: string,
-  diagnostics: Diagnostic[],
-  worktree: string,
-): ts.ParsedCommandLine | undefined {
+function readConfig(context: Context, configPath: string): ts.ParsedCommandLine | undefined {
   const result = ts.readConfigFile(configPath, ts.sys.readFile);
   if (result.error !== undefined) {
-    addDiagnostic(diagnostics, result.error, worktree);
+    addCompiler(context, result.error);
     return undefined;
   }
   const parsed = ts.parseJsonConfigFileContent(
@@ -159,7 +326,7 @@ function readConfig(
     undefined,
     configPath,
   );
-  for (const diagnostic of parsed.errors) addDiagnostic(diagnostics, diagnostic, worktree);
+  for (const diagnostic of parsed.errors) addCompiler(context, diagnostic);
   return parsed;
 }
 
@@ -172,11 +339,6 @@ function includesSelectedPath(
     (fileName) =>
       isInside(worktree, fileName) && selectedPaths.has(normalizedRelative(worktree, fileName)),
   );
-}
-
-interface ClaimOutput {
-  claims: Map<string, Claim>;
-  diagnostics: Diagnostic[];
 }
 
 /**
@@ -192,13 +354,61 @@ function isRepositorySource(program: ts.Program, worktree: string, file: ts.Sour
   );
 }
 
+function isTypeScriptSource(path: string): boolean {
+  return (
+    TYPESCRIPT_SOURCE.test(path) &&
+    !DECLARATION_FILE.test(path) &&
+    !path.split("/").includes("node_modules")
+  );
+}
+
+type WorktreeFile = { state: "file"; absolute: string } | { state: "missing" | "unreadable" };
+
+/**
+ * Locates a worktree-relative path. A path whose real location is outside the
+ * worktree, such as a symbolic link to another directory, or which is not a
+ * regular file, is unreadable.
+ */
+function worktreeFile(request: ValidatedRequest, path: string): WorktreeFile {
+  const absolute = resolve(request.worktree, path);
+  let real: string;
+  try {
+    real = realpathSync(absolute);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return { state: code === "ENOENT" || code === "ENOTDIR" ? "missing" : "unreadable" };
+  }
+  try {
+    if (isInside(request.realWorktree, real) && statSync(real).isFile())
+      return { state: "file", absolute };
+  } catch {
+    // Unreadable below.
+  }
+  return { state: "unreadable" };
+}
+
+/** Returns the bytes of a working-tree file, undefined when it is absent. */
+function readWorktreeFile(
+  request: ValidatedRequest,
+  path: string,
+): Buffer | "unreadable" | undefined {
+  const file = worktreeFile(request, path);
+  if (file.state !== "file") return file.state === "missing" ? undefined : "unreadable";
+  try {
+    return readFileSync(file.absolute);
+  } catch {
+    return "unreadable";
+  }
+}
+
 function collectExports(
+  context: Context,
   program: ts.Program,
   file: ts.SourceFile,
   path: string,
-  worktree: string,
-  output: ClaimOutput,
+  subset: ReadonlySet<string> | undefined,
 ): void {
+  const { worktree } = context.request;
   const checker = program.getTypeChecker();
   const moduleSymbol = checker.getSymbolAtLocation(file);
   if (moduleSymbol === undefined) return;
@@ -206,61 +416,72 @@ function collectExports(
     const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
     if (declaration === undefined) continue;
     const name = checker.symbolToString(symbol);
-    const reference = `${subjectPath(path)}/${stableName(name)}`;
+    if (subset !== undefined && !subset.has(symbol.name) && !subset.has(name)) continue;
     // `export *` can surface a declaration outside the worktree. Its location
     // must not be disclosed, so cite the re-exporting module instead.
     const declared = declaration.getSourceFile();
     const evidence = isInside(worktree, declared.fileName)
-      ? evidenceFor(declared, declaration.getStart(), worktree, name)
-      : evidenceFor(file, 0, worktree, name);
-    addClaim(output, {
-      subject_kind: "code_symbol",
-      normalized_subject: `symbol:typescript:${reference}`,
-      display_name: name,
-      relation: "affects",
-      provenance_kind: "static_analysis",
-      evidence_refs: [evidence],
-    });
-    addClaim(output, {
-      subject_kind: "contract",
-      normalized_subject: `contract:typescript:${reference}`,
-      display_name: name,
-      relation: "produces",
-      provenance_kind: "static_analysis",
-      evidence_refs: [evidence],
-    });
+      ? evidenceFor(context, declared, declaration.getStart(), name)
+      : evidenceFor(context, file, 0, name);
+    addExportClaims(context, path, name, "changes", evidence);
   }
 }
 
+/** `changes` and `removes` cover the symbol and its contract; `produces` covers the contract. */
+function addExportClaims(
+  context: Context,
+  path: string,
+  name: string,
+  relation: "changes" | "removes" | "produces",
+  evidence: EvidenceRef,
+): void {
+  const reference = `${subjectPath(path)}/${stableName(name)}`;
+  if (relation !== "produces")
+    addClaim(context, {
+      subject_kind: "code_symbol",
+      normalized_subject: `symbol:typescript:${reference}`,
+      display_name: name,
+      relation,
+      provenance_kind: "static_analysis",
+      evidence_refs: [evidence],
+    });
+  addClaim(context, {
+    subject_kind: "contract",
+    normalized_subject: `contract:typescript:${reference}`,
+    display_name: name,
+    relation,
+    provenance_kind: "static_analysis",
+    evidence_refs: [evidence],
+  });
+}
+
 function collectImports(
+  context: Context,
   program: ts.Program,
   file: ts.SourceFile,
   path: string,
-  worktree: string,
-  output: ClaimOutput,
 ): void {
+  const { worktree } = context.request;
   const checker = program.getTypeChecker();
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
       continue;
     const moduleSymbol = checker.getSymbolAtLocation(statement.moduleSpecifier);
     const target = moduleSymbol?.declarations?.[0]?.getSourceFile();
-    if (target === undefined || !isRepositorySource(program, worktree, target)) continue;
+    if (moduleSymbol === undefined || target === undefined) continue;
+    if (!isRepositorySource(program, worktree, target)) continue;
     const targetPath = subjectPath(normalizedRelative(worktree, target.fileName));
-    const bindings = importBindings(statement.importClause);
-    for (const name of bindings) {
-      const resolved = checker
-        .getExportsOfModule(moduleSymbol ?? ({} as ts.Symbol))
-        .find((symbol) => symbol.name === name);
+    const exports = checker.getExportsOfModule(moduleSymbol);
+    for (const name of importBindings(statement.importClause)) {
+      const resolved = exports.find((symbol) => symbol.name === name);
       const stable = stableName(resolved === undefined ? name : checker.symbolToString(resolved));
-      const reference = `${targetPath}/${stable}`;
-      addClaim(output, {
+      addClaim(context, {
         subject_kind: "contract",
-        normalized_subject: `contract:typescript:${reference}`,
+        normalized_subject: `contract:typescript:${targetPath}/${stable}`,
         display_name: name,
         relation: "consumes",
         provenance_kind: "static_analysis",
-        evidence_refs: [evidenceFor(file, statement.getStart(), worktree, `${path}/${name}`)],
+        evidence_refs: [evidenceFor(context, file, statement.getStart(), `${path}/${name}`)],
       });
     }
   }
@@ -281,57 +502,71 @@ function importBindings(clause: ts.ImportClause | undefined): string[] {
 /**
  * Adds a claim only when it fits the Conn contract bounds. A claim that cannot
  * be represented is omitted with a code-only diagnostic, so one unusual file
- * cannot invalidate the whole report.
+ * cannot invalidate the whole report. The claim limit applies later, in
+ * relation priority order.
  */
-function addClaim(output: ClaimOutput, claim: Claim): void {
-  const { claims, diagnostics } = output;
+function addClaim(context: Context, claim: Claim): void {
   const key = `${claim.normalized_subject} ${claim.relation}`;
-  if (claims.size >= MAX_CLAIMS || claims.has(key)) return;
+  if (context.claims.has(key)) return;
   const evidence = claim.evidence_refs[0];
   if (
     claim.normalized_subject.length > MAX_SUBJECT_LENGTH ||
     (evidence !== undefined &&
       (evidence.locator.length > MAX_LOCATOR_LENGTH || evidence.path.length > MAX_PATH_LENGTH))
   ) {
-    if (diagnostics.length < MAX_DIAGNOSTICS) {
-      const diagnostic: Diagnostic = {
-        code: SKIPPED_CLAIM_CODE,
-        message: "A claim exceeded the Conn reference length bounds and was omitted.",
-      };
-      if (evidence !== undefined && evidence.path.length <= MAX_PATH_LENGTH) {
-        diagnostic.path = evidence.path;
-        diagnostic.line = evidence.line;
-      }
-      diagnostics.push(diagnostic);
+    const diagnostic: Diagnostic = {
+      code: DIAGNOSTIC_CODES.claimSkipped,
+      message: "A claim exceeded the Conn reference length bounds and was omitted.",
+    };
+    if (evidence !== undefined && evidence.path.length <= MAX_PATH_LENGTH) {
+      diagnostic.path = evidence.path;
+      diagnostic.line = evidence.line;
     }
+    addOwn(context, diagnostic);
     return;
   }
-  claims.set(key, { ...claim, display_name: displayName(claim.display_name) });
+  context.claims.set(key, { ...claim, display_name: displayName(claim.display_name) });
 }
 
 function displayName(value: string): string {
-  const bounded = value.slice(0, MAX_DISPLAY_NAME_LENGTH);
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are replaced.
+  const bounded = value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, MAX_DISPLAY_NAME_LENGTH);
   return bounded.trim() === "" ? "module" : bounded;
 }
 
 function evidenceFor(
+  context: Context,
   file: ts.SourceFile,
   position: number,
-  worktree: string,
   locator: string,
 ): EvidenceRef {
-  const path = normalizedRelative(worktree, file.fileName);
+  const path = normalizedRelative(context.request.worktree, file.fileName);
+  const absolute = resolve(file.fileName);
+  let hash = context.hashes.get(absolute);
+  if (hash === undefined) {
+    hash = sha256(readFileSync(absolute));
+    context.hashes.set(absolute, hash);
+  }
+  return sourceEvidence(path, locator, file.getLineAndCharacterOfPosition(position).line + 1, hash);
+}
+
+function sourceEvidence(path: string, locator: string, line: number, hash: string): EvidenceRef {
   return {
     kind: "source_location",
     locator: `typescript:${subjectPath(path)}:${stableName(locator)}`,
     path,
-    line: file.getLineAndCharacterOfPosition(position).line + 1,
-    content_hash: createHash("sha256").update(readFileSync(file.fileName)).digest("hex"),
+    line,
+    content_hash: hash,
   };
 }
 
-function addDiagnostic(output: Diagnostic[], diagnostic: ts.Diagnostic, worktree: string): void {
-  if (output.length >= MAX_DIAGNOSTICS) return;
+function addOwn(context: Context, diagnostic: Diagnostic): void {
+  if (context.own.length < MAX_DIAGNOSTICS) context.own.push(diagnostic);
+}
+
+function addCompiler(context: Context, diagnostic: ts.Diagnostic): void {
+  if (context.compiler.length >= MAX_DIAGNOSTICS) return;
+  const { worktree } = context.request;
   const item: Diagnostic = {
     code: `TS${diagnostic.code}`,
     message: `TypeScript diagnostic TS${diagnostic.code}`,
@@ -340,24 +575,52 @@ function addDiagnostic(output: Diagnostic[], diagnostic: ts.Diagnostic, worktree
     item.path = normalizedRelative(worktree, diagnostic.file.fileName);
     item.line = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start ?? 0).line + 1;
   }
-  output.push(item);
+  context.compiler.push(item);
 }
 
-function normalizedRelative(worktree: string, path: string): string {
-  const value = relative(worktree, resolve(worktree, path)).split(sep).join("/");
-  if (value === "" || value.startsWith("../") || value === "..")
-    throw new Error("path must stay inside the worktree");
-  return value;
-}
-
-function isInside(worktree: string, path: string): boolean {
-  const relativePath = relative(worktree, resolve(path));
-  return (
-    relativePath !== "" &&
-    !relativePath.startsWith(`..${sep}`) &&
-    relativePath !== ".." &&
-    !relativePath.startsWith("../")
+/**
+ * Applies the claim limit in relation priority order, then sorts the kept
+ * claims by subject. The truncation notice and analyzer diagnostics are kept
+ * ahead of compiler diagnostics at the diagnostic limit.
+ */
+function report(context: Context, repository: AnalyzerRepository): AnalyzerReport {
+  const ranked = [...context.claims.values()].sort(
+    (left, right) =>
+      RELATION_PRIORITY[left.relation] - RELATION_PRIORITY[right.relation] ||
+      compareText(left.normalized_subject, right.normalized_subject),
   );
+  const kept = ranked.slice(0, MAX_CLAIMS);
+  const notices: Diagnostic[] = [];
+  if (ranked.length > kept.length)
+    notices.push({
+      code: DIAGNOSTIC_CODES.claimsTruncated,
+      message: `Kept ${kept.length} of ${ranked.length} claims; omitted ${ranked.length - kept.length}.`,
+    });
+  const diagnostics = [...notices, ...context.own, ...context.compiler].slice(0, MAX_DIAGNOSTICS);
+  return {
+    report_version: 2,
+    mode: context.request.mode,
+    repository,
+    claims: kept.sort(
+      (left, right) =>
+        compareText(left.normalized_subject, right.normalized_subject) ||
+        RELATION_PRIORITY[left.relation] - RELATION_PRIORITY[right.relation],
+    ),
+    diagnostics: diagnostics.sort((left, right) =>
+      compareText(
+        `${left.code}:${left.path ?? ""}:${left.line ?? 0}`,
+        `${right.code}:${right.path ?? ""}:${right.line ?? 0}`,
+      ),
+    ),
+  };
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sha256(content: Buffer): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function stableName(value: string): string {

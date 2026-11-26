@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -151,20 +152,67 @@ func (p *Projects) assessActiveIntentCollisions(ctx context.Context, tx Tx, acto
 	for _, key := range keys {
 		candidate := candidates[key]
 		assessment := candidate.assessment(changed.ProjectID, at)
+		inherited, err := p.inheritDecision(ctx, tx, candidate, &assessment)
+		if err != nil {
+			return err
+		}
 		inserted, err := tx.InsertCollisionAssessment(ctx, assessment)
 		if err != nil {
 			return err
 		}
-		if inserted {
-			if _, err := tx.AppendEvent(ctx, protocol.EventEnvelope{
-				ProjectID: changed.ProjectID, EventID: uuid.NewV7(), EntityID: assessment.CollisionID,
-				ActorHumanID: actor, OccurredAt: at, Payload: protocol.CollisionOpened{},
-			}); err != nil {
-				return err
-			}
+		if !inserted {
+			continue
+		}
+		// A carried-forward decision is a state change of the decided
+		// collision, not a new warning.
+		payload := protocol.EventPayload(protocol.CollisionOpened{})
+		if inherited {
+			payload = protocol.CollisionUpdated{}
+		}
+		if _, err := tx.AppendEvent(ctx, protocol.EventEnvelope{
+			ProjectID: changed.ProjectID, EventID: uuid.NewV7(), EntityID: assessment.CollisionID,
+			ActorHumanID: actor, OccurredAt: at, Payload: payload,
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// inheritDecision carries a human decision forward to a new assessment for
+// the same Intent pair and rule. The new assessment inherits the decided
+// state only when every subject it matched was covered by the decision, so a
+// new matching subject always reopens the warning. A decided subject list at
+// its bound may have been truncated and is never treated as complete.
+func (p *Projects) inheritDecision(ctx context.Context, tx Tx, candidate *collisionCandidate, assessment *protocol.CollisionAssessment) (bool, error) {
+	prior, err := tx.LatestDecidedCollision(ctx, assessment.ProjectID, candidate.leftIntentID, candidate.rightIntentID, candidate.ruleID)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if prior.DecisionRef == nil || len(prior.MatchedSubjects) >= protocol.MaxMatchedSubjects || !subjectsCovered(candidate.subjects, prior.MatchedSubjects) {
+		return false, nil
+	}
+	assessment.State = prior.State
+	decision := *prior.DecisionRef
+	assessment.DecisionRef = &decision
+	assessment.ExplanationMarkdown += fmt.Sprintf(" Human decision %s on collision %s covered every matched subject, so this assessment inherits the %s state.", decision, prior.CollisionID, prior.State)
+	return true, nil
+}
+
+func subjectsCovered(subjects map[string]struct{}, decided []string) bool {
+	covered := make(map[string]bool, len(decided))
+	for _, subject := range decided {
+		covered[subject] = true
+	}
+	for subject := range subjects {
+		if !covered[subject] {
+			return false
+		}
+	}
+	return true
 }
 
 func matchingRules(left, right protocol.SemanticClaim) []string {
@@ -239,6 +287,10 @@ func (c collisionCandidate) assessment(projectID uuid.UUID, at protocol.Timestam
 		subjects = append(subjects, subject)
 	}
 	sort.Strings(subjects)
+	matched := append([]string(nil), subjects...)
+	if len(matched) > protocol.MaxMatchedSubjects {
+		matched = matched[:protocol.MaxMatchedSubjects]
+	}
 	if len(subjects) > 3 {
 		subjects = append(subjects[:3], "additional normalized subjects")
 	}
@@ -251,8 +303,9 @@ func (c collisionCandidate) assessment(projectID uuid.UUID, at protocol.Timestam
 		CollisionID: uuid.NewV7(), ProjectID: projectID,
 		LeftIntentID: c.leftIntentID, LeftIntentRevision: c.leftRevision,
 		RightIntentID: c.rightIntentID, RightIntentRevision: c.rightRevision,
-		RuleID: c.ruleID, Severity: "amber", Confidence: 1, State: "open",
+		RuleID: c.ruleID, Severity: "amber", Confidence: 1, State: protocol.CollisionOpen,
 		MatchingClaimRefs:   claimRefs,
+		MatchedSubjects:     matched,
 		ExplanationMarkdown: fmt.Sprintf("Rule `%s` matched normalized subject(s) `%s` from %s claims on active Intent revisions %s@%d and %s@%d. Matching claim identifiers provide the provenance for this advisory assessment.", c.ruleID, strings.Join(subjects, "`, `"), strings.Join(provenance, " and "), c.leftIntentID, c.leftRevision, c.rightIntentID, c.rightRevision),
 		CreatedAt:           at,
 	}

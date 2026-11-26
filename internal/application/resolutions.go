@@ -86,6 +86,10 @@ func (p *Projects) ConflictContext(ctx context.Context, actor, projectID, collis
 		if err != nil {
 			return err
 		}
+		decidedCollisions, err := tx.DecidedCollisions(ctx, projectID, maxRadarDecidedCollisions)
+		if err != nil {
+			return err
+		}
 		decisionRefs, err := tx.ResolutionDecisionRefs(ctx, projectID)
 		if err != nil {
 			return err
@@ -104,7 +108,7 @@ func (p *Projects) ConflictContext(ctx context.Context, actor, projectID, collis
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		radar := buildRadar(project, objectives, blueprint, repositories, intents, activeClaims, openCollisions, decisionRefs, allDecisions, evidence)
+		radar := buildRadar(project, objectives, blueprint, repositories, intents, activeClaims, openCollisions, decidedCollisions, decisionRefs, allDecisions, evidence)
 		pack := contextPack(collision, objective, left, right, claims, decisions, radar, evidence)
 		if err := validateRecord(pack); err != nil {
 			return err
@@ -223,9 +227,12 @@ func (p *Projects) ProposeResolution(ctx context.Context, actor, projectID, part
 	return result, err
 }
 
-// DecideResolution appends an attributable human decision. Binding and
-// high-risk outcomes remain owner-authorized; no decision mutates the source
-// proposal or an Objective/Blueprint itself.
+// DecideResolution appends an attributable human decision and sets the
+// collision state the decision implies, in one transaction. Binding and
+// high-risk outcomes remain owner-authorized. A member who is not an owner may
+// dismiss a collision as a false positive only when they are the Human behind
+// one of its two Intents. No decision mutates the source proposal or an
+// Objective/Blueprint itself.
 func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, collisionID uuid.UUID, input protocol.ResolutionDecisionInput) (Result[protocol.ResolutionDecision], error) {
 	decision := protocol.ResolutionDecision{DecisionID: uuid.NewV7(), ProjectID: projectID, CollisionID: collisionID, SelectedProposalID: input.SelectedProposalID, DecidedByHumanID: actor, Kind: input.Kind, Binding: input.Binding, RationaleMarkdown: input.RationaleMarkdown, References: input.References, CreatedAt: protocol.NewTimestamp(p.now())}
 	if err := validateRecord(decision); err != nil {
@@ -237,7 +244,8 @@ func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, colli
 		if err != nil {
 			return err
 		}
-		if _, err := tx.CollisionAssessment(ctx, projectID, collisionID); err != nil {
+		collision, err := tx.CollisionAssessment(ctx, projectID, collisionID)
+		if err != nil {
 			return err
 		}
 		if decision.SelectedProposalID != nil {
@@ -255,14 +263,63 @@ func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, colli
 		if requiresOwnerDecision(decision) && role != protocol.RoleOwner {
 			return ErrForbidden
 		}
+		if decision.Kind == "false_positive" && role != protocol.RoleOwner {
+			behind, err := humanBehindCollision(ctx, tx, projectID, collision, actor)
+			if err != nil {
+				return err
+			}
+			if !behind {
+				return ErrForbidden
+			}
+		}
 		if err := tx.InsertResolutionDecision(ctx, decision); err != nil {
 			return err
 		}
+		if err := tx.SetCollisionDecision(ctx, projectID, collisionID, decisionState(decision.Kind), decision.DecisionID); err != nil {
+			return err
+		}
 		result.Data = decision
-		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, decision.DecisionID, actor, decision.CreatedAt.Time(), protocol.ResolutionDecided{}))
+		if _, err := tx.AppendEvent(ctx, newEvent(projectID, decision.DecisionID, actor, decision.CreatedAt.Time(), protocol.ResolutionDecided{})); err != nil {
+			return err
+		}
+		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, collisionID, actor, decision.CreatedAt.Time(), protocol.CollisionUpdated{}))
 		return err
 	})
 	return result, err
+}
+
+// decisionState maps a human decision kind to the collision state it sets.
+func decisionState(kind string) string {
+	switch kind {
+	case "false_positive":
+		return protocol.CollisionDismissed
+	case "dependency", "sequencing", "contract_agreement", "accepted_risk":
+		return protocol.CollisionResolved
+	default:
+		return protocol.CollisionUnderReview
+	}
+}
+
+// humanBehindCollision reports whether actor is the Human behind the
+// Participant of either Intent revision in the collision.
+func humanBehindCollision(ctx context.Context, tx Tx, projectID uuid.UUID, collision protocol.CollisionAssessment, actor uuid.UUID) (bool, error) {
+	for _, side := range []struct {
+		intentID uuid.UUID
+		revision int
+	}{{collision.LeftIntentID, collision.LeftIntentRevision}, {collision.RightIntentID, collision.RightIntentRevision}} {
+		intent, err := tx.IntentRevision(ctx, projectID, side.intentID, side.revision)
+		if err != nil {
+			return false, err
+		}
+		participant, err := tx.ParticipantByID(ctx, projectID, intent.ParticipantID)
+		if err != nil {
+			return false, err
+		}
+		if participant.HumanID == actor {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func requiresOwnerDecision(decision protocol.ResolutionDecision) bool {

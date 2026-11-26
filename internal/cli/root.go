@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/analyzer"
+	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/devenv"
 )
 
@@ -60,9 +62,27 @@ type Dependencies struct {
 	// Account returns local account operations against serverURL.
 	Account func(serverURL string) (*account.Service, error)
 
+	// Analyzer resolves the local TypeScript analyzer and Node.js. Nil
+	// treats local analysis as unavailable.
+	Analyzer func() analyzer.Location
+
+	// HookStore returns the operating-system credential store entry hooks
+	// read for a canonical server URL. Nil lets hooks use only CONN_TOKEN.
+	HookStore func(serverURL string) credentials.Store
+
+	// Executable returns the absolute path of the running conn executable,
+	// which the Kiro bundle renders into its command hooks.
+	Executable func() (string, error)
+
 	// RunApp starts the interactive terminal application against serverURL.
 	RunApp func(ctx context.Context, in io.Reader, out, err io.Writer, serverURL string) error
 }
+
+// exitWith ends a command with a specific exit code and no diagnostic. Hooks
+// use it for their non-blocking warning code.
+type exitWith struct{ code int }
+
+func (e exitWith) Error() string { return fmt.Sprintf("exit %d", e.code) }
 
 // Execute runs one command line and returns the process exit code.
 // Results go to streams.Out; diagnostics always go to streams.Err.
@@ -72,9 +92,14 @@ func Execute(ctx context.Context, args []string, streams Streams, deps Dependenc
 	markStarted(root, &started)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
+	var exit exitWith
 	switch {
 	case err == nil:
 		return ExitOK
+	case hookCommand(args):
+		return silenceHookFailure(err)
+	case errors.As(err, &exit):
+		return exit.code
 	case errors.Is(err, errReported):
 		return ExitFailure
 	}
@@ -105,8 +130,9 @@ func markStarted(cmd *cobra.Command, started *bool) {
 func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "conn",
-		Short: "Coordinate human-agent work cells around a shared blueprint",
-		Long: "Coordinate human-agent work cells around a shared blueprint.\n\n" +
+		Short: "Warn coding agents before they edit when other in-progress work changes the same behavior",
+		Long: "Conn tells a coding agent, before it edits, when other in-progress work changes the same\n" +
+			"behavior, contract, or data, and gives the reviewer proof of what each change intended.\n\n" +
 			"Structured commands accept --json and then print {\"data\": ..., \"as_of_event\": n}\n" +
 			"on standard output. Diagnostics always go to standard error.\n\n" + exitCodeHelp,
 		Version:       deps.Version,
@@ -131,6 +157,7 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newCharterCommand(deps, streams),
 		newStatusCommand(deps, streams),
 		newRadarCommand(deps, streams),
+		newConceptsCommand(deps, streams),
 		newConflictsCommand(deps, streams),
 		newExplainCommand(deps, streams),
 		newConflictCommand(deps, streams),
@@ -138,7 +165,8 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newEvidenceCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
-		newKiroCommand(streams),
+		newKiroCommand(deps, streams),
+		newHookCommand(deps, streams),
 		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
@@ -192,16 +220,19 @@ func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 		Use:   "mcp",
 		Short: "Run the Kiro MCP adapter over standard input and output",
 		Long: "Run the Kiro MCP adapter over standard input and output.\n\n" +
-			"It exposes session and Project diagnostics, focused coordination reads, guided\n" +
-			"start/sync/resolve/finish/handoff prompts, participant-owned Intent and evidence\n" +
-			"writes, non-binding proposals, and bounded local TypeScript analysis. It cannot\n" +
-			"perform Charter, Objective, Blueprint, membership, risk, or binding resolution decisions.\n\n" +
+			"It exposes session and Project diagnostics, the concept catalog, pre-edit claim\n" +
+			"suggestions, focused coordination reads, guided start/sync/resolve/finish/handoff prompts,\n" +
+			"participant-owned Intent and evidence writes, non-binding proposals, and bounded local\n" +
+			"TypeScript analysis. It cannot perform Charter, Objective, Blueprint, membership, risk,\n" +
+			"or binding resolution decisions.\n\n" +
 			"Authentication uses conn login, interactive MCP login, or an explicit CONN_TOKEN.\n" +
 			"Project selection is process-local and never grants backend access.\n\n" +
 			"Environment:\n" +
-			"  CONN_SERVER_URL  Conn server URL\n" +
-			"  CONN_PROJECT     optional default project ID\n" +
-			"  CONN_TOKEN       explicit non-persistent session override\n\n" +
+			"  CONN_SERVER_URL     Conn server URL\n" +
+			"  CONN_PROJECT        optional default project ID\n" +
+			"  CONN_TOKEN          explicit non-persistent session override\n" +
+			"  CONN_ANALYZER_PATH  optional TypeScript analyzer script (default: beside conn, then cwd)\n" +
+			"  CONN_NODE_PATH      optional Node.js executable (default: node on PATH)\n\n" +
 			"Standard output carries only MCP messages; diagnostics go to standard error.\n" +
 			"Normal startup never edits Kiro configuration.",
 		Args: cobra.NoArgs,

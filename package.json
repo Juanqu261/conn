@@ -14,7 +14,7 @@
     "build": "pnpm run build:go && pnpm run build:node",
     "build:go": "go build ./...",
     "build:node": "pnpm --recursive --if-present run build",
-    "check": "pnpm run check:node && pnpm run check:go",
+    "check": "pnpm run check:node && pnpm run build:node && pnpm run check:go",
     "check:go": "node ./scripts/check-go-format.mjs && go vet ./... && go test ./...",
     "check:node": "biome check . && pnpm run typecheck && pnpm run test:node",
     "db:migrate": "go run ./internal/cmd/conn-migrate --dev up",

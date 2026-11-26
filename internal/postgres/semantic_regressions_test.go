@@ -52,6 +52,15 @@ func TestRadarBoundsUnboundedInputs(t *testing.T) {
 	publishAssessmentIntent(t, ctx, projects, owner, projectID, objectiveID, rightParticipant, rightID, shared)
 	collision := loadAssessments(t, ctx, store, leftID, rightID)[0]
 
+	// Radar decision_refs are bounded at 200. The latest decision sets the
+	// collision state, so the dependency decision is recorded last.
+	for i := 0; i < 200; i++ {
+		if _, err := projects.DecideResolution(ctx, owner, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
+			Kind: "other", RationaleMarkdown: fmt.Sprintf("Follow-up note %d.", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// A human rationale may be up to 4000 characters; a Radar dependency
 	// summary is a 1000-character statement.
 	if _, err := projects.DecideResolution(ctx, owner, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
@@ -59,14 +68,6 @@ func TestRadarBoundsUnboundedInputs(t *testing.T) {
 		References: []string{"meeting:retry-sync"},
 	}); err != nil {
 		t.Fatal(err)
-	}
-	// Radar decision_refs are bounded at 200.
-	for i := 0; i < 200; i++ {
-		if _, err := projects.DecideResolution(ctx, owner, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
-			Kind: "other", RationaleMarkdown: fmt.Sprintf("Follow-up note %d.", i),
-		}); err != nil {
-			t.Fatal(err)
-		}
 	}
 	// Radar evidence_coverage[].evidence_refs is bounded at 50 per key.
 	var last protocol.EvidenceReference

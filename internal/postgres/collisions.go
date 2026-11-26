@@ -7,6 +7,9 @@ import (
 
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/Juanqu261/conn/internal/application"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
@@ -120,14 +123,15 @@ func (t projectTx) InsertCollisionAssessment(ctx context.Context, assessment pro
 		INSERT INTO collision_assessments
 			(collision_id, project_id, left_intent_id, left_intent_revision,
 			 right_intent_id, right_intent_revision, rule_id, severity,
-			 confidence, state, explanation_markdown, created_at, superseded_at, document)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			 confidence, state, explanation_markdown, created_at, superseded_at,
+			 matched_subjects, decision_id, document)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		ON CONFLICT (project_id, left_intent_id, left_intent_revision,
 			right_intent_id, right_intent_revision, rule_id) DO NOTHING`,
 		assessment.CollisionID, assessment.ProjectID, assessment.LeftIntentID, assessment.LeftIntentRevision,
 		assessment.RightIntentID, assessment.RightIntentRevision, assessment.RuleID, assessment.Severity,
 		assessment.Confidence, assessment.State, assessment.ExplanationMarkdown, assessment.CreatedAt.Time(),
-		assessment.SupersededAt, document)
+		assessment.SupersededAt, assessment.MatchedSubjects, assessment.DecisionRef, document)
 	if err != nil {
 		return false, err
 	}
@@ -140,4 +144,89 @@ func (t projectTx) InsertCollisionAssessment(ctx context.Context, assessment pro
 		}
 	}
 	return true, nil
+}
+
+func (t projectTx) LatestDecidedCollision(ctx context.Context, projectID, leftIntentID, rightIntentID uuid.UUID, ruleID string) (protocol.CollisionAssessment, error) {
+	var document []byte
+	err := t.tx.QueryRow(ctx, `
+		SELECT document FROM collision_assessments
+		WHERE project_id = $1 AND left_intent_id = $2 AND right_intent_id = $3 AND rule_id = $4
+			AND state IN ('resolved', 'dismissed')
+		ORDER BY created_at DESC, collision_id DESC
+		LIMIT 1`, projectID, leftIntentID, rightIntentID, ruleID).Scan(&document)
+	if err != nil {
+		return protocol.CollisionAssessment{}, notFound(err)
+	}
+	return decodeCollision(document)
+}
+
+func (t projectTx) SetCollisionDecision(ctx context.Context, projectID, collisionID uuid.UUID, state string, decisionID uuid.UUID) error {
+	tag, err := t.tx.Exec(ctx, `
+		UPDATE collision_assessments
+		SET state = $3, decision_id = $4,
+			document = jsonb_set(
+				jsonb_set(document, '{state}', to_jsonb($3::text)),
+				'{decision_ref}', to_jsonb($5::text))
+		WHERE project_id = $1 AND collision_id = $2`, projectID, collisionID, state, decisionID, decisionID.String())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return application.ErrNotFound
+	}
+	return nil
+}
+
+func (t projectTx) DecidedCollisions(ctx context.Context, projectID uuid.UUID, limit int) ([]protocol.CollisionAssessment, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT a.document FROM collision_assessments a
+		JOIN intents l ON l.project_id = a.project_id AND l.intent_id = a.left_intent_id
+			AND l.status = 'active' AND l.current_revision = a.left_intent_revision
+		JOIN intents r ON r.project_id = a.project_id AND r.intent_id = a.right_intent_id
+			AND r.status = 'active' AND r.current_revision = a.right_intent_revision
+		WHERE a.project_id = $1 AND a.state IN ('resolved', 'dismissed')
+		ORDER BY a.created_at DESC, a.collision_id DESC
+		LIMIT $2`, projectID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return collectCollisions(rows)
+}
+
+func (t projectTx) CollisionsForIntentRevision(ctx context.Context, projectID, intentID uuid.UUID, revision int) ([]protocol.CollisionAssessment, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT document FROM collision_assessments
+		WHERE project_id = $1
+			AND ((left_intent_id = $2 AND left_intent_revision = $3)
+				OR (right_intent_id = $2 AND right_intent_revision = $3))
+		ORDER BY created_at, collision_id`, projectID, intentID, revision)
+	if err != nil {
+		return nil, err
+	}
+	return collectCollisions(rows)
+}
+
+func collectCollisions(rows pgx.Rows) ([]protocol.CollisionAssessment, error) {
+	defer rows.Close()
+	collisions := []protocol.CollisionAssessment{}
+	for rows.Next() {
+		var document []byte
+		if err := rows.Scan(&document); err != nil {
+			return nil, err
+		}
+		collision, err := decodeCollision(document)
+		if err != nil {
+			return nil, err
+		}
+		collisions = append(collisions, collision)
+	}
+	return collisions, rows.Err()
+}
+
+func decodeCollision(document []byte) (protocol.CollisionAssessment, error) {
+	collision, err := protocol.Decode[protocol.CollisionAssessment](document)
+	if err != nil {
+		return protocol.CollisionAssessment{}, fmt.Errorf("stored collision assessment: %w", err)
+	}
+	return collision, nil
 }

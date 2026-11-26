@@ -10,8 +10,9 @@
     "intent_revision": { "$ref": "urn:conn:schema:v1:intent-revision" },
     "status": { "enum": ["active", "released", "superseded"] },
     "advisory_observations": {
+      "description": "Advisory context such as optional Charter association and near-match subject advice. Observations never change the Intent, its claims, or any collision.",
       "type": "array",
-      "maxItems": 10,
+      "maxItems": 21,
       "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
     }
   }

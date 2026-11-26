@@ -65,6 +65,9 @@ func (p *Projects) writeIntent(ctx context.Context, actor, projectID, participan
 					return ErrForbidden
 				}
 				if existing.IntentRevision.Revision == 1 && sameIntentContent(existing.IntentRevision, revision) {
+					if existing.AdvisoryObservations, err = intentObservationsWithAdvice(ctx, tx, existing.IntentRevision); err != nil {
+						return err
+					}
 					result.Data = existing
 					result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 					return err
@@ -93,6 +96,9 @@ func (p *Projects) writeIntent(ctx context.Context, actor, projectID, participan
 		if !inserted {
 			current, loadErr := tx.Intent(ctx, projectID, input.IntentID)
 			if loadErr == nil && current.IntentRevision.ParticipantID == participantID && current.IntentRevision.Revision == revision.Revision && sameIntentContent(current.IntentRevision, revision) {
+				if current.AdvisoryObservations, err = intentObservationsWithAdvice(ctx, tx, current.IntentRevision); err != nil {
+					return err
+				}
 				result.Data = current
 				result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 				return err
@@ -108,7 +114,11 @@ func (p *Projects) writeIntent(ctx context.Context, actor, projectID, participan
 				return err
 			}
 		}
-		result.Data = protocol.IntentView{IntentRevision: revision, Status: "active", AdvisoryObservations: intentObservations(revision)}
+		observations, err := intentObservationsWithAdvice(ctx, tx, revision)
+		if err != nil {
+			return err
+		}
+		result.Data = protocol.IntentView{IntentRevision: revision, Status: "active", AdvisoryObservations: observations}
 		payload := protocol.EventPayload(protocol.IntentPublished{Revision: revision.Revision})
 		if !publish {
 			payload = protocol.IntentRevised{Revision: revision.Revision}
@@ -189,6 +199,9 @@ func (p *Projects) Intent(ctx context.Context, actor, projectID, intentID uuid.U
 		}
 		var err error
 		if result.Data, err = tx.Intent(ctx, projectID, intentID); err != nil {
+			return err
+		}
+		if result.Data.AdvisoryObservations, err = intentObservationsWithAdvice(ctx, tx, result.Data.IntentRevision); err != nil {
 			return err
 		}
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
@@ -277,9 +290,32 @@ func sameIntentContent(a, b protocol.IntentRevision) bool {
 	return leftErr == nil && rightErr == nil && bytes.Equal(left, right)
 }
 
-func intentObservations(revision protocol.IntentRevision) []string {
+// IntentCharterObservation describes the optional Charter context of one
+// Intent revision. Charters are optional planning context; warnings and
+// evidence never require one.
+func IntentCharterObservation(revision protocol.IntentRevision) string {
 	if revision.CharterID == nil {
-		return []string{"No accepted Charter is associated with this Intent; its scope is unpartitioned coordination context."}
+		return "No Charter is associated with this Intent. Charters are optional planning context; collision warnings and evidence work without one."
 	}
-	return []string{fmt.Sprintf("Accepted Charter %s is associated. Conn cannot deterministically map this Intent's summary and claims to Charter boundaries, so possible scope divergence is advisory and does not alter that Charter or authorize a boundary change.", *revision.CharterID)}
+	return fmt.Sprintf("Accepted Charter %s is associated. Conn cannot deterministically map this Intent's summary and claims to Charter boundaries, so possible scope divergence is advisory and does not alter that Charter or authorize a boundary change.", *revision.CharterID)
+}
+
+// intentObservationsWithAdvice recomputes advisory observations for one
+// revision: its Charter context and near-match subject advice against the
+// current catalog, excluding the Intent's own claims. It reads only and never
+// changes the Intent, its claims, or a collision.
+func intentObservationsWithAdvice(ctx context.Context, tx Tx, revision protocol.IntentRevision) ([]string, error) {
+	observations := []string{IntentCharterObservation(revision)}
+	if len(revision.DeclaredClaims) == 0 {
+		return observations, nil
+	}
+	objectives, err := tx.CurrentObjectives(ctx, revision.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	claims, err := tx.ActiveSemanticClaims(ctx, revision.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	return append(observations, nearMatchObservations(buildCatalog(objectives, claims, revision.IntentID), revision)...), nil
 }

@@ -87,38 +87,64 @@ func newIntentCommand(deps Dependencies, streams Streams) *cobra.Command {
 		return printResult(rl, result, printIntent)
 	}
 
-	analyze := &cobra.Command{Use: "analyze", Short: "Analyze a local TypeScript worktree and attach source-free claims", Args: cobra.NoArgs}
+	analyze := &cobra.Command{
+		Use:   "analyze",
+		Short: "Analyze the local diff against the Intent base and attach source-free claims",
+		Long: "Compare the Intent base revision with the working tree and attach source-free observed\n" +
+			"claims: changes, removes, produces, and consumes for TypeScript exports and imports.\n" +
+			"The base defaults to the Intent's base_revision_ref, then --base.",
+		Args: cobra.NoArgs,
+	}
 	ra := newRemote(analyze, deps, streams)
 	var analyzeProject, analyzeIntent uuid.UUID
-	var worktree, remote, nodePath, analyzerPath, tsconfigPath string
+	var worktree, remote, nodePath, analyzerPath, tsconfigPath, base string
 	var paths []string
 	var timeout time.Duration
 	requiredUUID(analyze, &analyzeProject, "project", "project ID")
 	requiredUUID(analyze, &analyzeIntent, "intent", "intent ID")
 	requiredString(analyze, &worktree, "worktree", "local repository worktree")
 	requiredString(analyze, &remote, "remote", "credential-free canonical repository remote")
-	analyze.Flags().StringVar(&nodePath, "node", "node", "Node.js executable")
-	analyze.Flags().StringVar(&analyzerPath, "analyzer-script", "packages/typescript-analyzer/dist/cli.js", "built local TypeScript analyzer script")
+	analyze.Flags().StringVar(&nodePath, "node", "", "Node.js executable (default $CONN_NODE_PATH or node on PATH)")
+	analyze.Flags().StringVar(&analyzerPath, "analyzer-script", "", "built local TypeScript analyzer script (default $CONN_ANALYZER_PATH, then beside conn, then the working directory)")
 	analyze.Flags().StringVar(&tsconfigPath, "tsconfig", "", "optional repository-relative tsconfig path")
-	analyze.Flags().StringSliceVar(&paths, "path", nil, "repository-relative TypeScript path to analyze (repeatable)")
+	analyze.Flags().StringVar(&base, "base", "", "base commit when the Intent records none")
+	analyze.Flags().StringSliceVar(&paths, "path", nil, "repository-relative TypeScript path to analyze instead of the diff (repeatable)")
 	analyze.Flags().DurationVar(&timeout, "timeout", localanalyzer.DefaultTimeout, "maximum local analysis duration")
 	analyze.RunE = func(cmd *cobra.Command, _ []string) error {
 		if timeout <= 0 {
 			return usageError{fmt.Errorf("--timeout must be positive")}
 		}
-		absoluteScript, err := filepath.Abs(analyzerPath)
-		if err != nil {
-			return fmt.Errorf("resolve analyzer script: %w", err)
+		config := locateAnalyzer(deps).Config
+		if nodePath != "" {
+			config.NodePath = nodePath
 		}
-		report, err := localanalyzer.Run(cmd.Context(), localanalyzer.Config{NodePath: nodePath, AnalyzerPath: absoluteScript, Timeout: timeout}, localanalyzer.Request{
-			Worktree: worktree, CanonicalRemote: remote, TSConfigPath: tsconfigPath, Paths: paths,
+		if analyzerPath != "" {
+			absoluteScript, err := filepath.Abs(analyzerPath)
+			if err != nil {
+				return fmt.Errorf("resolve analyzer script: %w", err)
+			}
+			config.AnalyzerPath = absoluteScript
+		}
+		config.Timeout = timeout
+		client, err := ra.client()
+		if err != nil {
+			return err
+		}
+		intent, err := client.Intent(cmd.Context(), analyzeProject, analyzeIntent)
+		if err != nil {
+			return err
+		}
+		if intent.Data.IntentRevision.BaseRevisionRef != "" {
+			base = intent.Data.IntentRevision.BaseRevisionRef
+		}
+		report, err := localanalyzer.Run(cmd.Context(), config, localanalyzer.Request{
+			Mode: protocol.AnalyzerModeObserved, Worktree: worktree, CanonicalRemote: remote, TSConfigPath: tsconfigPath, Paths: paths, BaseRevisionRef: base,
 		})
 		if err != nil {
 			return err
 		}
-		client, err := ra.client()
-		if err != nil {
-			return err
+		if localanalyzer.HasDiagnostic(report, localanalyzer.DiagnosticBaseUnavailable) {
+			return usageError{fmt.Errorf("the base revision is unavailable; pass --base or revise the Intent with base_revision_ref. Nothing was attached")}
 		}
 		result, err := client.AttachStaticAnalysis(cmd.Context(), analyzeProject, analyzeIntent, report)
 		if err != nil {
@@ -173,7 +199,7 @@ func newIntentCommand(deps Dependencies, streams Streams) *cobra.Command {
 		}
 		return printResult(rread, result, printIntent)
 	}
-	intent.AddCommand(publish, revise, release, analyze, list, read)
+	intent.AddCommand(publish, revise, release, analyze, newSuggestClaimsCommand(deps, streams), list, read)
 	return intent
 }
 

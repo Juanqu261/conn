@@ -1,0 +1,39 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "conn-session-start",
+      "description": "Summarize the focused Conn Intent, or recommend /conn-start in a connected repository. Reads only; never blocks.",
+      "trigger": "SessionStart",
+      "action": { "type": "command", "command": "{{CONN_COMMAND}} hook session-start" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "conn-prompt-submit",
+      "description": "Report new Conn collisions, decisions, and counterpart revisions since the last prompt, and deliver queued write warnings. Reads only; never blocks.",
+      "trigger": "UserPromptSubmit",
+      "action": { "type": "command", "command": "{{CONN_COMMAND}} hook prompt-submit" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "conn-pre-write",
+      "description": "Warn before a write that touches another Intent's claims or an open collision. The warning never blocks the write.",
+      "trigger": "PreToolUse",
+      "matcher": "write",
+      "action": { "type": "command", "command": "{{CONN_COMMAND}} hook pre-write" },
+      "timeout": 5,
+      "enabled": true
+    },
+    {
+      "name": "conn-post-write",
+      "description": "Record the repository-relative path an agent wrote, never its content. Reads nothing from the backend.",
+      "trigger": "PostToolUse",
+      "matcher": "write",
+      "action": { "type": "command", "command": "{{CONN_COMMAND}} hook post-write" },
+      "timeout": 5,
+      "enabled": true
+    }
+  ]
+}

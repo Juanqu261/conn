@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:collision-assessment",
   "title": "CollisionAssessment",
-  "description": "An advisory, explainable semantic interaction between two exact active Intent revisions.",
+  "description": "An advisory, explainable semantic interaction between two exact active Intent revisions. Human decisions set the state: false_positive dismisses; dependency, sequencing, contract_agreement, and accepted_risk resolve; other kinds put it under review.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,6 +17,7 @@
     "confidence",
     "state",
     "matching_claim_refs",
+    "matched_subjects",
     "explanation_markdown",
     "created_at"
   ],
@@ -43,6 +44,18 @@
       "minItems": 2,
       "maxItems": 20,
       "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+    },
+    "matched_subjects": {
+      "description": "Sorted normalized subjects that matched the rule. A list at the 50-item bound may be truncated.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" }
+    },
+    "decision_ref": {
+      "description": "The human decision that set or was inherited by this assessment's state.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
     },
     "supporting_context_refs": {
       "type": "array",

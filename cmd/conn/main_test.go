@@ -150,7 +150,7 @@ func TestMCPStdio(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status"}; !slices.Equal(names, want) {
+	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_concepts", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status", "suggest_claims"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
 	listedPrompts, err := session.ListPrompts(ctx, nil)
@@ -293,10 +293,14 @@ func TestMCPStdio(t *testing.T) {
 	}
 
 	_, data, _ = call("check_collisions", map[string]any{"intent_id": bobIntentID.String()})
-	var collisions []json.RawMessage
-	if err := json.Unmarshal(data, &collisions); err != nil || len(collisions) != 1 {
+	var groups struct {
+		NeedsAttention []json.RawMessage `json:"needs_attention"`
+		Decided        []json.RawMessage `json:"decided"`
+	}
+	if err := json.Unmarshal(data, &groups); err != nil || len(groups.NeedsAttention) != 1 || len(groups.Decided) != 0 {
 		t.Fatalf("check_collisions: %s, %v", data, err)
 	}
+	collisions := groups.NeedsAttention
 	collision, err := protocol.Decode[protocol.CollisionAssessment](collisions[0])
 	if err != nil || collision.State != "open" || collision.RuleID != "shared_declared_invariant" || len(collision.MatchingClaimRefs) != 2 {
 		t.Fatalf("collision: %s, %v", collisions[0], err)
@@ -386,8 +390,9 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("ResolutionProposals over HTTP: %+v, %v", proposals.Data, err)
 	}
 	// A human, rather than either Kiro participant, records the selected
-	// proposal as an immutable decision. The non-binding sequencing outcome
-	// deliberately keeps the collision advisory and visible on Radar.
+	// proposal as an immutable decision. A sequencing decision resolves the
+	// collision: it leaves the needs-attention list and Radar shows it as
+	// decided with its decision reference.
 	decision, err := projects.DecideResolution(ctx, alice.HumanID, projectID, collision.CollisionID, protocol.ResolutionDecisionInput{
 		SelectedProposalID: &proposalResult.ProposalID, Kind: "sequencing", Binding: false,
 		RationaleMarkdown: "The project owner will merge gateway retry behavior before order retry behavior.",
@@ -397,9 +402,10 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("DecideResolution: %+v, %v", decision.Data, err)
 	}
 	_, data, _ = call("read_radar", map[string]any{})
-	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 2 || len(radar.OpenCollisions) != 1 || len(radar.DecisionRefs) != 1 ||
-		!slices.Contains(radar.KnownUnknowns, "Open collision assessments are advisory and disputed until a human records a decision.") {
-		t.Fatalf("read_radar with collision: %s, %v", data, err)
+	if radar, err := protocol.Decode[protocol.RadarView](data); err != nil || len(radar.ActiveIntents) != 2 || len(radar.OpenCollisions) != 0 || len(radar.DecisionRefs) != 1 ||
+		len(radar.DecidedCollisions) != 1 || radar.DecidedCollisions[0].State != protocol.CollisionResolved ||
+		radar.DecidedCollisions[0].DecisionRef == nil || *radar.DecidedCollisions[0].DecisionRef != decision.Data.DecisionID {
+		t.Fatalf("read_radar with decided collision: %s, %v", data, err)
 	}
 
 	// Bounded evidence is owned by Bob's active Intent, then revisions and a

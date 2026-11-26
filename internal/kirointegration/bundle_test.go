@@ -10,8 +10,12 @@ import (
 	"testing"
 )
 
-func TestBundleTemplatesAreAdvisoryAndInspectable(t *testing.T) {
-	artifacts, err := Artifacts()
+// The hook command contains a space and a backslash so rendering must quote
+// it for the shell and escape it for JSON.
+const testCommand = `"C:\Program Files\conn\conn.exe"`
+
+func TestBundleTemplatesAreWarnOnlyCommandHooks(t *testing.T) {
+	artifacts, err := Artifacts(testCommand)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,76 +27,95 @@ func TestBundleTemplatesAreAdvisoryAndInspectable(t *testing.T) {
 		contents[filepath.ToSlash(artifact.RelativePath)] = string(artifact.Content)
 	}
 	steering := contents[".kiro/steering/conn-work-loop.md"]
-	for _, phrase := range []string{"inclusion: always", "/conn-start", "/conn-sync", "/conn-finish", "Do not start background polling", "not Charter acceptance"} {
+	for _, phrase := range []string{"inclusion: always", "/conn-start", "list_concepts", "suggest_claims", "/conn-sync", "/conn-finish", "Do not start background polling", "only warn", "optional planning context", "not Charter acceptance"} {
 		if !strings.Contains(steering, phrase) {
 			t.Errorf("steering omitted %q", phrase)
 		}
 	}
 
-	var hookDocument struct {
+	var document struct {
 		Version string `json:"version"`
 		Hooks   []struct {
 			Name    string `json:"name"`
 			Trigger string `json:"trigger"`
+			Matcher string `json:"matcher"`
 			Enabled bool   `json:"enabled"`
+			Timeout int    `json:"timeout"`
 			Action  struct {
-				Type   string `json:"type"`
-				Prompt string `json:"prompt"`
+				Type    string `json:"type"`
+				Command string `json:"command"`
+				Prompt  string `json:"prompt"`
 			} `json:"action"`
 		} `json:"hooks"`
 	}
-	hooks := contents[".kiro/hooks/conn-lifecycle.json"]
-	if err := json.Unmarshal([]byte(hooks), &hookDocument); err != nil {
+	hooks := contents[".kiro/hooks/conn-hooks.json"]
+	if err := json.Unmarshal([]byte(hooks), &document); err != nil {
 		t.Fatal(err)
 	}
-	if hookDocument.Version != "v1" || len(hookDocument.Hooks) != 2 {
-		t.Fatalf("hook document = %+v", hookDocument)
+	want := map[string]string{"SessionStart": "session-start", "UserPromptSubmit": "prompt-submit", "PreToolUse": "pre-write", "PostToolUse": "post-write"}
+	if document.Version != "v1" || len(document.Hooks) != len(want) {
+		t.Fatalf("hook document = %+v", document)
 	}
-	triggers := []string{hookDocument.Hooks[0].Trigger, hookDocument.Hooks[1].Trigger}
-	slices.Sort(triggers)
-	if !slices.Equal(triggers, []string{"SessionStart", "Stop"}) {
-		t.Fatalf("hook triggers = %v", triggers)
-	}
-	for _, hook := range hookDocument.Hooks {
-		if hook.Name == "" || !hook.Enabled || hook.Action.Type != "agent" || !strings.Contains(hook.Action.Prompt, "Do not") {
-			t.Errorf("unsafe or incomplete hook = %+v", hook)
+	for _, hook := range document.Hooks {
+		name, ok := want[hook.Trigger]
+		if !ok || hook.Action.Type != "command" || hook.Action.Prompt != "" || !hook.Enabled || hook.Timeout <= 0 {
+			t.Errorf("hook %s is not an enabled command hook: %+v", hook.Name, hook)
 		}
-		for _, forbidden := range []string{"employee score", "background timer", "type\": \"command"} {
-			if strings.Contains(hook.Action.Prompt, forbidden) {
-				t.Errorf("hook %s contains forbidden behavior %q", hook.Name, forbidden)
-			}
+		if hook.Action.Command != testCommand+" hook "+name {
+			t.Errorf("hook %s command = %q", hook.Name, hook.Action.Command)
+		}
+		if (hook.Trigger == "PreToolUse" || hook.Trigger == "PostToolUse") != (hook.Matcher == "write") {
+			t.Errorf("hook %s matcher = %q", hook.Name, hook.Matcher)
+		}
+		if strings.Contains(hook.Action.Command, "--warn-exit-code 2") {
+			t.Errorf("hook %s could block a tool call", hook.Name)
 		}
 	}
-	if !strings.Contains(hookDocument.Hooks[0].Action.Prompt, "session_status") || !strings.Contains(hookDocument.Hooks[0].Action.Prompt, "read_work_context") {
-		t.Error("SessionStart hook omitted read-only Conn context checks")
+	if strings.Contains(hooks, CommandPlaceholder) {
+		t.Error("rendered hooks still contain the command placeholder")
 	}
-	if !strings.Contains(hookDocument.Hooks[1].Action.Prompt, "Offer /conn-finish") || !strings.Contains(hookDocument.Hooks[1].Action.Prompt, "do not invoke it automatically") {
-		t.Error("Stop hook omitted explicit, non-automatic finish guidance")
+	for _, path := range []string{`C:\Users\dev\conn.exe`, `/opt/conn/bin/conn`} {
+		if RenderCommand(path) != path {
+			t.Errorf("RenderCommand(%q) quoted a path without spaces", path)
+		}
+	}
+	if RenderCommand(`C:\Program Files\conn\conn.exe`) != testCommand {
+		t.Error("RenderCommand did not quote a path with spaces")
 	}
 }
 
-func TestBundleInstallAndRemovePreserveUnrelatedConfiguration(t *testing.T) {
+func TestBundleInstallMigrationAndRemovalPreserveUnrelatedConfiguration(t *testing.T) {
 	root := t.TempDir()
-	unrelatedSteering := filepath.Join(root, ".kiro", "steering", "team.md")
-	unrelatedHook := filepath.Join(root, ".kiro", "hooks", "team.json")
-	if err := os.MkdirAll(filepath.Dir(unrelatedSteering), 0o755); err != nil {
-		t.Fatal(err)
+	write := func(relative, content string) string {
+		t.Helper()
+		path := filepath.Join(root, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
 	}
-	if err := os.MkdirAll(filepath.Dir(unrelatedHook), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(unrelatedSteering, []byte("team steering\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(unrelatedHook, []byte(`{"version":"v1","hooks":[]}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	preview, err := Preview(ScopeWorkspace, root, ModeInstall)
+	unrelatedSteering := write(".kiro/steering/team.md", "team steering\n")
+	unrelatedHook := write(".kiro/hooks/team.json", `{"version":"v1","hooks":[]}`)
+	legacy, err := LegacyArtifact()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.HasConflicts() || len(preview.Changes) != 2 || preview.Changes[0].Action != ActionCreate || preview.Changes[1].Action != ActionCreate {
+	legacyPath := write(filepath.ToSlash(legacy.RelativePath), string(legacy.Content))
+
+	// An unchanged version 1 file is listed for removal, and preview writes nothing.
+	preview, err := Preview(ScopeWorkspace, root, ModeInstall, testCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]Action{}
+	for _, change := range preview.Changes {
+		actions[filepath.ToSlash(change.RelativePath)] = change.Action
+	}
+	if preview.HasConflicts() || actions[".kiro/steering/conn-work-loop.md"] != ActionCreate ||
+		actions[".kiro/hooks/conn-hooks.json"] != ActionCreate || actions[".kiro/hooks/conn-lifecycle.json"] != ActionRemove {
 		t.Fatalf("install preview = %+v", preview)
 	}
 	preserved := make([]string, len(preview.Preserved))
@@ -102,62 +125,60 @@ func TestBundleInstallAndRemovePreserveUnrelatedConfiguration(t *testing.T) {
 	if !slices.Equal(preserved, []string{".kiro/hooks/team.json", ".kiro/steering/team.md"}) {
 		t.Fatalf("preserved files = %v", preserved)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".kiro", "steering", "conn-work-loop.md")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(root, ".kiro", "hooks", "conn-hooks.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("preview changed the workspace")
 	}
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatal("preview removed the version 1 file")
+	}
+
 	if err := Apply(preview); err != nil {
 		t.Fatal(err)
 	}
-	artifacts, err := Artifacts()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, artifact := range artifacts {
+	for _, artifact := range preview.Artifacts {
 		content, err := os.ReadFile(filepath.Join(root, artifact.RelativePath))
 		if err != nil || string(content) != string(artifact.Content) {
 			t.Fatalf("installed %s differs: %v", artifact.RelativePath, err)
 		}
 	}
+	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("installation kept the unchanged version 1 hook file")
+	}
 	if _, err := os.Stat(filepath.Join(root, ".kiro", "settings", "mcp.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("installation created MCP configuration")
 	}
 
-	steeringTarget := filepath.Join(root, ".kiro", "steering", "conn-work-loop.md")
-	modified := []byte("user-owned replacement\n")
-	if err := os.WriteFile(steeringTarget, modified, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	conflict, err := Preview(ScopeWorkspace, root, ModeInstall)
+	// A modified version 1 file is preserved and stops installation.
+	modifiedLegacy := strings.Replace(string(legacy.Content), "Conn session-start reminder.", "Team reminder.", 1)
+	write(filepath.ToSlash(legacy.RelativePath), modifiedLegacy)
+	conflict, err := Preview(ScopeWorkspace, root, ModeInstall, testCommand)
 	if err != nil || !conflict.HasConflicts() {
-		t.Fatalf("modified install preview = %+v, %v", conflict, err)
+		t.Fatalf("modified version 1 preview = %+v, %v", conflict, err)
 	}
 	if err := Apply(conflict); !errors.Is(err, ErrConflict) {
-		t.Fatalf("conflicting install = %v, want conflict", err)
+		t.Fatalf("install over modified version 1 = %v, want conflict", err)
 	}
-	if content, _ := os.ReadFile(steeringTarget); string(content) != string(modified) {
-		t.Fatal("conflicting install overwrote the modified target")
+	if content, _ := os.ReadFile(legacyPath); string(content) != modifiedLegacy {
+		t.Fatal("a modified version 1 hook file was changed")
 	}
-	removeConflict, err := Preview(ScopeWorkspace, root, ModeRemove)
-	if err != nil || !removeConflict.HasConflicts() {
-		t.Fatalf("modified removal preview = %+v, %v", removeConflict, err)
-	}
-	if err := Apply(removeConflict); !errors.Is(err, ErrConflict) {
-		t.Fatalf("conflicting removal = %v, want conflict", err)
+	if err := os.Remove(legacyPath); err != nil {
+		t.Fatal(err)
 	}
 
-	for _, artifact := range artifacts {
-		if err := os.WriteFile(filepath.Join(root, artifact.RelativePath), artifact.Content, 0o644); err != nil {
-			t.Fatal(err)
-		}
+	// Installing with a different command does not overwrite the hooks.
+	if other, err := Preview(ScopeWorkspace, root, ModeInstall, PathCommand); err != nil || !other.HasConflicts() {
+		t.Fatalf("install with another command = %+v, %v", other, err)
 	}
-	removal, err := Preview(ScopeWorkspace, root, ModeRemove)
-	if err != nil || removal.HasConflicts() {
+
+	// Removal recognizes the installed command and removes only Conn files.
+	removal, err := Preview(ScopeWorkspace, root, ModeRemove, "")
+	if err != nil || removal.HasConflicts() || removal.Command != testCommand {
 		t.Fatalf("removal preview = %+v, %v", removal, err)
 	}
 	if err := Apply(removal); err != nil {
 		t.Fatal(err)
 	}
-	for _, artifact := range artifacts {
+	for _, artifact := range preview.Artifacts {
 		if _, err := os.Stat(filepath.Join(root, artifact.RelativePath)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("Conn artifact %s remains after removal", artifact.RelativePath)
 		}
@@ -167,4 +188,28 @@ func TestBundleInstallAndRemovePreserveUnrelatedConfiguration(t *testing.T) {
 			t.Fatalf("unrelated configuration %s was removed: %v", path, err)
 		}
 	}
+
+	// A modified hook file is preserved on removal.
+	if err := Apply(mustPreview(t, root, ModeInstall, testCommand)); err != nil {
+		t.Fatal(err)
+	}
+	hooksPath := filepath.Join(root, ".kiro", "hooks", "conn-hooks.json")
+	if err := os.WriteFile(hooksPath, []byte("user content\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Apply(mustPreview(t, root, ModeRemove, "")); !errors.Is(err, ErrConflict) {
+		t.Fatalf("removal of a modified hook file = %v, want conflict", err)
+	}
+	if content, _ := os.ReadFile(hooksPath); string(content) != "user content\n" {
+		t.Fatal("removal changed a modified hook file")
+	}
+}
+
+func mustPreview(t *testing.T, root string, mode Mode, command string) Plan {
+	t.Helper()
+	plan, err := Preview(ScopeWorkspace, root, mode, command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
 }
