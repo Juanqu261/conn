@@ -11,9 +11,11 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/application"
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/cli"
@@ -57,12 +59,14 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 			// print elsewhere in the process cannot corrupt the protocol.
 			protocolOut := os.Stdout
 			os.Stdout = os.Stderr
+			analyzerConfig := localAnalyzerConfig()
 			return mcp.Serve(ctx, os.Stdin, protocolOut, mcp.Config{
 				Version:           version,
 				Account:           service,
 				Client:            service.Client,
 				DefaultProject:    cfg.DefaultProject,
 				AnalyzerAvailable: localAnalyzerAvailable,
+				Analyzer:          analyzerConfig,
 				Log:               log,
 			})
 		},
@@ -93,11 +97,19 @@ func accountService(serverURL string) (*account.Service, error) {
 	}, nil
 }
 
+func localAnalyzerConfig() analyzer.Config {
+	path, err := filepath.Abs("packages/typescript-analyzer/dist/cli.js")
+	if err != nil {
+		path = "packages/typescript-analyzer/dist/cli.js"
+	}
+	return analyzer.Config{NodePath: "node", AnalyzerPath: path, Timeout: analyzer.DefaultTimeout}
+}
+
 func localAnalyzerAvailable() bool {
 	if _, err := exec.LookPath("node"); err != nil {
 		return false
 	}
-	info, err := os.Stat("packages/typescript-analyzer/dist/cli.js")
+	info, err := os.Stat(localAnalyzerConfig().AnalyzerPath)
 	return err == nil && !info.IsDir()
 }
 

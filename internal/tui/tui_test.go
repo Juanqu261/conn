@@ -110,7 +110,7 @@ var enter, esc, ctrlS = tea.KeyMsg{Type: tea.KeyEnter}, tea.KeyMsg{Type: tea.Key
 
 func keys(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
-// TestBlueprintFormRevisesTheObjectivesBlueprint protects decision 0005 in
+// TestBlueprintFormRevisesTheObjectivesBlueprint protects decision 0001 in
 // the app: choosing an Objective that already has a blueprint builds that
 // blueprint's next revision from its latest cells, so cell IDs and fields
 // the app cannot edit survive, instead of starting a second blueprint.

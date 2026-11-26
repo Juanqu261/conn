@@ -11,10 +11,18 @@ import (
 )
 
 // AttachStaticAnalysis stores source-free static-analysis claims against the
-// caller's current active IntentRevision. It cannot revise an Intent, choose a
-// participant, or grant any human authority. Diagnostics are retained as
-// bounded incomplete-analysis context, not transformed into semantic facts.
+// caller's current active IntentRevision. Existing callers that do not hold an
+// exact revision use this compatibility entry point.
 func (p *Projects) AttachStaticAnalysis(ctx context.Context, actor, projectID, participantID, intentID uuid.UUID, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {
+	return p.AttachStaticAnalysisAtRevision(ctx, actor, projectID, participantID, intentID, 0, report)
+}
+
+// stores source-free static-analysis claims
+// against the caller's exact active IntentRevision
+func (p *Projects) AttachStaticAnalysisAtRevision(ctx context.Context, actor, projectID, participantID, intentID uuid.UUID, expectedRevision int, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {
+	if expectedRevision < 0 {
+		return Result[protocol.IntentView]{}, &InvalidError{Message: "The expected revision cannot be negative."}
+	}
 	if err := validateRecord(report); err != nil {
 		return Result[protocol.IntentView]{}, err
 	}
@@ -38,7 +46,7 @@ func (p *Projects) AttachStaticAnalysis(ctx context.Context, actor, projectID, p
 		if err != nil {
 			return err
 		}
-		if current.Status != "active" {
+		if current.Status != "active" || (expectedRevision > 0 && current.IntentRevision.Revision != expectedRevision) {
 			return ErrStaleRevision
 		}
 		revision := current.IntentRevision

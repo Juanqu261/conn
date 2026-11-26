@@ -1,95 +1,69 @@
 # Code structure
 
-Conn is a Go-first monorepo with language-neutral JSON Schema contracts and two small Node.js/TypeScript workspaces. The directories below describe the implemented MVP, not planned components.
+Conn is a Go-first monorepo with language-neutral contracts and two small Node.js/TypeScript workspaces.
 
-## Top-level layout
+## Layout
 
-| Path | Ownership |
-| --- | --- |
-| `cmd/conn` | Main package for the single `conn` executable. It wires dependencies and contains no product behavior. |
-| `internal/` | Private Go implementation. Its packages are grouped by adapter, application, persistence, protocol, and support responsibility. |
-| `contracts/v1` | Canonical versioned JSON Schema protocol contracts and cross-language fixtures. |
-| `contracts/embed.go` | Embeds `contracts/v1` for Go components. |
-| `packages/contracts` | Node.js and TypeScript AJV validation adapter for the canonical schemas. |
-| `packages/typescript-analyzer` | Buildable placeholder for future TypeScript analysis. It has no analysis behavior yet. |
-| `internal/migrations/sql` | Goose SQL migrations for Conn's backend database. |
-| `compose.yaml` | Local PostgreSQL 18.7 development database. |
-| `scripts/` | Root-tooling support, including Go formatting validation. |
-| `docs/` | Maintained architecture, source layout, real-trial, and decision records. |
+| Path                                                               | Responsibility                                                                                           |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `cmd/conn`                                                         | Wires the single executable. No product behavior.                                                        |
+| `internal/cli`                                                     | Cobra parsing, local file input, rendering, and stable exit codes.                                       |
+| `internal/tui`                                                     | Bubble Tea terminal application and reviewed in-memory forms.                                            |
+| `internal/mcp`                                                     | Kiro stdio tools, prompts, resources, session selection, analysis orchestration, and generated handoffs. |
+| `internal/kirointegration`                                         | Optional steering/hook templates and conflict-safe explicit installation.                                |
+| `internal/account`, `internal/auth/github`, `internal/credentials` | Device Flow, session resolution, and OS credential storage.                                              |
+| `internal/httpclient`                                              | Authenticated client shared by CLI, TUI, and MCP.                                                        |
+| `internal/httpapi`                                                 | `/v1` handlers, middleware, validation, health, and readiness.                                           |
+| `internal/application`                                             | Authorization, lifecycle, revisions, collisions, evidence, and events.                                   |
+| `internal/postgres`                                                | pgx persistence and parameterized SQL.                                                                   |
+| `internal/migrations`                                              | Embedded Goose migrations used by development/deployment automation.                                     |
+| `internal/protocol`                                                | Handwritten Go records, codecs, timestamps, identities, and typed events.                                |
+| `internal/analyzer`                                                | Bounded credential-free Node.js subprocess adapter.                                                      |
+| `internal/repositorygit`, `internal/kirospec`                      | Credential-free repository identity and local spec hashing.                                              |
+| `contracts/v1`                                                     | Canonical JSON Schema contracts and shared fixtures.                                                     |
+| `packages/contracts`                                               | Ajv contract adapter and fixture tests.                                                                  |
+| `packages/typescript-analyzer`                                     | Implemented compiler-API analyzer and CLI artifact.                                                      |
+| `fixtures/semantic-intent-radar-two-intents`                       | Controlled source-free semantic coordination fixture.                                                    |
+| `docs/decisions`                                                   | Accepted architecture records and summary.                                                               |
 
-`apps/web`, `internal/controlplane`, `internal/github`, `internal/sidecar`, and `fixtures` contain no implemented MVP behavior. Git does not retain empty directories, so they may disappear until a later accepted decision gives them a concrete responsibility.
-
-## Go boundaries
+## Dependency direction
 
 ```text
-cmd/conn
-   ├── internal/cli ────── internal/account ───── internal/auth/github
-   │       │                       │                         │
-   │       │                       ├──── internal/credentials │
-   │       │                       └──── internal/httpclient ─┤
-   │       │                                                 │
-   ├── internal/mcp ─────────────── internal/httpclient ─────┤
-   │                                                         │
-   └── internal/httpapi ─────────── internal/application ─── internal/postgres
-                                             │                    │
-                              internal/protocol + contracts ─────┘
-                                             │
-                                   internal/contracts
+CLI / TUI / MCP ──> HTTP client ──> /v1 API ──> application ──> PostgreSQL
+                              protocol + contracts <──────────┘
+MCP ──> analyzer adapter ──> Node.js analyzer
 ```
 
-### Process and presentation adapters
+Rules:
 
-- `cmd/conn` constructs the dependencies for `conn`, `conn server`, and `conn mcp`.
-- `internal/cli` defines Cobra parsing, `--file` and `--json` behavior, output rendering, and stable exit codes. It must not contain domain, database, or HTTP behavior.
-- `internal/mcp` defines the Kiro stdio adapter and its four read-only tools. SDK types stay in this package.
-- `internal/httpapi` defines the `/v1` HTTP handlers, authentication middleware, input/output boundaries, health/readiness endpoints, request IDs, and access logging.
-- `internal/httpclient` is the authenticated backend client used by the CLI account flow and MCP adapter.
+1. JSON Schema defines public document shapes. Go and TypeScript consume it rather than inventing competing models.
+2. Presentation adapters parse, render, and transport. Domain and database rules stay outside Cobra, Bubble Tea, and MCP handlers.
+3. `internal/application` owns authority and state transitions through store interfaces.
+4. `internal/postgres` owns SQL; `internal/httpapi` owns HTTP.
+5. Credentials stay in `secret.String` and never enter analyzer input.
+6. Tests protect public contracts and fundamental invariants rather than implementation details.
 
-### Application and persistence
+## Processes
 
-- `internal/application` owns authorization, project workflow rules, session behavior, blueprint lifecycle, charter decisions, optimistic concurrency, and event sequencing. It works through store and transaction interfaces.
-- `internal/postgres` implements those store interfaces with pgx and handwritten parameterized SQL.
-- `internal/migrations` embeds, checks, and applies Conn-owned Goose migrations. `internal/cmd/conn-migrate` is the development, CI, and deployment migration executable; it is not part of the public `conn` CLI.
+- `conn server` runs the authoritative backend.
+- `conn mcp` is started and stopped by Kiro.
+- `conn app` is an interactive human-authoritative client.
+- `packages/typescript-analyzer/dist/cli.js` runs only as a bounded child process.
+- PostgreSQL runs in Docker Compose for local development.
 
-### Identity and local environment
-
-- `internal/account` combines Device Flow, credential resolution, and the backend client for `login`, `logout`, `whoami`, and `doctor`.
-- `internal/auth/github` performs CLI Device Flow and backend GitHub identity verification. `githubtest` is its local fake GitHub server.
-- `internal/credentials` resolves `CONN_TOKEN` or the operating-system credential store without a plaintext fallback.
-- `internal/devenv` reads supported local development environment values.
-- `internal/secret` holds sensitive values in a type that avoids accidental formatting or logging.
-
-### Protocol boundary
-
-- `contracts/v1` remains the source of truth for protocol documents. Human-authored input schemas omit server-assigned fields. Record, view, error, and event schemas describe data that crosses a process boundary.
-- `internal/contracts` loads embedded schemas and validates untyped JSON before it reaches typed application logic.
-- `internal/protocol` owns the matching handwritten Go records, identity and timestamp rules, codecs, and typed event payloads. It validates decoded and encoded records against the schemas.
-- `packages/contracts` provides the equivalent Node.js/TypeScript Ajv registry. Its test runs the same `contracts/v1/fixtures/cases.json` data as Go.
-
-Schema validation verifies document shape. `internal/application` and PostgreSQL enforce rules that depend on current state, including project authority, charter assignment, revision ordering, and blueprint lifecycle.
-
-## Dependency rules
-
-1. JSON Schema contracts define the public data boundary. Go and TypeScript adapters consume them; neither defines a competing protocol shape.
-2. Presentation adapters (`internal/cli`, `internal/mcp`, and `internal/httpapi`) parse and render. They delegate behavior to application operations or the authenticated backend client.
-3. `internal/application` owns business rules and depends on interfaces rather than concrete PostgreSQL or HTTP implementations.
-4. `internal/postgres` owns SQL persistence. It does not own HTTP, CLI, or MCP behavior.
-5. Secrets stay in `internal/secret` values and credential resolution stays in `internal/credentials`.
-6. Tests focus on public contracts and fundamental invariants. Go tests sit beside the behavior they protect; the Node shared-fixture test sits in `packages/contracts/test`.
+No persistent sidecar or browser process exists in the MVP.
 
 ## Root commands
 
-Root `pnpm` scripts coordinate formatting, checks, tests, builds, and local database operations. They are intentionally the only task interface:
-
 ```text
-pnpm db:start     start the Compose PostgreSQL container
-pnpm db:migrate   apply Conn backend migrations
-pnpm db:status    show the PostgreSQL container state
-pnpm db:stop      stop the container without removing its volume
-pnpm format       format Go, JavaScript, TypeScript, and JSON
-pnpm check        run formatting validation, static checks, and tests
-pnpm test         run Node and Go tests
-pnpm build        build Go and Node workspaces
+pnpm db:start      start PostgreSQL
+pnpm db:migrate    apply Conn migrations
+pnpm db:status     inspect the container
+pnpm db:stop       stop without deleting data
+pnpm format        format supported files
+pnpm check         lint, type-check, vet, and test
+pnpm test          run Node and Go tests
+pnpm build         build Go and Node components
 ```
 
-See [architecture](architecture.md) for runtime behavior and [the testing policy](decisions/0003-minimal-fundamental-testing.md) for the criteria used to keep the suite small.
+See [architecture](architecture.md) for runtime behavior and [decision 0004](decisions/0004-minimal-fundamental-testing.md) for the testing policy.

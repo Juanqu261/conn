@@ -46,7 +46,7 @@ A small cross-platform Node.js script checks tracked and untracked Go files with
 
 ## Testing strategy
 
-No artificial application test is created. Vitest runs with `--passWithNoTests`, and `go test ./...` validates the current packages without requiring a test file. Tests will be added only when a fundamental behavior from decision 0003 exists.
+No artificial application test is created. Vitest runs with `--passWithNoTests`, and `go test ./...` validates the current packages without requiring a test file. Tests will be added only when a fundamental behavior from decision 0004 exists.
 
 ## Continuous integration
 

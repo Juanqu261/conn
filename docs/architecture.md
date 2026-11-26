@@ -1,90 +1,101 @@
-# Conn architecture
+# Architecture
 
-This document describes the implemented MVP. Conn coordinates human work around a versioned blueprint. It does not launch agents, assign work automatically, or let agents approve changes.
+Conn is a coordination protocol and evidence layer. The backend owns authorization and records; local adapters present workflows without becoming authorities.
 
-## System shape
-
-```text
-human ── conn CLI ──┐
-                    ├── Conn HTTP API ── application rules ── PostgreSQL
-Kiro ── conn mcp ───┘          │
-                               └── GitHub Device Flow and identity check
-```
-
-`conn` is one Go executable. It provides the human CLI, the Kiro MCP adapter over standard input and output, and the backend service through `conn server`. The CLI and MCP adapter call the backend API. They do not access PostgreSQL directly.
-
-For local development, PostgreSQL runs in Docker Compose and `conn server` listens on loopback at `http://127.0.0.1:8080`. The deployed topology is intended to use HTTPS between local Conn clients and the authoritative backend.
-
-## Authority and lifecycle
-
-A project is the authorization and event boundary. It has one owner and zero or more members. Owners create projects, add members, create objective revisions, and propose blueprint revisions. All people added to a project must first sign in and obtain a Conn human ID.
-
-An Objective is an immutable versioned description of the goal. It contains a required Markdown overview and can contain keyed outcomes, acceptance criteria, invariants, constraints, and questions.
-
-A BlueprintRevision is an immutable snapshot for one Objective revision. It contains every CellCharter in the proposed division of work. A charter assigns one accountable human and describes the cell through a required Markdown overview plus optional boundary points and dependencies.
+## Runtime shape
 
 ```text
-objective revision
-       │
-       ▼
-blueprint proposed ── each accountable human accepts own charter ──► active
-       │                                   │
-       │                                   └── rejection ──► rejected
-       │
-       └── newer proposal leaves the current active revision in force
+Kiro ── stdio ── conn mcp ── HTTPS ──┐
+conn CLI / conn app ──────── HTTPS ──┼── Go /v1 API ── application rules ── PostgreSQL
+GitHub Device Flow ──────────────────┘
+
+conn mcp ── bounded JSON ── local Node.js TypeScript analyzer
 ```
 
-A charter decision is append-only and final for its blueprint revision. Only the human assigned to that charter can make it. When a new blueprint revision is proposed, the active revision stays in force until every assigned human accepts the new one. Rejected or superseded revisions cannot become active.
+One Go executable provides `conn`, `conn app`, `conn mcp`, and `conn server`. CLI, TUI, and MCP adapters use the authenticated HTTP client and never access PostgreSQL directly. The analyzer receives no Conn token or database access.
 
-Objectives and blueprints use integer revisions for optimistic concurrency. A revise command includes the latest revision read by its caller. If that is stale, Conn returns conflict exit code `5` rather than silently overwriting a newer revision.
+Local development runs PostgreSQL through Docker Compose and runs `conn server` natively. Deployed clients require HTTPS connectivity to the authoritative backend.
 
-## Sign-in and sessions
+## Domain and authority
 
-`conn login` performs GitHub Device Flow directly from the CLI. The backend exposes its public GitHub client ID, receives the temporary GitHub token once, calls GitHub's `GET /user` endpoint to identify the person, then discards the GitHub token.
+A Project is the authorization and event-cursor boundary. MVP roles are `owner` and `member`.
 
-The backend returns an opaque Conn session token. The CLI stores it in the operating-system credential store, with one entry for each server URL. The stored token is a 256-bit secret whose SHA-256 hash is retained server-side. Sessions expire after 30 days and `conn logout` immediately revokes the current session.
+- An Objective is an immutable Markdown-led revision with optional keyed outcomes, acceptance criteria, invariants, constraints, and questions.
+- A Blueprint revision is a complete immutable set of Cell Charter snapshots for one Objective revision.
+- Each assigned Human accepts or rejects their own Charter. A Blueprint becomes active only after every Charter is accepted.
+- A new proposal does not replace the active Blueprint until accepted. An Objective has at most one Blueprint identity; planning changes append revisions.
+- Intents are participant-owned, revisioned descriptions of planned work. Agents may publish, revise, release, analyze, and attach permitted evidence only for their authenticated participant.
+- Semantic Claims are immutable records on one exact Intent revision. Deterministic rules produce advisory Collision Assessments; they do not block work or prove a defect.
+- Resolution Proposals are non-binding. Binding decisions remain human-authoritative.
 
-`CONN_TOKEN` takes precedence over the credential store but is never persisted. Conn has no plaintext credential fallback. Credentials and request bodies are not logged.
+Objectives, Blueprints, and Intents use integer expected revisions. A stale write returns a conflict instead of overwriting current state. Project changes append gap-free `bigint` event cursors.
 
-## Write path
+## Identity and sessions
 
-Structured CLI writes use a JSON file or standard input. The client validates the document against the canonical schema before sending it. The HTTP API authenticates the Conn session, validates the JSON document again, then passes the request to the application layer.
+`conn login` runs GitHub Device Flow locally and exchanges the temporary GitHub token once. Conn stores only a 256-bit opaque session token in the operating-system credential store; the backend stores its SHA-256 hash. Sessions have a 30-day absolute expiry and immediate revocation. `CONN_TOKEN` is an explicit non-persistent override. There is no plaintext fallback.
 
-The application layer checks membership, owner authority, lifecycle state, and optimistic-concurrency expectations inside the same PostgreSQL transaction that records the operation. PostgreSQL migrations enforce the matching append-only, membership, revision, decision, and event invariants.
+Every backend operation derives the Human from the session. MCP inputs never select a Human or Participant as authority.
 
-Successful project-scoped responses use this envelope:
+## Kiro adapter
+
+Kiro owns the lifetime of `conn mcp` over standard input and output. Standard output is protocol-only; diagnostics use standard error.
+
+The adapter keeps only concurrency-safe process-local Project selection. It resolves Projects in this order:
+
+1. explicit `project_id`;
+2. process-local `select_project` choice;
+3. `CONN_PROJECT`;
+4. sole visible Project;
+5. exact normalized local Git remote match;
+6. bounded ambiguity response.
+
+Backend membership is checked on every operation. Selection never grants access.
+
+### MCP surface
+
+Read-only tools cover session status, Projects, Objectives, Blueprints, own Charters, updates, focused work context, Radar, collisions, and conflict context. Mutating tools cover interactive account operations, process-local Project selection, participant-owned Intents, local analysis, reference-first evidence, and non-binding proposals.
+
+`analyze_intent` verifies the exact active Intent revision and analysis-enabled Repository Connection, confines paths to the trusted worktree, runs the existing Node.js subprocess without credentials, validates its bounded report, attaches observed claims, reassesses collisions, and returns the post-commit cursor.
+
+Prompts provide `/conn-start`, `/conn-sync`, `/conn-resolve`, `/conn-finish`, and `/conn-handoff`. Optional resource templates expose focused context where the client supports them; Kiro CLI workflows use focused tools and do not depend on resource discovery. Optional steering and hooks are installed only by `conn kiro integration install`.
+
+Synchronization is pull-by-cursor during explicit turns. Conn has no MCP idle push, polling timer, sidecar, SSE, or WebSocket in the MVP.
+
+### Capability proof
+
+The pinned official MCP Go SDK supports prompts, resource templates, structured results with text fallback, cancellation, and form/URL elicitation over the existing transport. Protocol `2026-07-28` uses multi-round-trip `InputRequests`, echoed `InputResponses`, and opaque request state; handlers do not issue a nested elicitation request.
+
+Interactive Kiro validation confirmed prompt discovery, structured fallback, form accept/decline/dismiss, URL opening, and cancellation. Kiro CLI 3.6.1 exposed no documented resource-template selector, so focused tools remain required. Headless operation has no mid-session input and must fail closed for elicitation.
+
+## Human review boundary
+
+Kiro tool permission is a client safety mechanism, not a domain signature. Ordinary MCP tools cannot accept Charters, approve Objectives or Blueprints, mutate membership, accept risk, or record binding Resolution Decisions.
+
+Decision 0001 selects an authenticated browser review page for future binding actions. URL elicitation may open that page, but the browser independently authenticates the Human and submits directly to the backend. `conn app` and direct CLI review remain fallbacks until the web feature exists.
+
+## Contracts, API, and persistence
+
+JSON Schema Draft 2020-12 files under `contracts/v1` are canonical. Go and Node validators run the same accepted and rejected fixtures. Go protocol types are handwritten and held to the schemas by conformance tests.
+
+The backend uses Go `net/http`, pgx, handwritten parameterized SQL, and Goose migrations. Application transactions enforce membership, authority, lifecycle, revision, and event rules. Successful Project responses use:
 
 ```json
-{"data": {}, "as_of_event": 42}
+{ "data": {}, "as_of_event": 42 }
 ```
 
-Each committed project change receives the next gap-free event cursor. `conn sync` retrieves committed events after a cursor, oldest first. Conn has no background polling timer in the MVP.
+Conn-owned migrations run only in development and deployment automation, never in customer repositories or public CLI/MCP operations.
 
-## Contracts and API
+## Local analysis and data minimization
 
-The versioned JSON Schema Draft 2020-12 files in [`contracts/v1`](../contracts/v1/) are the language-neutral protocol source of truth. They define human-authored inputs, authoritative records, views, errors, and event envelopes. Schemas reject unknown fields for authoritative records.
+The TypeScript analyzer uses its pinned TypeScript 5.7.3 compiler API dependency. It receives an explicit worktree, normalized remote, and optional relative paths. Output contains normalized subjects, bounded paths/hashes, provenance, and code-only diagnostics. Source, diffs, prompts, transcripts, raw logs, and credentials are rejected or omitted by default.
 
-Go validates contracts with `santhosh-tekuri/jsonschema/v6`; Node and TypeScript use Ajv. Both validators run the same accepted and rejected fixture table. Handwritten Go protocol types are constrained by that same schema and fixture conformance test.
+## Deferred
 
-The backend is a Go `net/http` service under `/v1`. It exposes health/readiness checks, GitHub exchange and session operations, project/member operations, objective and blueprint revisions, charter decisions, status, and events. Request bodies are JSON, limited to 1 MiB, and response documents are validated before they are sent.
+- production web application and authenticated browser binding review;
+- additional coding-agent adapters;
+- offline outbox, persistent sidecar, background synchronization, or idle push;
+- hosted source analysis, source upload, embeddings, or model-inferred claims;
+- GitHub App checks, pull-request automation, CI publishers, and merge policy;
+- automatic assignment, execution supervision, and productivity scoring.
 
-## Kiro integration
-
-Kiro starts `conn mcp` as a stdio process. The adapter resolves the currently signed-in human for every call and uses the same backend client as the CLI. Standard output carries only MCP messages; diagnostics use standard error.
-
-The adapter is deliberately read-only:
-
-| Tool | Behavior |
-| --- | --- |
-| `read_objective` | Reads an Objective revision, defaulting to the only Objective and its latest revision. |
-| `read_blueprint` | Reads a BlueprintRevision and status, defaulting to the active revision or latest proposal. |
-| `read_my_charter` | Reads only the signed-in human's charters and their decisions. |
-| `check_updates` | Reads project events after an event cursor. |
-
-The project is supplied per tool call or by `CONN_PROJECT`. The adapter never accepts a human ID from a tool call, and it has no write, approval, or rejection tool.
-
-## Deferred work
-
-The MVP has no web application, agent-authored writes, additional coding-agent integrations, local SQLite outbox, persistent sidecar, background update polling, contract/evidence schemas beyond the first slice, or TypeScript protocol models. The TypeScript analyzer package is a buildable boundary only; it does not inspect a repository yet.
-
-See [code structure](code-structure.md) for module ownership, [the real-trial guide](real-trial.md) for manual validation, and [accepted decisions](decisions/README.md) for the choices behind this architecture.
+See [code structure](code-structure.md), [three-session trial](real-trial.md), and [accepted decisions](decisions/README.md).

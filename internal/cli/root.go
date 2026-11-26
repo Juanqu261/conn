@@ -138,6 +138,7 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newEvidenceCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
+		newKiroCommand(streams),
 		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
@@ -191,13 +192,18 @@ func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 		Use:   "mcp",
 		Short: "Run the Kiro MCP adapter over standard input and output",
 		Long: "Run the Kiro MCP adapter over standard input and output.\n\n" +
-			"It exposes read-only tools: read_objective, read_blueprint, read_my_charter,\n" +
-			"and check_updates. They act as the human signed in with conn login, or\n" +
-			"CONN_TOKEN when set.\n\n" +
+			"It exposes session and Project diagnostics, focused coordination reads, guided\n" +
+			"start/sync/resolve/finish/handoff prompts, participant-owned Intent and evidence\n" +
+			"writes, non-binding proposals, and bounded local TypeScript analysis. It cannot\n" +
+			"perform Charter, Objective, Blueprint, membership, risk, or binding resolution decisions.\n\n" +
+			"Authentication uses conn login, interactive MCP login, or an explicit CONN_TOKEN.\n" +
+			"Project selection is process-local and never grants backend access.\n\n" +
 			"Environment:\n" +
 			"  CONN_SERVER_URL  Conn server URL\n" +
-			"  CONN_PROJECT     default project ID for tool calls\n\n" +
-			"Standard output carries only MCP messages; diagnostics go to standard error.",
+			"  CONN_PROJECT     optional default project ID\n" +
+			"  CONN_TOKEN       explicit non-persistent session override\n\n" +
+			"Standard output carries only MCP messages; diagnostics go to standard error.\n" +
+			"Normal startup never edits Kiro configuration.",
 		Args: cobra.NoArgs,
 	}
 	server := serverFlag(cmd, deps)

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -24,12 +25,22 @@ func TestWorkflowDiscoveryAndFocusedResourceFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	radar := workflowTestRadar(t, work)
+	radarData, err := protocol.Encode(radar)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var adapterHeader string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		adapterHeader = r.Header.Get("X-Conn-Participant-Adapter")
 		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/work-context") {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(w, `{"data":%s,"as_of_event":1}`, workData)
+			return
+		}
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/radar") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"data":%s,"as_of_event":1}`, radarData)
 			return
 		}
 		http.NotFound(w, r)
@@ -159,9 +170,21 @@ func TestWorkflowDiscoveryAndFocusedResourceFallbacks(t *testing.T) {
 		t.Fatalf("handoff resource: %+v, %v", handoffResource, err)
 	}
 	handoffText := handoffResource.Contents[0].Text
-	if !strings.Contains(handoffText, safeHandlingNote) || !strings.Contains(handoffText, "Intent release does not prove") ||
-		strings.Contains(handoffText, work.Focus.Objective.OverviewMarkdown) || strings.Contains(handoffText, "transcript") {
+	if !strings.Contains(handoffText, safeHandlingNote) || !strings.Contains(handoffText, completionBoundaryNote) ||
+		!strings.Contains(handoffText, "Observed claim") || strings.Contains(handoffText, work.Focus.Objective.OverviewMarkdown) ||
+		strings.Contains(handoffText, "transcript") {
 		t.Fatalf("unsafe or incomplete handoff resource:\n%s", handoffText)
+	}
+	jsonHandoffURI := handoffURI + "?format=json&after=0"
+	jsonResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: jsonHandoffURI})
+	if err != nil || len(jsonResource.Contents) != 1 || jsonResource.Contents[0].MIMEType != "application/json" {
+		t.Fatalf("JSON handoff resource: %+v, %v", jsonResource, err)
+	}
+	var generated handoffSnapshot
+	if err := json.Unmarshal([]byte(jsonResource.Contents[0].Text), &generated); err != nil || generated.Intent.IntentID.String() != intentID ||
+		generated.AsOfEvent != 1 || len(generated.ObservedClaims) != 1 || generated.CompletionBoundary != completionBoundaryNote ||
+		strings.Contains(jsonResource.Contents[0].Text, work.Focus.Objective.OverviewMarkdown) {
+		t.Fatalf("JSON handoff = %+v, %v", generated, err)
 	}
 
 	tools, err := session.ListTools(ctx, nil)
@@ -229,6 +252,30 @@ func workflowTestContext(t *testing.T) protocol.WorkContext {
 		OwnedActiveIntents: []protocol.IntentRevision{intent}, RelatedCollisions: []protocol.CollisionAssessment{},
 		AcceptanceEvidenceCoverage: []protocol.RadarEvidenceCoverage{}, Updates: []protocol.EventEnvelope{},
 		KnownUnknowns: []string{"A reviewed deployment decision is still unknown."}, AsOfEvent: 1,
+	}
+}
+
+func workflowTestRadar(t *testing.T, work protocol.WorkContext) protocol.RadarView {
+	t.Helper()
+	intent := *work.Focus.SelectedIntent
+	claimID := workflowUUID(t, "019a8f00-0014-7000-8000-000000000014")
+	claim := protocol.SemanticClaim{
+		ClaimID: claimID, ProjectID: work.Project.ProjectID, IntentID: intent.IntentID, IntentRevision: intent.Revision,
+		SubjectKind: "code_symbol", NormalizedSubject: "symbol:typescript:src/workflow.ts/run", DisplayName: "run",
+		Relation: "affects", ProvenanceKind: "static_analysis", ProducerParticipantID: &intent.ParticipantID,
+		ObservedAt: intent.CreatedAt,
+	}
+	return protocol.RadarView{
+		Project: protocol.Project{
+			ProjectID: work.Project.ProjectID, Name: work.Project.Name, OwnerHumanID: work.Reader.Human.HumanID,
+			CreatedAt: intent.CreatedAt,
+		},
+		AsOfEvent: 1, Objectives: []protocol.RadarObjective{{
+			ObjectiveID: work.Focus.Objective.ObjectiveID, Revision: work.Focus.Objective.Revision, Title: work.Focus.Objective.Title,
+		}},
+		Repositories: []protocol.RepositoryConnection{}, ActiveIntents: []protocol.IntentRevision{intent},
+		SemanticClaims: []protocol.SemanticClaim{claim}, OpenCollisions: []protocol.CollisionAssessment{},
+		OpenQuestions: []string{}, Assumptions: []string{}, EvidenceCoverage: []protocol.RadarEvidenceCoverage{}, KnownUnknowns: []string{},
 	}
 }
 

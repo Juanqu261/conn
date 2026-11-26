@@ -42,7 +42,7 @@ func (m model) objectiveTitle(id uuid.UUID) string {
 }
 
 // blueprintName names a blueprint by the Objective it divides. An Objective
-// has at most one blueprint (decision 0005).
+// has at most one blueprint (decision 0001).
 func (m model) blueprintName(id uuid.UUID) string {
 	for _, blueprint := range m.status.Blueprints {
 		if blueprint.BlueprintID == id && len(blueprint.Revisions) > 0 {

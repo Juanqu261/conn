@@ -74,6 +74,7 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		"publish_intent":        {false, false, false, false},
 		"revise_intent":         {false, true, false, false},
 		"release_intent":        {false, true, false, false},
+		"analyze_intent":        {false, true, false, false},
 		"check_collisions":      {true, true, false, false},
 		"read_radar":            {true, true, false, false},
 		"read_work_context":     {true, true, false, false},
@@ -147,6 +148,7 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"publish Intent without generated ID", "publish_intent", map[string]any{"intent": validIntent}},
 		{"revise Intent with defaulted nested ID", "revise_intent", map[string]any{"intent_id": intentID, "expected_revision": 1, "intent": validIntent}},
 		{"attach evidence with defaulted nested ID", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": validEvidence}},
+		{"analyze exact Intent revision", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 1, "paths": []any{"src/payment.ts"}}},
 		{"submit non-binding proposal", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first."}}},
 		{"read focused work context", "read_work_context", map[string]any{"project_id": "019a8f00-0001-7000-8000-000000000001", "objective_id": objectiveID, "after": 0, "limit": 100}},
 	}
@@ -183,6 +185,9 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"raw evidence log", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": mergeMap(validEvidence, "raw_log", "all output")}},
 		{"binding proposal field", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first.", "binding": true}}},
 		{"zero expected revision", "revise_intent", map[string]any{"intent_id": intentID, "expected_revision": 0, "intent": validIntent}},
+		{"analysis authority selector", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 1, "participant_id": intentID}},
+		{"analysis unknown field", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 1, "analyzer_script": "unsafe.mjs"}},
+		{"analysis zero revision", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 0}},
 		{"work-context authority selector", "read_work_context", map[string]any{"human_id": intentID}},
 		{"work-context unknown field", "read_work_context", map[string]any{"diagnostics": []any{}}},
 	}

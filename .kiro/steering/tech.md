@@ -47,6 +47,6 @@
 
 Keep the automated suite as small as practical. Test public contracts and fundamental invariants rather than implementation details. Prefer parameterized tests, avoid duplicate assertions across layers, and do not add a coverage-percentage gate during the MVP.
 
-The detailed policy is `docs/decisions/0003-minimal-fundamental-testing.md`.
+The detailed policy is `docs/decisions/0004-minimal-fundamental-testing.md`.
 
 Root task orchestration uses pnpm workspace scripts. Frameworks, persistence libraries, deployment, and exact component process boundaries remain undecided. Ask before selecting them and record each accepted choice.
