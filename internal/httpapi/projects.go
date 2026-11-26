@@ -78,6 +78,31 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/concepts", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok || !allowQueryParameters(w, r, log, "kind", "q", "objective_id", "limit", "after") {
+			return
+		}
+		objectiveID, ok := queryOptionalID(w, r, log, "objective_id")
+		if !ok {
+			return
+		}
+		kind := r.URL.Query().Get("kind")
+		if kind != "" && !semanticClaimKinds[kind] {
+			writeInvalid(w, log, "The kind query parameter must be a semantic subject kind.", "")
+			return
+		}
+		page := int64(application.DefaultConceptPage)
+		limit, ok := queryInt(w, r, log, "limit", 1, application.MaxConceptPage, &page)
+		if !ok {
+			return
+		}
+		result, err := projects.Concepts(r.Context(), s.Human.HumanID, projectID, application.ConceptQuery{
+			Kind: kind, Query: r.URL.Query().Get("q"), ObjectiveID: objectiveID, Limit: int(limit), After: r.URL.Query().Get("after"),
+		})
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("GET /v1/projects/{project_id}/work-context", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok || !allowQueryParameters(w, r, log, "objective_id", "intent_id", "after", "limit") {
@@ -534,6 +559,13 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		result, err := projects.Events(r.Context(), s.Human.HumanID, projectID, after, int(limit))
 		respondEvents(w, log, result, err)
 	})
+}
+
+// semanticClaimKinds mirrors the semanticClaimKind contract enumeration for
+// query-parameter validation.
+var semanticClaimKinds = map[string]bool{
+	"behavior": true, "invariant": true, "contract": true, "data_resource": true, "infrastructure_resource": true,
+	"code_symbol": true, "dependency": true, "assumption": true, "question": true, "acceptance_criterion": true,
 }
 
 // participantAdapter accepts only Conn's built-in Kiro identifier. It never

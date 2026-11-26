@@ -44,6 +44,10 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 		if err != nil {
 			return err
 		}
+		decided, err := tx.DecidedCollisions(ctx, projectID, maxRadarDecidedCollisions)
+		if err != nil {
+			return err
+		}
 		decisionRefs, err := tx.ResolutionDecisionRefs(ctx, projectID)
 		if err != nil {
 			return err
@@ -63,7 +67,7 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 			return err
 		}
 
-		view := buildRadar(project, objectives, activeBlueprint, repositories, intents, claims, collisions, decisionRefs, decisions, evidence)
+		view := buildRadar(project, objectives, activeBlueprint, repositories, intents, claims, collisions, decided, decisionRefs, decisions, evidence)
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		if err != nil {
 			return err
@@ -78,11 +82,11 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 	return result, err
 }
 
-func buildRadar(project protocol.Project, objectives []protocol.Objective, activeBlueprint *protocol.BlueprintRevision, repositories []protocol.RepositoryConnection, intents []protocol.IntentView, claims []protocol.SemanticClaim, collisions []protocol.CollisionAssessment, decisionRefs []uuid.UUID, decisions []protocol.ResolutionDecision, evidence []protocol.EvidenceReference) protocol.RadarView {
+func buildRadar(project protocol.Project, objectives []protocol.Objective, activeBlueprint *protocol.BlueprintRevision, repositories []protocol.RepositoryConnection, intents []protocol.IntentView, claims []protocol.SemanticClaim, collisions, decided []protocol.CollisionAssessment, decisionRefs []uuid.UUID, decisions []protocol.ResolutionDecision, evidence []protocol.EvidenceReference) protocol.RadarView {
 	view := protocol.RadarView{
 		Project: project, Objectives: make([]protocol.RadarObjective, 0, len(objectives)),
 		Repositories: repositories, ActiveIntents: []protocol.IntentRevision{}, SemanticClaims: claims,
-		OpenCollisions: collisions, DecisionRefs: decisionRefs, Dependencies: []protocol.RadarDependency{},
+		OpenCollisions: collisions, DecidedCollisions: decided, DecisionRefs: decisionRefs, Dependencies: []protocol.RadarDependency{},
 		OpenQuestions: []string{}, Assumptions: []string{}, EvidenceCoverage: []protocol.RadarEvidenceCoverage{}, KnownUnknowns: []string{},
 	}
 	// The ledger is append-only and unbounded; the Radar contract is not.
@@ -131,12 +135,12 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 	view.OpenQuestions = uniqueBounded(view.OpenQuestions, 200)
 	view.Assumptions = uniqueBounded(view.Assumptions, 200)
 	view.Dependencies, view.KnownUnknowns = radarDependencies(activeBlueprint, view.ActiveIntents, view.KnownUnknowns)
-	view.Dependencies, view.KnownUnknowns = resolutionDependencies(view.Dependencies, view.KnownUnknowns, collisions, decisions)
+	view.Dependencies, view.KnownUnknowns = resolutionDependencies(view.Dependencies, view.KnownUnknowns, append(append([]protocol.CollisionAssessment{}, collisions...), decided...), decisions)
 	if len(objectives) == 0 {
 		view.KnownUnknowns = append(view.KnownUnknowns, "No governing Objective has been recorded.")
 	}
 	if activeBlueprint == nil {
-		view.KnownUnknowns = append(view.KnownUnknowns, "No active Blueprint is in force; work boundaries are not ratified.")
+		view.KnownUnknowns = append(view.KnownUnknowns, optionalBlueprintNote)
 	}
 	if len(repositories) == 0 {
 		view.KnownUnknowns = append(view.KnownUnknowns, "No repository connections are recorded, so repository scope is unknown.")
@@ -165,12 +169,17 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 
 // Radar contract bounds for lists whose ledger source is unbounded.
 const (
-	maxRadarDecisionRefs     = 200
-	maxRadarCoverage         = 200
-	maxRadarCoverageRefs     = 50
-	maxRadarStatementRunes   = 1000
-	truncatedStatementMarker = "…"
+	maxRadarDecisionRefs      = 200
+	maxRadarDecidedCollisions = 50
+	maxRadarCoverage          = 200
+	maxRadarCoverageRefs      = 50
+	maxRadarStatementRunes    = 1000
+	truncatedStatementMarker  = "…"
 )
+
+// optionalBlueprintNote describes a missing Blueprint as optional planning
+// context. Collision warnings and evidence never require one.
+const optionalBlueprintNote = "No active Blueprint is in force. Blueprints and Charters are optional planning context; collision warnings and evidence work without them."
 
 // coverageFor distinguishes absent evidence from current, stale, inaccessible,
 // or unknown evidence. The most recently observed record supplies the state.
@@ -279,18 +288,33 @@ func radarDependencies(blueprint *protocol.BlueprintRevision, intents []protocol
 	return dependencies, unknowns
 }
 
+// resolutionDependencies projects dependency decisions onto Radar while the
+// decided collision's two Intent revisions remain active. collisions contains
+// the open, under-review, and decided assessments on active revisions.
 func resolutionDependencies(existing []protocol.RadarDependency, unknowns []string, collisions []protocol.CollisionAssessment, decisions []protocol.ResolutionDecision) ([]protocol.RadarDependency, []string) {
 	byID := make(map[uuid.UUID]protocol.CollisionAssessment, len(collisions))
+	byDecision := make(map[uuid.UUID]protocol.CollisionAssessment, len(collisions))
 	for _, collision := range collisions {
 		byID[collision.CollisionID] = collision
+		if collision.DecisionRef != nil {
+			byDecision[*collision.DecisionRef] = collision
+		}
 	}
 	for _, decision := range decisions {
 		if decision.Kind != "dependency" {
 			continue
 		}
-		collision, ok := byID[decision.CollisionID]
+		// A later revision's assessment may carry the decision forward under
+		// a new collision identity.
+		collision, ok := byDecision[decision.DecisionID]
 		if !ok {
-			unknowns = append(unknowns, fmt.Sprintf("Dependency decision %s references a collision that is no longer open; review its historical collision context.", decision.DecisionID))
+			// Decisions recorded before collision states followed decisions
+			// still project onto their open collision.
+			collision, ok = byID[decision.CollisionID]
+			ok = ok && collision.DecisionRef == nil
+		}
+		if !ok {
+			unknowns = append(unknowns, fmt.Sprintf("Dependency decision %s references a collision whose Intent revisions are no longer active; review its historical collision context.", decision.DecisionID))
 			continue
 		}
 		existing = append(existing, protocol.RadarDependency{FromIntentID: collision.LeftIntentID, ToIntentID: collision.RightIntentID, Summary: boundedStatement(decision.RationaleMarkdown)})

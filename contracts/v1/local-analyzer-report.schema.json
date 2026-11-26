@@ -2,18 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:local-analyzer-report",
   "title": "Local analyzer report",
-  "description": "Bounded local analysis output. It contains normalized claims and diagnostics, never repository source or prompts.",
+  "description": "Bounded local analysis output. It contains normalized claims and diagnostics, never repository source, diffs, or prompts. Planned mode describes files a participant intends to change; observed mode describes the difference between the Intent base revision and the working tree.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["report_version", "repository", "claims", "diagnostics"],
+  "required": ["report_version", "mode", "repository", "claims", "diagnostics"],
   "properties": {
-    "report_version": { "const": 1 },
+    "report_version": { "const": 2 },
+    "mode": { "enum": ["planned", "observed"] },
     "repository": {
       "type": "object",
       "additionalProperties": false,
       "required": ["canonical_remote"],
       "properties": {
         "canonical_remote": { "$ref": "urn:conn:schema:v1:common#/$defs/repositoryRemote" },
+        "base_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
         "head_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
         "branch_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
       }

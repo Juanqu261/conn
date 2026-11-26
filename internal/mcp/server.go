@@ -35,6 +35,9 @@ type Config struct {
 	// AnalyzerAvailable reports whether the local Node.js analyzer artifact is
 	// available. It performs no analysis and reads no credential.
 	AnalyzerAvailable func() bool
+	// AnalyzerLocation, when set, reports the resolved analyzer and Node.js
+	// sources for diagnostics. It takes precedence over AnalyzerAvailable.
+	AnalyzerLocation func() analyzer.Location
 	// Analyzer configures the existing bounded Node.js subprocess adapter.
 	// Its program path is trusted local Conn configuration, never tool input.
 	Analyzer analyzer.Config
@@ -50,7 +53,9 @@ type Config struct {
 	Log                  *slog.Logger
 }
 
-const instructions = "Conn tools read your team's shared Objective, Blueprint, charters, Intents, collision assessments, and Radar. " +
+const instructions = "Conn tells you, before you edit, when other in-progress work changes the same behavior, contract, or data. " +
+	"Before editing, call list_concepts and suggest_claims for the planned paths, publish or revise your Intent with the chosen claims, and call check_collisions. " +
+	"Tools read your team's Objectives, optional Blueprints and Charters, Intents, collision assessments, and Radar. " +
 	"They may publish, revise, or release only the signed-in human's participant-owned Intents and may attach bounded reference-only evidence or non-binding resolution proposals. " +
 	"Humans alone make binding decisions. Your human identity comes from the Conn session, not from tool input."
 

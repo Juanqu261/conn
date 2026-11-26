@@ -9,9 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/Juanqu261/conn/internal/account"
@@ -59,18 +57,23 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 			// print elsewhere in the process cannot corrupt the protocol.
 			protocolOut := os.Stdout
 			os.Stdout = os.Stderr
-			analyzerConfig := localAnalyzerConfig()
+			location := analyzer.LocateProcess()
 			return mcp.Serve(ctx, os.Stdin, protocolOut, mcp.Config{
-				Version:           version,
-				Account:           service,
-				Client:            service.Client,
-				DefaultProject:    cfg.DefaultProject,
-				AnalyzerAvailable: localAnalyzerAvailable,
-				Analyzer:          analyzerConfig,
-				Log:               log,
+				Version:          version,
+				Account:          service,
+				Client:           service.Client,
+				DefaultProject:   cfg.DefaultProject,
+				AnalyzerLocation: analyzer.LocateProcess,
+				Analyzer:         location.Config,
+				Log:              log,
 			})
 		},
-		Account: accountService,
+		Account:  accountService,
+		Analyzer: analyzer.LocateProcess,
+		// Hooks read the session stored for the canonical server URL, the
+		// same keyring entry conn login writes.
+		HookStore:  func(serverURL string) credentials.Store { return credentials.NewKeyring(serverURL) },
+		Executable: os.Executable,
 		RunApp: func(ctx context.Context, in io.Reader, out, _ io.Writer, serverURL string) error {
 			service, err := accountService(serverURL)
 			if err != nil {
@@ -95,22 +98,6 @@ func accountService(serverURL string) (*account.Service, error) {
 		GitHub:    github.Production,
 		HTTP:      httpClient,
 	}, nil
-}
-
-func localAnalyzerConfig() analyzer.Config {
-	path, err := filepath.Abs("packages/typescript-analyzer/dist/cli.js")
-	if err != nil {
-		path = "packages/typescript-analyzer/dist/cli.js"
-	}
-	return analyzer.Config{NodePath: "node", AnalyzerPath: path, Timeout: analyzer.DefaultTimeout}
-}
-
-func localAnalyzerAvailable() bool {
-	if _, err := exec.LookPath("node"); err != nil {
-		return false
-	}
-	info, err := os.Stat(localAnalyzerConfig().AnalyzerPath)
-	return err == nil && !info.IsDir()
 }
 
 func loadDevSettings() *devenv.Result {

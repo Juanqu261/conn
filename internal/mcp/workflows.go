@@ -26,7 +26,7 @@ func registerWorkflowPrompts(server *sdk.Server) {
 	server.AddPrompt(&sdk.Prompt{
 		Name:        "conn-start",
 		Title:       "Start Conn work",
-		Description: "Authenticate, select a Project, load focused context, establish an Intent, and check collisions before implementation.",
+		Description: "Authenticate, select a Project, load focused context, suggest claims for planned paths, publish an Intent, and check collisions before any write.",
 		Arguments: []*sdk.PromptArgument{
 			{Name: "focus", Title: "Objective, task, or Intent", Description: "Optional Objective, task description, or Intent UUID used only to select focus."},
 			{Name: "last_event", Title: "Last event cursor", Description: "Optional last observed Project event cursor."},
@@ -56,7 +56,7 @@ func registerWorkflowPrompts(server *sdk.Server) {
 	server.AddPrompt(&sdk.Prompt{
 		Name:        "conn-finish",
 		Title:       "Finish Conn work",
-		Description: "Verify exact revisions, analysis eligibility, collisions, and evidence before revising or releasing an owned Intent.",
+		Description: "Verify exact revisions, analyze the diff against the Intent base, recheck collisions, and attach evidence before revising or releasing an owned Intent.",
 		Arguments: []*sdk.PromptArgument{
 			{Name: "intent_id", Title: "Intent ID", Description: "Optional owned Intent UUID. Require an explicit choice when context is ambiguous."},
 			{Name: "evidence_locators", Title: "Evidence locators", Description: "Optional human-supplied bounded references, not raw logs or source."},
@@ -102,14 +102,15 @@ Safety and authority boundary:
 - Tool approval is not Charter acceptance, Objective or Blueprint approval, membership authorization, accepted risk, or a binding ResolutionDecision.
 - Preserve and report the latest authoritative as_of_event cursor. Do not poll in the background.`
 
-const startWorkflow = `Coordinate the start of one Conn work session in this order:
+const startWorkflow = `Coordinate the start of one Conn work session in this order, before any file write:
 1. Call session_status.
 2. If unauthenticated and direct URL input is supported, offer login. Otherwise stop with the explicit non-interactive credential path.
 3. Resolve the Project. Use list_projects and select_project when session_status or a tool reports ambiguity.
-4. Call read_work_context with the supplied focus and last_event when they identify valid UUIDs or a cursor. Stop if it returns focus_choices until one is selected.
-5. Reuse an owned active Intent for the exact requested work. If none exists, draft one against exactly one Objective revision and, when applicable, one accepted active Charter, then call publish_intent.
-6. Call check_collisions for the selected Intent.
-7. Before implementation, summarize accepted scope, assumptions, advisory collisions, evidence gaps, known unknowns, and the returned cursor.
+4. Call read_work_context with the supplied focus and last_event when they identify valid UUIDs or a cursor. Stop if it returns focus_choices until one is selected. Blueprints and Charters are optional planning context; their absence is not a blocker.
+5. Agree the planned repository-relative paths with the human. Call list_concepts with a short task focus to see subjects the team already uses, then call suggest_claims with the planned paths, the Objective, and the focus. Nothing is persisted yet.
+6. Choose the candidates that describe the planned change, preferring existing catalog subjects over new strings. Reuse an owned active Intent for the exact requested work with revise_intent; otherwise draft one against exactly one Objective revision and call publish_intent with the chosen candidates as declared_claims. Conn fills repository_id, branch_ref, and base_revision_ref from the worktree; report filled_fields and any near-match observation.
+7. Call check_collisions for the Intent. Present every collision as an advisory warning, not a block, and point to /conn-resolve <collision_id> for review.
+8. Before implementation, summarize scope, published claims, advisory collisions, evidence gaps, known unknowns, and the returned cursor.
 Never present an Intent publication or normal tool approval as a binding Human decision.` + workflowBoundary
 
 const syncWorkflow = `Synchronize one Conn Project from the supplied cursor:
@@ -128,9 +129,9 @@ const resolveWorkflow = `Review one advisory Conn collision:
 
 const finishWorkflow = `Evaluate whether to revise, release, or hand off one owned Intent:
 1. Call read_work_context with intent_id when supplied. Stop on focus ambiguity or stale exact revisions.
-2. Compare the exact Objective, Blueprint, own Charter, repository, and current Intent revisions. A proposed, rejected, superseded, pending, or missing Charter is not an accepted boundary.
-3. If analyze_intent is present in the discovered tool list and the repository is eligible, call it with intent_id and expected_intent_revision from the exact focused Intent. Otherwise report local analysis as unavailable and continue with declared claims.
-4. Call check_collisions after analysis and keep every unresolved advisory collision explicit.
+2. Compare the exact Objective, repository, and current Intent revisions, and the optional Blueprint and own Charter when present. A proposed, rejected, superseded, pending, or missing Charter is not an accepted boundary, and Charters remain optional.
+3. If analyze_intent is present in the discovered tool list and the repository is eligible, call it with intent_id and expected_intent_revision from the exact focused Intent and without paths, so observed analysis uses the diff between the Intent base revision and the working tree. Each Intent revision accepts one analysis. Otherwise report local analysis as unavailable and continue with declared claims.
+4. Call check_collisions after analysis and keep every collision that needs attention explicit.
 5. Map only bounded reference-first evidence to the exact acceptance keys. Call attach_evidence only for references the Human supplied or explicitly approved; never attach raw logs, source, diffs, prompts, transcripts, or credentials.
 6. Reread work context after writes. Identify missing, stale, inaccessible, failing, or unknown evidence. Do not infer that unrelated tests prove an acceptance criterion.
 7. Revise or release only the authenticated Participant's own Intent when appropriate, using the exact current revision. Reread focused context after the mutation and report its authoritative cursor.

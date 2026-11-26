@@ -59,20 +59,7 @@ func (t projectTx) OpenCollisions(ctx context.Context, projectID uuid.UUID) ([]p
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	collisions := []protocol.CollisionAssessment{}
-	for rows.Next() {
-		var document []byte
-		if err := rows.Scan(&document); err != nil {
-			return nil, err
-		}
-		collision, err := protocol.Decode[protocol.CollisionAssessment](document)
-		if err != nil {
-			return nil, fmt.Errorf("stored collision assessment: %w", err)
-		}
-		collisions = append(collisions, collision)
-	}
-	return collisions, rows.Err()
+	return collectCollisions(rows)
 }
 
 func (t projectTx) ResolutionDecisionRefs(ctx context.Context, projectID uuid.UUID) ([]uuid.UUID, error) {

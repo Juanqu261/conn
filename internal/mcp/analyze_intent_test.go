@@ -34,9 +34,9 @@ process.stdin.on("data", chunk => input += chunk);
 process.stdin.on("end", () => {
   const request = JSON.parse(input);
   console.log(JSON.stringify({
-    report_version: 1,
+    report_version: 2, mode: "observed",
     repository: {canonical_remote: request.canonical_remote},
-    claims: [{subject_kind:"code_symbol", normalized_subject:"symbol:typescript:src/payment.ts/charge", display_name:"charge", relation:"affects", provenance_kind:"static_analysis"}],
+    claims: [{subject_kind:"code_symbol", normalized_subject:"symbol:typescript:src/payment.ts/charge", display_name:"charge", relation:"changes", provenance_kind:"static_analysis"}],
     diagnostics: [{code:"TS2322", message:"TypeScript diagnostic TS2322", path:"src/payment.ts", line:1}]
   }));
 });`)
@@ -50,7 +50,7 @@ process.stdin.on("end", () => {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if harness.attachCalls.Load() != 1 || harness.attachedReport.ReportVersion != 1 {
+	if harness.attachCalls.Load() != 1 || harness.attachedReport.ReportVersion != 2 || harness.attachedReport.Mode != "observed" {
 		t.Fatalf("analysis attachment = calls %d, report %#v", harness.attachCalls.Load(), harness.attachedReport)
 	}
 	if len(harness.attachedReport.Claims) != 1 || strings.Contains(harness.attachedJSON, "conn_sess_") || strings.Contains(harness.attachedJSON, "source_text") {
@@ -82,8 +82,8 @@ func TestAnalyzeIntentStopsBeforeAttachmentOnUnsafeOrStaleInput(t *testing.T) {
 	if err != nil {
 		t.Skip("Node.js is required for the MCP analyzer failure scenarios")
 	}
-	validScript := writeAnalyzerScript(t, `console.log(JSON.stringify({report_version:1,repository:{canonical_remote:"github.com/acme/payments"},claims:[],diagnostics:[]}));`)
-	forbiddenScript := writeAnalyzerScript(t, `console.log(JSON.stringify({report_version:1,repository:{canonical_remote:"github.com/acme/payments"},claims:[],diagnostics:[],source:"forbidden"}));`)
+	validScript := writeAnalyzerScript(t, `console.log(JSON.stringify({report_version:2,mode:"observed",repository:{canonical_remote:"github.com/acme/payments"},claims:[],diagnostics:[]}));`)
+	forbiddenScript := writeAnalyzerScript(t, `console.log(JSON.stringify({report_version:2,mode:"observed",repository:{canonical_remote:"github.com/acme/payments"},claims:[],diagnostics:[],source:"forbidden"}));`)
 	failedScript := writeAnalyzerScript(t, `process.exit(2);`)
 
 	tests := []struct {
@@ -186,7 +186,7 @@ func newAnalysisHarness(t *testing.T, node, script string, disabled bool) *analy
 	collision := protocol.CollisionAssessment{
 		CollisionID: workflowUUID(t, "019a8f00-0016-7000-8000-000000000016"), ProjectID: projectID,
 		LeftIntentID: intentID, LeftIntentRevision: 1, RightIntentID: otherIntentID, RightIntentRevision: 1,
-		RuleID: "shared_exported_symbol", Severity: "amber", Confidence: 1, State: "open",
+		RuleID: "shared_exported_symbol", Severity: "amber", Confidence: 1, State: "open", MatchedSubjects: []string{"symbol:typescript:src/payment.ts/charge"},
 		MatchingClaimRefs:   []uuid.UUID{workflowUUID(t, "019a8f00-0014-7000-8000-000000000014"), workflowUUID(t, "019a8f00-0015-7000-8000-000000000015")},
 		ExplanationMarkdown: "Both Intents affect the same exported symbol.", CreatedAt: created,
 	}

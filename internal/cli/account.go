@@ -1,15 +1,19 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/credentials"
+	"github.com/Juanqu261/conn/internal/hookstate"
 	"github.com/Juanqu261/conn/internal/httpclient"
 )
 
@@ -144,6 +148,8 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 			detail := fmt.Sprintf("%s: %d loaded, %d already set in the environment", settings.Path, len(settings.Loaded), len(settings.Overridden))
 			checks = append([]account.Check{{Name: "Dev settings", OK: len(settings.Warnings) == 0, Detail: detail}}, checks...)
 		}
+		checks = append(checks, analyzerChecks(cmd.Context(), deps)...)
+		checks = append(checks, hookDiagnosticsCheck(cmd.Context()))
 		if !renderChecks(streams.Out, checks) {
 			return errReported
 		}
@@ -152,11 +158,57 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 	return cmd
 }
 
+// analyzerChecks report local analysis availability. Analysis is optional:
+// declared claims and collision warnings work without it.
+func analyzerChecks(ctx context.Context, deps Dependencies) []account.Check {
+	location := locateAnalyzer(deps)
+	analyzerCheck := account.Check{Name: "Analyzer", Optional: true, OK: location.AnalyzerAvailable}
+	if location.AnalyzerAvailable {
+		analyzerCheck.Detail = "from " + location.AnalyzerSource
+	} else {
+		analyzerCheck.Detail = "not found; set " + analyzer.AnalyzerPathEnv + " or run pnpm build (local analysis is optional)"
+	}
+	nodeCheck := account.Check{Name: "Node.js", Optional: true, OK: location.NodeAvailable}
+	if location.NodeAvailable {
+		version := analyzer.NodeVersion(ctx, location.Config.NodePath)
+		if version == "" {
+			nodeCheck.OK, nodeCheck.Detail = false, "found on "+location.NodeSource+" but `node --version` failed"
+		} else {
+			nodeCheck.Detail = version + " from " + location.NodeSource
+		}
+	} else {
+		nodeCheck.Detail = "not found; set " + analyzer.NodePathEnv + " or add node to PATH"
+	}
+	return []account.Check{analyzerCheck, nodeCheck}
+}
+
+// hookDiagnosticsCheck reports silent hook failures recorded in the current
+// worktree's local hook state.
+func hookDiagnosticsCheck(ctx context.Context) account.Check {
+	check := account.Check{Name: "Hook diagnostics", Optional: true, OK: true, Detail: "none recorded"}
+	store, err := hookstate.Open(ctx, ".")
+	if err != nil {
+		check.Detail = "not in a Git worktree"
+		return check
+	}
+	diagnostics := store.Diagnostics()
+	if len(diagnostics) == 0 {
+		return check
+	}
+	last := diagnostics[len(diagnostics)-1]
+	check.OK = false
+	check.Detail = fmt.Sprintf("%d recent silent failure(s); last %s in %s at %s", len(diagnostics), last.Code, last.Hook, last.At.Format(time.RFC3339))
+	return check
+}
+
 func renderChecks(out io.Writer, checks []account.Check) bool {
 	healthy := true
 	for _, check := range checks {
 		status := "ok"
-		if !check.OK {
+		switch {
+		case !check.OK && check.Optional:
+			status = "warn"
+		case !check.OK:
 			status, healthy = "fail", false
 		}
 		fmt.Fprintf(out, "[%-4s] %-17s %s\n", status, check.Name, check.Detail)

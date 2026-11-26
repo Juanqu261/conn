@@ -76,8 +76,27 @@
       }
     },
     "open_collisions": {
+      "description": "Collisions that need attention: open or under review.",
       "type": "array",
       "items": { "$ref": "urn:conn:schema:v1:collision-assessment" }
+    },
+    "decided_collisions": {
+      "description": "The most recent resolved or dismissed collisions on active Intent revisions, each with its decision reference.",
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "allOf": [
+          { "$ref": "urn:conn:schema:v1:collision-assessment" },
+          {
+            "type": "object",
+            "properties": {
+              "state": { "enum": ["resolved", "dismissed"] },
+              "decision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+            },
+            "required": ["state", "decision_ref"]
+          }
+        ]
+      }
     },
     "decision_refs": {
       "type": "array",

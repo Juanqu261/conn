@@ -1631,32 +1631,85 @@
       }
     },
     {
-      "name": "local analyzer report accepts static-analysis claims without source",
+      "name": "local analyzer report accepts observed diff claims without source",
       "schema": "urn:conn:schema:v1:local-analyzer-report",
       "valid": true,
       "document": {
-        "report_version": 1,
+        "report_version": 2,
+        "mode": "observed",
         "repository": {
           "canonical_remote": "github.com/acme/payments",
+          "base_revision_ref": "1234567890abcdef1234567890abcdef12345678",
           "head_revision_ref": "abcdef1"
         },
         "claims": [
           {
-            "subject_kind": "code_symbol",
-            "normalized_subject": "symbol:typescript:src/payment/service.ts",
-            "display_name": "Payment service",
-            "relation": "affects",
+            "subject_kind": "contract",
+            "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+            "display_name": "shouldRetryCharge",
+            "relation": "changes",
             "provenance_kind": "static_analysis",
             "evidence_refs": [
               {
                 "kind": "source_location",
-                "locator": "src/payment/service.ts#PaymentService.charge",
-                "path": "src/payment/service.ts",
-                "line": 44
+                "locator": "typescript:src/payments/retry.ts:shouldRetryCharge",
+                "path": "src/payments/retry.ts",
+                "line": 9,
+                "content_hash": "0000000000000000000000000000000000000000000000000000000000000000"
               }
             ]
+          },
+          {
+            "subject_kind": "code_symbol",
+            "normalized_subject": "symbol:typescript:src/payments/retry.ts/legacyRetry",
+            "display_name": "legacyRetry",
+            "relation": "removes",
+            "provenance_kind": "static_analysis"
           }
         ],
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "local analyzer report accepts planned claims and a new-path diagnostic",
+      "schema": "urn:conn:schema:v1:local-analyzer-report",
+      "valid": true,
+      "document": {
+        "report_version": 2,
+        "mode": "planned",
+        "repository": {
+          "canonical_remote": "github.com/acme/payments"
+        },
+        "claims": [
+          {
+            "subject_kind": "contract",
+            "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+            "display_name": "shouldRetryCharge",
+            "relation": "consumes",
+            "provenance_kind": "static_analysis"
+          }
+        ],
+        "diagnostics": [
+          {
+            "code": "conn-planned-path-new",
+            "message": "Planned path does not exist yet; no claims were derived.",
+            "path": "src/orders/refund.ts"
+          }
+        ]
+      }
+    },
+    {
+      "name": "local analyzer report rejects the removed version 1",
+      "schema": "urn:conn:schema:v1:local-analyzer-report",
+      "valid": false,
+      "at": "/report_version",
+      "document": {
+        "report_version": 1,
+        "mode": "observed",
+        "repository": {
+          "canonical_remote": "github.com/acme/payments"
+        },
+        "claims": [],
         "diagnostics": []
       }
     },
@@ -1666,7 +1719,8 @@
       "valid": false,
       "at": "",
       "document": {
-        "report_version": 1,
+        "report_version": 2,
+        "mode": "observed",
         "repository": {
           "canonical_remote": "github.com/acme/payments"
         },
@@ -1694,8 +1748,225 @@
           "019a8f00-0014-7000-8000-000000000014",
           "019a8f00-0015-7000-8000-000000000015"
         ],
+        "matched_subjects": ["invariant:checkout:one-charge-per-attempt"],
         "explanation_markdown": "Both active intents affect the same checkout invariant.",
         "created_at": "2026-11-22T09:05:00Z"
+      }
+    },
+    {
+      "name": "collision assessment accepts a dismissed state with its decision reference",
+      "schema": "urn:conn:schema:v1:collision-assessment",
+      "valid": true,
+      "document": {
+        "collision_id": "019a8f00-0026-7000-8000-000000000026",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "left_intent_revision": 2,
+        "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+        "right_intent_revision": 1,
+        "rule_id": "shared_declared_invariant",
+        "severity": "amber",
+        "confidence": 1,
+        "state": "dismissed",
+        "matching_claim_refs": [
+          "019a8f00-0024-7000-8000-000000000024",
+          "019a8f00-0015-7000-8000-000000000015"
+        ],
+        "matched_subjects": ["invariant:checkout:one-charge-per-attempt"],
+        "decision_ref": "019a8f00-0019-7000-8000-000000000019",
+        "explanation_markdown": "The decided subject set still covers this revision.",
+        "created_at": "2026-11-22T09:25:00Z"
+      }
+    },
+    {
+      "name": "collision assessment rejects a matched subject outside the subject alphabet",
+      "schema": "urn:conn:schema:v1:collision-assessment",
+      "valid": false,
+      "at": "/matched_subjects/0",
+      "document": {
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "left_intent_revision": 1,
+        "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+        "right_intent_revision": 1,
+        "rule_id": "shared_declared_invariant",
+        "severity": "amber",
+        "confidence": 1,
+        "state": "open",
+        "matching_claim_refs": [
+          "019a8f00-0014-7000-8000-000000000014",
+          "019a8f00-0015-7000-8000-000000000015"
+        ],
+        "matched_subjects": ["invariant:checkout:one charge"],
+        "explanation_markdown": "Both active intents affect the same checkout invariant.",
+        "created_at": "2026-11-22T09:05:00Z"
+      }
+    },
+    {
+      "name": "radar view accepts needs-attention and decided collisions",
+      "schema": "urn:conn:schema:v1:radar-view",
+      "valid": true,
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "created_at": "2026-11-20T09:00:00Z"
+        },
+        "as_of_event": 42,
+        "objectives": [],
+        "repositories": [],
+        "active_intents": [],
+        "semantic_claims": [],
+        "open_collisions": [],
+        "decided_collisions": [
+          {
+            "collision_id": "019a8f00-0026-7000-8000-000000000026",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 2,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "confidence": 1,
+            "state": "resolved",
+            "matching_claim_refs": [
+              "019a8f00-0024-7000-8000-000000000024",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "decision_ref": "019a8f00-0019-7000-8000-000000000019",
+            "explanation_markdown": "The producer lands before the consumer.",
+            "created_at": "2026-11-22T09:25:00Z"
+          }
+        ],
+        "open_questions": [],
+        "assumptions": [],
+        "evidence_coverage": [],
+        "known_unknowns": [
+          "No active Blueprint is in force. Blueprints and Charters are optional planning context."
+        ]
+      }
+    },
+    {
+      "name": "radar view rejects a decided collision without a decision reference",
+      "schema": "urn:conn:schema:v1:radar-view",
+      "valid": false,
+      "at": "/decided_collisions/0",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "created_at": "2026-11-20T09:00:00Z"
+        },
+        "as_of_event": 42,
+        "objectives": [],
+        "repositories": [],
+        "active_intents": [],
+        "semantic_claims": [],
+        "open_collisions": [],
+        "decided_collisions": [
+          {
+            "collision_id": "019a8f00-0026-7000-8000-000000000026",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 2,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "confidence": 1,
+            "state": "resolved",
+            "matching_claim_refs": [
+              "019a8f00-0024-7000-8000-000000000024",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "explanation_markdown": "The producer lands before the consumer.",
+            "created_at": "2026-11-22T09:25:00Z"
+          }
+        ],
+        "open_questions": [],
+        "assumptions": [],
+        "evidence_coverage": [],
+        "known_unknowns": []
+      }
+    },
+    {
+      "name": "concept list accepts Objective-derived and claimed subjects with ranking",
+      "schema": "urn:conn:schema:v1:concept-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "concepts": [
+          {
+            "normalized_subject": "invariant:checkout:one-charge-per-attempt",
+            "subject_kind": "invariant",
+            "display_name": "A retried checkout creates at most one charge per attempt key.",
+            "sources": ["objective", "active_claim"],
+            "objective_refs": [
+              {
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "key_point_key": "one-charge-per-attempt"
+              }
+            ],
+            "claims": [
+              {
+                "claim_id": "019a8f00-0014-7000-8000-000000000014",
+                "intent_id": "019a8f00-0012-7000-8000-000000000012",
+                "intent_revision": 1,
+                "relation": "affects",
+                "provenance_kind": "declared"
+              }
+            ],
+            "claim_count": 1,
+            "score": 0.5,
+            "reason": "Shared tokens: charge, attempt."
+          },
+          {
+            "normalized_subject": "acceptance:checkout:retry-evidence",
+            "subject_kind": "acceptance_criterion",
+            "display_name": "Retry behavior has passing automated evidence.",
+            "sources": ["objective"],
+            "objective_refs": [
+              {
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "key_point_key": "retry-evidence"
+              }
+            ],
+            "claims": [],
+            "claim_count": 0
+          }
+        ],
+        "has_more": true,
+        "continuation_after": "2"
+      }
+    },
+    {
+      "name": "concept list rejects source content in a concept",
+      "schema": "urn:conn:schema:v1:concept-list",
+      "valid": false,
+      "at": "/concepts/0",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "concepts": [
+          {
+            "normalized_subject": "symbol:typescript:src/payments/retry.ts/shouldRetryCharge",
+            "subject_kind": "code_symbol",
+            "display_name": "shouldRetryCharge",
+            "sources": ["active_claim"],
+            "objective_refs": [],
+            "claims": [],
+            "claim_count": 0,
+            "source_text": "export function shouldRetryCharge() {}"
+          }
+        ],
+        "has_more": false
       }
     },
     {
@@ -2067,6 +2338,7 @@
               "019a8f00-0014-7000-8000-000000000014",
               "019a8f00-0015-7000-8000-000000000015"
             ],
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
             "explanation_markdown": "Both Intents affect the retry contract.",
             "created_at": "2026-11-22T09:15:00Z"
           }

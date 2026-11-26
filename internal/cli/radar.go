@@ -89,7 +89,7 @@ func printRadar(out io.Writer, view protocol.RadarView) {
 	} else {
 		fmt.Fprintf(out, "Active blueprint: %s revision %d\n", view.ActiveBlueprint.BlueprintID, view.ActiveBlueprint.Revision)
 	}
-	fmt.Fprintf(out, "Repositories: %d\nActive Intents: %d\nSemantic claims: %d across %d concepts\nOpen collisions: %d\nDependencies: %d\nDecisions: %d\n", len(view.Repositories), len(view.ActiveIntents), len(view.SemanticClaims), len(view.SemanticConcepts), len(view.OpenCollisions), len(view.Dependencies), len(view.DecisionRefs))
+	fmt.Fprintf(out, "Repositories: %d\nActive Intents: %d\nSemantic claims: %d across %d concepts\nCollisions needing attention: %d\nDecided collisions: %d\nDependencies: %d\nDecisions: %d\n", len(view.Repositories), len(view.ActiveIntents), len(view.SemanticClaims), len(view.SemanticConcepts), len(view.OpenCollisions), len(view.DecidedCollisions), len(view.Dependencies), len(view.DecisionRefs))
 	if len(view.EvidenceCoverage) == 0 {
 		fmt.Fprintln(out, "Evidence coverage: absent (no keyed acceptance criteria)")
 	} else {
@@ -105,11 +105,18 @@ func printRadar(out io.Writer, view protocol.RadarView) {
 
 func printConflicts(out io.Writer, view protocol.RadarView) {
 	if len(view.OpenCollisions) == 0 {
-		fmt.Fprintln(out, "No open collision assessments. This does not prove that the project has no conflicts.")
+		fmt.Fprintln(out, "No collision assessments need attention. This does not prove that the project has no conflicts.")
 	} else {
 		for _, collision := range view.OpenCollisions {
-			fmt.Fprintf(out, "%s  %s  %s  confidence %.2f\n", collision.CollisionID, collision.Severity, clean(collision.RuleID), collision.Confidence)
+			fmt.Fprintf(out, "%s  %s  %s  %s  confidence %.2f\n", collision.CollisionID, collision.State, collision.Severity, clean(collision.RuleID), collision.Confidence)
 		}
+	}
+	for _, collision := range view.DecidedCollisions {
+		decision := ""
+		if collision.DecisionRef != nil {
+			decision = " by decision " + collision.DecisionRef.String()
+		}
+		fmt.Fprintf(out, "%s  %s%s  %s\n", collision.CollisionID, collision.State, decision, clean(collision.RuleID))
 	}
 	printStatements(out, "Known unknowns", view.KnownUnknowns)
 	fmt.Fprintf(out, "As of event %d.\n", view.AsOfEvent)

@@ -94,15 +94,55 @@ func analyzeIntentToolSchema() map[string]any {
 			"type":        "array",
 			"maxItems":    500,
 			"items":       path,
-			"description": "Optional bounded repository-relative paths. Omit to analyze configured TypeScript projects in the worktree.",
+			"description": "Optional bounded repository-relative paths. Omit to analyze the TypeScript files changed between the Intent base revision and the working tree.",
 		},
 	})
+}
+
+func listConceptsToolSchema() map[string]any {
+	return objectSchema(nil, map[string]any{
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
+		"kind":         mergeSchema(canonicalDefinition("urn:conn:schema:v1:common", "semanticClaimKind"), "Optional subject kind filter."),
+		"q":            map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "Optional task focus text. Results are ranked by deterministic token similarity with a stated reason."},
+		"objective_id": idSchema("Optional Objective UUID; return only subjects derived from its current revision."),
+		"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "description": "Maximum concepts to return. Defaults to 50."},
+		"after":        map[string]any{"type": "string", "pattern": "^[0-9]{1,6}$", "description": "Opaque continuation from a previous continuation_after."},
+	})
+}
+
+func suggestClaimsToolSchema() map[string]any {
+	path := canonicalDefinition("urn:conn:schema:v1:common", "relativePath")
+	path["description"] = "Repository-relative file the work plans to change. It may not exist yet. Parent traversal and symlink escapes are rejected."
+	return objectSchema([]string{"paths"}, map[string]any{
+		"project_id":   idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
+		"objective_id": idSchema("Optional Objective UUID whose invariants and acceptance criteria become candidates."),
+		"paths": map[string]any{
+			"type": "array", "minItems": 1, "maxItems": 50, "items": path,
+			"description": "Planned repository-relative paths, agreed with the human before editing.",
+		},
+		"symbols": map[string]any{
+			"type":                 "object",
+			"maxProperties":        50,
+			"description":          "Optional map from a planned path to the export names that will change. Paths without an entry suggest every export.",
+			"additionalProperties": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 200}},
+		},
+		"focus": map[string]any{"type": "string", "minLength": 1, "maxLength": 200, "description": "Optional short task focus used to match existing catalog subjects."},
+		"worktree": map[string]any{
+			"type": "string", "minLength": 1, "maxLength": 4096,
+			"description": "Optional local directory inside the trusted MCP workspace. Defaults to the trusted workspace root.",
+		},
+	})
+}
+
+func mergeSchema(schema map[string]any, description string) map[string]any {
+	schema["description"] = description
+	return schema
 }
 
 func collisionsToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
 		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
-		"intent_id":  idSchema("Optional Intent UUID. When present, return only its open collision assessments."),
+		"intent_id":  idSchema("Optional Intent UUID. When present, return only its collision assessments."),
 	})
 }
 

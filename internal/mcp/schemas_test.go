@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -86,6 +87,8 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		"select_project":        {false, true, false, false},
 		"login":                 {false, false, false, true},
 		"logout":                {false, true, true, false},
+		"list_concepts":         {true, true, false, false},
+		"suggest_claims":        {true, true, false, false},
 	}
 	for name, want := range wantAnnotations {
 		tool := tools[name]
@@ -151,6 +154,8 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"analyze exact Intent revision", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 1, "paths": []any{"src/payment.ts"}}},
 		{"submit non-binding proposal", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first."}}},
 		{"read focused work context", "read_work_context", map[string]any{"project_id": "019a8f00-0001-7000-8000-000000000001", "objective_id": objectiveID, "after": 0, "limit": 100}},
+		{"list concepts with a query", "list_concepts", map[string]any{"kind": "invariant", "q": "retry charge", "limit": 20}},
+		{"suggest claims for planned paths", "suggest_claims", map[string]any{"objective_id": objectiveID, "paths": []any{"src/payments/retry.ts"}, "symbols": map[string]any{"src/payments/retry.ts": []any{"shouldRetryCharge"}}, "focus": "retry charge"}},
 	}
 	for _, tc := range accepted {
 		t.Run("accepts "+tc.name, func(t *testing.T) {
@@ -190,6 +195,16 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		{"analysis zero revision", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 0}},
 		{"work-context authority selector", "read_work_context", map[string]any{"human_id": intentID}},
 		{"work-context unknown field", "read_work_context", map[string]any{"diagnostics": []any{}}},
+		{"concept kind outside the vocabulary", "list_concepts", map[string]any{"kind": "file"}},
+		{"suggestions without planned paths", "suggest_claims", map[string]any{"focus": "retry"}},
+		{"suggestions beyond the path bound", "suggest_claims", map[string]any{"paths": func() []any {
+			paths := make([]any, 51)
+			for i := range paths {
+				paths[i] = fmt.Sprintf("src/file%d.ts", i)
+			}
+			return paths
+		}()}},
+		{"suggestion authority selector", "suggest_claims", map[string]any{"paths": []any{"src/a.ts"}, "participant_id": intentID}},
 	}
 	for _, tc := range rejected {
 		t.Run("rejects "+tc.name, func(t *testing.T) {

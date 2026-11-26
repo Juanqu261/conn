@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -28,11 +27,11 @@ type Metadata struct {
 
 // Discover reads origin from worktree and converts it to safe metadata.
 func Discover(ctx context.Context, worktree string) (Metadata, error) {
-	output, err := exec.CommandContext(ctx, "git", "-C", worktree, "config", "--get", "remote.origin.url").Output()
+	output, err := git(ctx, worktree, "config", "--get", "remote.origin.url")
 	if err != nil {
 		return Metadata{}, ErrNoOrigin
 	}
-	return NormalizeRemote(string(output))
+	return NormalizeRemote(output)
 }
 
 // NormalizeRemote accepts common Git remote forms and returns only their safe

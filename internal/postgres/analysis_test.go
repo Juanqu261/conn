@@ -25,11 +25,11 @@ func TestStaticAnalysisAttachment(t *testing.T) {
 	}
 	publishAssessmentIntent(t, ctx, projects, owner, projectID, objectiveID, right, rightIntent, claim("code_symbol", "symbol:typescript:src/payment.ts/charge", "changes"))
 	report := protocol.LocalAnalyzerReport{
-		ReportVersion: 1,
-		Repository:    protocol.AnalyzerRepository{CanonicalRemote: "github.com/acme/payments"},
+		ReportVersion: protocol.AnalyzerReportVersion, Mode: protocol.AnalyzerModeObserved,
+		Repository: protocol.AnalyzerRepository{CanonicalRemote: "github.com/acme/payments"},
 		Claims: []protocol.SemanticClaimCandidate{{
 			SubjectKind: "code_symbol", NormalizedSubject: "symbol:typescript:src/payment.ts/charge", DisplayName: "charge",
-			Relation: "affects", ProvenanceKind: "static_analysis",
+			Relation: "changes", ProvenanceKind: "static_analysis",
 			EvidenceRefs: []protocol.ClaimEvidenceRef{{Kind: "source_location", Locator: "typescript:src/payment.ts:charge", Path: "src/payment.ts", Line: ptr(4)}},
 		}},
 		Diagnostics: []protocol.AnalyzerDiagnostic{{Code: "TS2322", Message: "TypeScript diagnostic TS2322", Path: "src/payment.ts", Line: ptr(7)}},

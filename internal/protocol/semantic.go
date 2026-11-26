@@ -156,8 +156,11 @@ type IntentList struct {
 func (IntentList) SchemaID() string { return IntentListSchema }
 
 // LocalAnalyzerReport is the bounded source-free result of local analysis.
+// Planned reports describe files a participant intends to change; observed
+// reports describe the difference between a base revision and the worktree.
 type LocalAnalyzerReport struct {
 	ReportVersion int                      `json:"report_version"`
+	Mode          string                   `json:"mode"`
 	Repository    AnalyzerRepository       `json:"repository"`
 	Claims        []SemanticClaimCandidate `json:"claims"`
 	Diagnostics   []AnalyzerDiagnostic     `json:"diagnostics"`
@@ -165,8 +168,16 @@ type LocalAnalyzerReport struct {
 
 func (LocalAnalyzerReport) SchemaID() string { return LocalAnalyzerReportSchema }
 
+// Analyzer report modes and version.
+const (
+	AnalyzerReportVersion = 2
+	AnalyzerModePlanned   = "planned"
+	AnalyzerModeObserved  = "observed"
+)
+
 type AnalyzerRepository struct {
 	CanonicalRemote string `json:"canonical_remote"`
+	BaseRevisionRef string `json:"base_revision_ref,omitempty"`
 	HeadRevisionRef string `json:"head_revision_ref,omitempty"`
 	BranchRef       string `json:"branch_ref,omitempty"`
 }
@@ -179,6 +190,8 @@ type AnalyzerDiagnostic struct {
 }
 
 // CollisionAssessment is an advisory interaction between exact revisions.
+// MatchedSubjects lists the sorted normalized subjects that matched the rule;
+// DecisionRef names the human decision that set or was inherited by State.
 type CollisionAssessment struct {
 	CollisionID           uuid.UUID   `json:"collision_id"`
 	ProjectID             uuid.UUID   `json:"project_id"`
@@ -191,6 +204,8 @@ type CollisionAssessment struct {
 	Confidence            float64     `json:"confidence"`
 	State                 string      `json:"state"`
 	MatchingClaimRefs     []uuid.UUID `json:"matching_claim_refs"`
+	MatchedSubjects       []string    `json:"matched_subjects"`
+	DecisionRef           *uuid.UUID  `json:"decision_ref,omitempty"`
 	SupportingContextRefs []uuid.UUID `json:"supporting_context_refs,omitempty"`
 	ExplanationMarkdown   string      `json:"explanation_markdown"`
 	CreatedAt             Timestamp   `json:"created_at"`
@@ -198,6 +213,20 @@ type CollisionAssessment struct {
 }
 
 func (CollisionAssessment) SchemaID() string { return CollisionAssessmentSchema }
+
+// Collision states. Open and under-review collisions need attention;
+// resolved and dismissed collisions carry a human decision.
+const (
+	CollisionOpen        = "open"
+	CollisionUnderReview = "under_review"
+	CollisionResolved    = "resolved"
+	CollisionDismissed   = "dismissed"
+	CollisionStale       = "stale"
+)
+
+// MaxMatchedSubjects bounds CollisionAssessment.MatchedSubjects. A list at
+// the bound may have been truncated.
+const MaxMatchedSubjects = 50
 
 // ResolutionProposalInput is participant-authored proposal content. Identity,
 // authority, Project scope, and timestamp come from Conn.
@@ -339,21 +368,22 @@ func (ObjectiveImportInput) SchemaID() string { return ObjectiveImportInputSchem
 
 // RadarView is the explainable project coordination snapshot.
 type RadarView struct {
-	Project          Project                 `json:"project"`
-	AsOfEvent        int64                   `json:"as_of_event"`
-	Objectives       []RadarObjective        `json:"objectives"`
-	ActiveBlueprint  *RadarBlueprint         `json:"active_blueprint,omitempty"`
-	Repositories     []RepositoryConnection  `json:"repositories"`
-	ActiveIntents    []IntentRevision        `json:"active_intents"`
-	SemanticClaims   []SemanticClaim         `json:"semantic_claims"`
-	SemanticConcepts []RadarSemanticConcept  `json:"semantic_concepts,omitempty"`
-	OpenCollisions   []CollisionAssessment   `json:"open_collisions"`
-	DecisionRefs     []uuid.UUID             `json:"decision_refs,omitempty"`
-	Dependencies     []RadarDependency       `json:"dependencies,omitempty"`
-	OpenQuestions    []string                `json:"open_questions"`
-	Assumptions      []string                `json:"assumptions"`
-	EvidenceCoverage []RadarEvidenceCoverage `json:"evidence_coverage"`
-	KnownUnknowns    []string                `json:"known_unknowns"`
+	Project           Project                 `json:"project"`
+	AsOfEvent         int64                   `json:"as_of_event"`
+	Objectives        []RadarObjective        `json:"objectives"`
+	ActiveBlueprint   *RadarBlueprint         `json:"active_blueprint,omitempty"`
+	Repositories      []RepositoryConnection  `json:"repositories"`
+	ActiveIntents     []IntentRevision        `json:"active_intents"`
+	SemanticClaims    []SemanticClaim         `json:"semantic_claims"`
+	SemanticConcepts  []RadarSemanticConcept  `json:"semantic_concepts,omitempty"`
+	OpenCollisions    []CollisionAssessment   `json:"open_collisions"`
+	DecidedCollisions []CollisionAssessment   `json:"decided_collisions,omitempty"`
+	DecisionRefs      []uuid.UUID             `json:"decision_refs,omitempty"`
+	Dependencies      []RadarDependency       `json:"dependencies,omitempty"`
+	OpenQuestions     []string                `json:"open_questions"`
+	Assumptions       []string                `json:"assumptions"`
+	EvidenceCoverage  []RadarEvidenceCoverage `json:"evidence_coverage"`
+	KnownUnknowns     []string                `json:"known_unknowns"`
 }
 
 func (RadarView) SchemaID() string { return RadarViewSchema }

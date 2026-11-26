@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:concept-list",
+  "title": "Concept list",
+  "description": "A bounded page of the Project concept catalog: Objective-derived subjects and the normalized subjects of active claims. The catalog is a read model computed at the response cursor. It contains identifiers, subjects, and bounded titles, never source content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "concepts", "has_more"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "concepts": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/concept" }
+    },
+    "has_more": { "type": "boolean" },
+    "continuation_after": {
+      "description": "Opaque continuation. Pass it as the after query parameter to read the next page.",
+      "type": "string",
+      "pattern": "^[0-9]{1,6}$"
+    }
+  },
+  "$defs": {
+    "concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "normalized_subject",
+        "subject_kind",
+        "display_name",
+        "sources",
+        "objective_refs",
+        "claims",
+        "claim_count"
+      ],
+      "properties": {
+        "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+        "subject_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticClaimKind" },
+        "display_name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "enum": ["objective", "active_claim"] }
+        },
+        "objective_refs": {
+          "description": "Current Objective key points that derive this subject.",
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["objective_id", "objective_revision", "key_point_key"],
+            "properties": {
+              "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+              "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+              "key_point_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" }
+            }
+          }
+        },
+        "claims": {
+          "description": "At most 20 active claims on this subject.",
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["claim_id", "intent_id", "intent_revision", "relation", "provenance_kind"],
+            "properties": {
+              "claim_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+              "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+              "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+              "relation": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticRelation" },
+              "provenance_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/claimProvenance" }
+            }
+          }
+        },
+        "claim_count": {
+          "description": "Total active claims on this subject, including any beyond the listed bound.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "description": "Deterministic token similarity to the query, present only when a query was supplied.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+      }
+    }
+  }
+}

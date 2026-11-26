@@ -8,6 +8,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/httpclient"
@@ -56,7 +57,10 @@ type projectSelectionStatus struct {
 }
 
 type analyzerStatus struct {
-	Available bool `json:"available"`
+	Available   bool   `json:"available"`
+	Source      string `json:"source,omitempty"`
+	NodeSource  string `json:"node_source,omitempty"`
+	NodeVersion string `json:"node_version,omitempty"`
 }
 
 type clientCapabilityStatus struct {
@@ -114,7 +118,7 @@ func registerAccountTools(server *sdk.Server, t tools) {
 func (t tools) sessionStatus(ctx context.Context, req *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, sessionStatusOutput, error) {
 	output := sessionStatusOutput{
 		ProjectSelection: projectSelectionStatus{State: "none"},
-		Analyzer:         analyzerStatus{Available: t.cfg.AnalyzerAvailable != nil && t.cfg.AnalyzerAvailable()},
+		Analyzer:         t.analyzerStatus(ctx),
 		Capabilities:     clientCapabilities(req),
 		Problems:         []string{},
 	}
@@ -160,6 +164,18 @@ func (t tools) sessionStatus(ctx context.Context, req *sdk.CallToolRequest, _ st
 		summary = fmt.Sprintf("Conn backend %s is not ready.", output.Server.URL)
 	}
 	return statusResult(summary), output, nil
+}
+
+func (t tools) analyzerStatus(ctx context.Context) analyzerStatus {
+	if t.cfg.AnalyzerLocation == nil {
+		return analyzerStatus{Available: t.cfg.AnalyzerAvailable != nil && t.cfg.AnalyzerAvailable()}
+	}
+	location := t.cfg.AnalyzerLocation()
+	status := analyzerStatus{Available: location.Available(), Source: location.AnalyzerSource, NodeSource: location.NodeSource}
+	if location.NodeAvailable {
+		status.NodeVersion = analyzer.NodeVersion(ctx, location.Config.NodePath)
+	}
+	return status
 }
 
 func (t tools) login(ctx context.Context, req *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, loginOutput, error) {

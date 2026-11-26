@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"github.com/Juanqu261/conn/internal/analyzer"
+	"github.com/Juanqu261/conn/internal/preedit"
 	"github.com/Juanqu261/conn/internal/protocol"
 	"github.com/Juanqu261/conn/internal/repositorygit"
 )
@@ -34,12 +35,25 @@ type analyzedClaimReference struct {
 }
 
 type analyzeIntentOutput struct {
-	IntentID       uuid.UUID                      `json:"intent_id"`
-	IntentRevision int                            `json:"intent_revision"`
-	ObservedClaims []analyzedClaimReference       `json:"observed_claims"`
-	Diagnostics    []protocol.AnalyzerDiagnostic  `json:"diagnostics"`
-	Incomplete     bool                           `json:"incomplete"`
-	Collisions     []protocol.CollisionAssessment `json:"collisions"`
+	IntentID          uuid.UUID                      `json:"intent_id"`
+	IntentRevision    int                            `json:"intent_revision"`
+	ObservedClaims    []analyzedClaimReference       `json:"observed_claims"`
+	BaseRevisionRef   string                         `json:"base_revision_ref,omitempty"`
+	BaseSource        string                         `json:"base_source,omitempty"`
+	Diagnostics       []protocol.AnalyzerDiagnostic  `json:"diagnostics"`
+	Incomplete        bool                           `json:"incomplete"`
+	Collisions        []protocol.CollisionAssessment `json:"collisions"`
+	DecidedCollisions []protocol.CollisionAssessment `json:"decided_collisions"`
+}
+
+func shortRef(ref string) string {
+	if len(ref) > 12 {
+		return ref[:12]
+	}
+	if ref == "" {
+		return "the base revision"
+	}
+	return ref
 }
 
 func (t tools) analyzeIntent(ctx context.Context, _ *sdk.CallToolRequest, in analyzeIntentInput) (*sdk.CallToolResult, any, error) {
@@ -96,11 +110,34 @@ func (t tools) analyzeIntent(ctx context.Context, _ *sdk.CallToolRequest, in ana
 		return t.fail("analyze_intent", errors.New("the local worktree does not match the Intent's RepositoryConnection"))
 	}
 
+	// Observed analysis compares the Intent base with the working tree. An
+	// Intent without a recorded base uses the merge base with the default
+	// branch; when neither exists, the analyzer reports conn-base-unavailable.
+	base, baseSource := intent.BaseRevisionRef, "intent"
+	if base == "" {
+		baseSource = "merge_base"
+		if computed, err := preedit.BaseRevision(ctx, worktree, repository.DefaultBranch); err == nil {
+			base = computed
+		}
+	}
 	report, err := analyzer.Run(ctx, t.cfg.Analyzer, analyzer.Request{
-		Worktree: worktree, CanonicalRemote: repository.CanonicalRemote, Paths: paths,
+		Mode: protocol.AnalyzerModeObserved, Worktree: worktree, CanonicalRemote: repository.CanonicalRemote, Paths: paths, BaseRevisionRef: base,
 	})
 	if err != nil {
 		return t.fail("analyze_intent", err)
+	}
+	if analyzer.HasDiagnostic(report, analyzer.DiagnosticBaseUnavailable) {
+		// Attaching an empty report would use the revision's one analysis, so
+		// nothing is attached and a retry stays possible.
+		output := analyzeIntentOutput{
+			IntentID: intentID, IntentRevision: in.ExpectedRevision, ObservedClaims: []analyzedClaimReference{},
+			Diagnostics: report.Diagnostics, Incomplete: true, Collisions: []protocol.CollisionAssessment{}, DecidedCollisions: []protocol.CollisionAssessment{},
+		}
+		data, err := json.Marshal(output)
+		if err != nil {
+			return t.fail("analyze_intent", err)
+		}
+		return envelope(fmt.Sprintf("Analysis is incomplete: the base revision of Intent %s is unavailable, so no observed claims were attached. Set base_revision_ref with revise_intent or fetch origin, then retry.", intentID), data, before.AsOfEvent)
 	}
 	attached, err := client.AttachStaticAnalysisAtRevision(ctx, projectID, intentID, in.ExpectedRevision, report)
 	if err != nil {
@@ -121,16 +158,17 @@ func (t tools) analyzeIntent(ctx context.Context, _ *sdk.CallToolRequest, in ana
 		return t.fail("analyze_intent", errors.New("the Conn server returned a stale post-analysis event cursor"))
 	}
 	collisions := intentCollisions(radar.Data.OpenCollisions, intentID, in.ExpectedRevision)
+	decided := intentCollisions(radar.Data.DecidedCollisions, intentID, in.ExpectedRevision)
 	claims := analyzedClaimReferences(radar.Data.SemanticClaims, intentID, in.ExpectedRevision)
 	output := analyzeIntentOutput{
-		IntentID: intentID, IntentRevision: in.ExpectedRevision, ObservedClaims: claims,
-		Diagnostics: report.Diagnostics, Incomplete: len(report.Diagnostics) > 0, Collisions: collisions,
+		IntentID: intentID, IntentRevision: in.ExpectedRevision, ObservedClaims: claims, BaseRevisionRef: report.Repository.BaseRevisionRef, BaseSource: baseSource,
+		Diagnostics: report.Diagnostics, Incomplete: len(report.Diagnostics) > 0, Collisions: collisions, DecidedCollisions: decided,
 	}
 	data, err := json.Marshal(output)
 	if err != nil {
 		return t.fail("analyze_intent", err)
 	}
-	summary := fmt.Sprintf("Attached %d source-free observed claim(s) to Intent %s revision %d; %d resulting open collision(s).", len(claims), intentID, in.ExpectedRevision, len(collisions))
+	summary := fmt.Sprintf("Attached %d source-free observed claim(s) from the diff against %s to Intent %s revision %d; %d collision(s) need attention.", len(claims), shortRef(report.Repository.BaseRevisionRef), intentID, in.ExpectedRevision, len(collisions))
 	if output.Incomplete {
 		summary += fmt.Sprintf(" The analyzer returned %d bounded diagnostic(s), so analysis is incomplete.", len(output.Diagnostics))
 	}

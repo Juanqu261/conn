@@ -57,8 +57,8 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", chunk => input += chunk);
 process.stdin.on("end", () => {
   const request = JSON.parse(input);
-  console.log(JSON.stringify({report_version:1,repository:{canonical_remote:request.canonical_remote},claims:[{
-    subject_kind:"code_symbol",normalized_subject:"symbol:typescript:src/workflow.ts/run",display_name:"run",relation:"affects",provenance_kind:"static_analysis"
+  console.log(JSON.stringify({report_version:2,mode:"observed",repository:{canonical_remote:request.canonical_remote},claims:[{
+    subject_kind:"code_symbol",normalized_subject:"symbol:typescript:src/workflow.ts/run",display_name:"run",relation:"changes",provenance_kind:"static_analysis"
   }],diagnostics:[]}));
 });`)
 
@@ -135,8 +135,9 @@ process.stdin.on("end", () => {
 		t.Fatalf("published Intent = %+v", published.Data)
 	}
 	initialCollisions := callWorkLoopEnvelopeRaw(t, ctx, session, "check_collisions", map[string]any{"intent_id": fixture.intentID.String()})
-	if string(initialCollisions.Data) != "[]" {
-		t.Fatalf("initial collisions = %s", initialCollisions.Data)
+	var initialGroups collisionGroups
+	if err := json.Unmarshal(initialCollisions.Data, &initialGroups); err != nil || len(initialGroups.NeedsAttention) != 0 || len(initialGroups.Decided) != 0 {
+		t.Fatalf("initial collisions = %s, %v", initialCollisions.Data, err)
 	}
 
 	// /conn-sync follows a bounded continuation and selectively rereads the
@@ -173,8 +174,8 @@ process.stdin.on("end", () => {
 		t.Fatalf("analysis result = %s, %v", analysis.Data, err)
 	}
 	collisions := callWorkLoopEnvelopeRaw(t, ctx, session, "check_collisions", map[string]any{"intent_id": fixture.intentID.String()})
-	var collisionData []json.RawMessage
-	if err := json.Unmarshal(collisions.Data, &collisionData); err != nil || len(collisionData) != 1 {
+	var collisionData collisionGroups
+	if err := json.Unmarshal(collisions.Data, &collisionData); err != nil || len(collisionData.NeedsAttention) != 1 {
 		t.Fatalf("finish collisions = %s, %v", collisions.Data, err)
 	}
 	evidence := callWorkLoopEnvelope[protocol.EvidenceReference](t, ctx, session, "attach_evidence", map[string]any{
@@ -448,7 +449,7 @@ func (b *workLoopBackend) collision() protocol.CollisionAssessment {
 	return protocol.CollisionAssessment{
 		CollisionID: workflowUUIDNoTest("019a8f10-0016-7000-8000-000000000016"), ProjectID: b.project.ProjectID,
 		LeftIntentID: b.intentID, LeftIntentRevision: 1, RightIntentID: b.otherIntent.IntentID, RightIntentRevision: 1,
-		RuleID: "shared_exported_symbol", Severity: "amber", Confidence: 1, State: "open",
+		RuleID: "shared_exported_symbol", Severity: "amber", Confidence: 1, State: "open", MatchedSubjects: []string{"symbol:typescript:src/workflow.ts/run"},
 		MatchingClaimRefs:   []uuid.UUID{b.analysisClaim().ClaimID, b.otherClaim().ClaimID},
 		ExplanationMarkdown: "Both work cells affect the same exported symbol.",
 		CreatedAt:           protocol.NewTimestamp(time.Date(2026, 11, 23, 9, 8, 0, 0, time.UTC)),

@@ -134,11 +134,7 @@ func (t projectTx) ReleaseIntent(ctx context.Context, projectID, intentID, parti
 }
 
 func intentView(revision protocol.IntentRevision, status string) protocol.IntentView {
-	observations := []string{"No accepted Charter is associated with this Intent; its scope is unpartitioned coordination context."}
-	if revision.CharterID != nil {
-		observations = []string{fmt.Sprintf("Accepted Charter %s is associated. Conn cannot deterministically map this Intent's summary and claims to Charter boundaries, so possible scope divergence is advisory and does not alter that Charter or authorize a boundary change.", *revision.CharterID)}
-	}
-	return protocol.IntentView{IntentRevision: revision, Status: status, AdvisoryObservations: observations}
+	return protocol.IntentView{IntentRevision: revision, Status: status, AdvisoryObservations: []string{application.IntentCharterObservation(revision)}}
 }
 
 var _ application.Tx = projectTx{}

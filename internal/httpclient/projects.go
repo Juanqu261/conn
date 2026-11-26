@@ -50,6 +50,41 @@ func (c *Client) Radar(ctx context.Context, projectID uuid.UUID) (Result[protoco
 	return read[protocol.RadarView](ctx, c, projectPath(projectID)+"/radar")
 }
 
+// ConceptQuery selects one bounded page of the Project concept catalog.
+type ConceptQuery struct {
+	Kind        string
+	Query       string
+	ObjectiveID uuid.UUID
+	Limit       int
+	After       string
+}
+
+// Concepts reads one page of the Project concept catalog: Objective-derived
+// subjects and the normalized subjects of active claims.
+func (c *Client) Concepts(ctx context.Context, projectID uuid.UUID, query ConceptQuery) (Result[protocol.ConceptList], error) {
+	values := url.Values{}
+	if query.Kind != "" {
+		values.Set("kind", query.Kind)
+	}
+	if query.Query != "" {
+		values.Set("q", query.Query)
+	}
+	if query.ObjectiveID != (uuid.UUID{}) {
+		values.Set("objective_id", query.ObjectiveID.String())
+	}
+	if query.Limit > 0 {
+		values.Set("limit", strconv.Itoa(query.Limit))
+	}
+	if query.After != "" {
+		values.Set("after", query.After)
+	}
+	path := projectPath(projectID) + "/concepts"
+	if encoded := values.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	return read[protocol.ConceptList](ctx, c, path)
+}
+
 // WorkContext reads one exact participant-focused coordination snapshot.
 func (c *Client) WorkContext(ctx context.Context, projectID, objectiveID, intentID uuid.UUID, after *int64, limit int) (Result[protocol.WorkContext], error) {
 	query := url.Values{}
