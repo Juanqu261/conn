@@ -233,7 +233,7 @@ func (m model) updateSemanticMessage(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.semantic.contextFor = msg.collisionID
 			m.semantic.contextText = application.RenderConflictContextMarkdown(msg.pack)
-			m.viewer.SetContent(cleanBlock(m.semantic.contextText))
+			m.wrapContext()
 			m.viewer.GotoTop()
 			m.screen, m.formNote = contextScreen, ""
 		}
@@ -519,24 +519,25 @@ func (m model) updateSemanticScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case intentConfirmScreen:
 		if key == "enter" {
 			input, expected := d.intent, d.intentExpected
+			name := quote(intentTitle(protocol.IntentRevision{SummaryMarkdown: input.SummaryMarkdown}))
 			m = m.confirm()
 			return m, func() tea.Msg {
 				if expected > 0 {
 					result, err := m.client.ReviseIntent(m.ctx, m.selectedProjectID(), input.IntentID, expected, input)
-					return actionDone{fmt.Sprintf("Revised Intent %s to revision %d.", input.IntentID, result.Data.IntentRevision.Revision), err}
+					return actionDone{fmt.Sprintf("Revised Intent %s to revision %d.", name, result.Data.IntentRevision.Revision), err}
 				}
 				_, err := m.client.PublishIntent(m.ctx, m.selectedProjectID(), input)
-				return actionDone{fmt.Sprintf("Published Intent %s as your CLI participant.", input.IntentID), err}
+				return actionDone{fmt.Sprintf("Published Intent %s as your CLI participant.", name), err}
 			}
 		}
 	case intentReleaseScreen:
 		if key == "enter" {
 			if intent, ok := m.currentIntent(); ok {
-				intentID := intent.IntentRevision.IntentID
+				intentID, name := intent.IntentRevision.IntentID, quote(intentTitle(intent.IntentRevision))
 				m = m.confirm()
 				return m, func() tea.Msg {
 					_, err := m.client.ReleaseIntent(m.ctx, m.selectedProjectID(), intentID)
-					return actionDone{fmt.Sprintf("Released Intent %s. Its revisions remain in history.", intentID), err}
+					return actionDone{fmt.Sprintf("Released Intent %s. Its revisions remain in history.", name), err}
 				}
 			}
 		}
@@ -583,11 +584,11 @@ func (m model) updateSemanticScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case evidenceConfirmScreen:
 		if key == "enter" {
-			input := d.evidence
+			input, name := d.evidence, m.intentName(d.evidence.IntentID)
 			m = m.confirm()
 			return m, func() tea.Msg {
-				result, err := m.client.AttachEvidence(m.ctx, m.selectedProjectID(), input.IntentID, input)
-				return actionDone{fmt.Sprintf("Attached %s evidence %s.", input.State, result.Data.EvidenceID), err}
+				_, err := m.client.AttachEvidence(m.ctx, m.selectedProjectID(), input.IntentID, input)
+				return actionDone{fmt.Sprintf("Attached %s %s evidence to Intent %s.", input.State, input.Kind, name), err}
 			}
 		}
 
@@ -654,8 +655,8 @@ func (m model) updateSemanticScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			input := d.proposal
 			m = m.confirm()
 			return m, func() tea.Msg {
-				result, err := m.client.ProposeResolution(m.ctx, m.selectedProjectID(), collision.CollisionID, input)
-				return actionDone{fmt.Sprintf("Recorded non-binding %s proposal %s. Only a human decision can adopt it.", input.Kind, result.Data.ProposalID), err}
+				_, err := m.client.ProposeResolution(m.ctx, m.selectedProjectID(), collision.CollisionID, input)
+				return actionDone{fmt.Sprintf("Recorded a non-binding %s proposal. Only a human decision can adopt it.", input.Kind), err}
 			}
 		}
 
@@ -722,12 +723,12 @@ func (m model) updateSemanticScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			input := d.decision
 			m = m.confirm()
 			return m, func() tea.Msg {
-				result, err := m.client.DecideResolution(m.ctx, m.selectedProjectID(), collision.CollisionID, input)
+				_, err := m.client.DecideResolution(m.ctx, m.selectedProjectID(), collision.CollisionID, input)
 				label := "non-binding"
 				if input.Binding {
 					label = "binding"
 				}
-				return actionDone{fmt.Sprintf("Recorded %s %s decision %s. The collision stays advisory.", label, input.Kind, result.Data.DecisionID), err}
+				return actionDone{fmt.Sprintf("Recorded a %s %s decision. The collision stays advisory.", label, input.Kind), err}
 			}
 		}
 
@@ -797,7 +798,7 @@ func (m model) updateSemanticScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m = m.confirm()
 			return m, func() tea.Msg {
 				result, err := m.client.ImportKiroSpecObjective(m.ctx, m.selectedProjectID(), expected, input)
-				return actionDone{fmt.Sprintf("Imported objective %s revision %d from %s.", input.ObjectiveID, result.Data.Revision, input.SourceRef), err}
+				return actionDone{fmt.Sprintf("Imported objective %s revision %d from %s.", quote(clean(input.Title)), result.Data.Revision, input.SourceRef), err}
 			}
 		}
 	}
@@ -896,12 +897,12 @@ func (m model) chooseIntentObjective() model {
 	current := false
 	for _, objective := range m.radar.Objectives {
 		value := fmt.Sprintf("%s %d", objective.ObjectiveID, objective.Revision)
-		items = append(items, choiceItem{clean(objective.Title), fmt.Sprintf("current revision %d · %s", objective.Revision, objective.ObjectiveID), value})
+		items = append(items, choiceItem{clean(objective.Title), fmt.Sprintf("current revision %d", objective.Revision), value})
 		current = current || (objective.ObjectiveID == d.intent.ObjectiveID && objective.Revision == d.intent.ObjectiveRevision)
 	}
 	if d.intentExpected > 0 && !current {
 		// A revision never silently moves to a newer Objective revision.
-		items = append([]choiceItem{{"Keep the referenced Objective revision", fmt.Sprintf("revision %d · %s (not current)", d.intent.ObjectiveRevision, d.intent.ObjectiveID),
+		items = append([]choiceItem{{"Keep the referenced Objective revision", fmt.Sprintf("%s · revision %d (not current)", m.objectiveTitle(d.intent.ObjectiveID), d.intent.ObjectiveRevision),
 			fmt.Sprintf("%s %d", d.intent.ObjectiveID, d.intent.ObjectiveRevision)}}, items...)
 	}
 	return m.choose(intentObjectiveScreen, "Objective selector for this Intent", items, fmt.Sprintf("%s %d", d.intent.ObjectiveID, d.intent.ObjectiveRevision))
@@ -919,7 +920,7 @@ func (m model) eligibleCharters(objectiveID uuid.UUID, objectiveRevision int) []
 			}
 			for _, cell := range revision.Cells {
 				if cell.AccountableHumanID == m.human.HumanID && cell.Decision == protocol.CellAccepted {
-					charters = append(charters, charterItem{blueprint.BlueprintID, revision, cell})
+					charters = append(charters, charterItem{blueprint.BlueprintID, revision, cell, m.objectiveTitle(revision.ObjectiveID)})
 				}
 			}
 		}
@@ -937,7 +938,7 @@ func (m model) chooseIntentCharterOrNext() model {
 	items := []choiceItem{{"No charter", "Unpartitioned coordination context", "none"}}
 	selected := "none"
 	for _, charter := range d.charters {
-		items = append(items, choiceItem{clean(charter.cell.Title), fmt.Sprintf("Blueprint %s · revision %d · %s", charter.blueprintID, charter.revision.Revision, charter.revision.Status), charter.cell.CellID.String()})
+		items = append(items, choiceItem{clean(charter.cell.Title), fmt.Sprintf("%s · revision %d · %s", blueprintLabel(charter.objective), charter.revision.Revision, charter.revision.Status), charter.cell.CellID.String()})
 		if d.intent.CharterID != nil && *d.intent.CharterID == charter.cell.CellID {
 			selected = charter.cell.CellID.String()
 		}
@@ -1018,7 +1019,7 @@ func (m model) chooseDecisionProposal() model {
 		selected = m.semantic.decisionProposal.ProposalID.String()
 	}
 	for _, proposal := range m.semantic.proposals {
-		items = append(items, choiceItem{fmt.Sprintf("%s proposal %s", proposal.Kind, proposal.ProposalID.String()[:8]), firstLine(proposal.RationaleMarkdown, 80), proposal.ProposalID.String()})
+		items = append(items, choiceItem{m.proposalName(proposal), firstLine(proposal.RationaleMarkdown, 80), proposal.ProposalID.String()})
 	}
 	return m.choose(decisionProposalScreen, "Proposal selector for this decision", items, selected)
 }
@@ -1052,7 +1053,7 @@ func (m model) chooseDecisionBinding() model {
 func (m model) chooseImportTarget() model {
 	items := []choiceItem{{"Create a new Objective", "Revision 1 with this specification's provenance", "new"}}
 	for _, objective := range m.radar.Objectives {
-		items = append(items, choiceItem{"Refresh: " + clean(objective.Title), fmt.Sprintf("Creates revision %d of %s; revision %d is never changed", objective.Revision+1, objective.ObjectiveID, objective.Revision), objective.ObjectiveID.String()})
+		items = append(items, choiceItem{"Refresh: " + clean(objective.Title), fmt.Sprintf("Creates revision %d; revision %d is never changed", objective.Revision+1, objective.Revision), objective.ObjectiveID.String()})
 	}
 	selected := "new"
 	if m.semantic.importExpected > 0 {
@@ -1093,6 +1094,7 @@ func (m model) runAnalysis() (tea.Model, tea.Cmd) {
 		m.err = err
 		return m, nil
 	}
+	name := m.intentName(d.analysisIntentID)
 	m = m.confirm()
 	client, ctx, projectID := m.client, m.ctx, m.selectedProjectID()
 	return m, func() tea.Msg {
@@ -1104,7 +1106,7 @@ func (m model) runAnalysis() (tea.Model, tea.Cmd) {
 		if _, err := client.AttachStaticAnalysis(ctx, projectID, d.analysisIntentID, report); err != nil {
 			return actionDone{err: err}
 		}
-		message := fmt.Sprintf("Attached %d static-analysis claims to Intent %s.", len(report.Claims), d.analysisIntentID)
+		message := fmt.Sprintf("Attached %d static-analysis claims to Intent %s.", len(report.Claims), name)
 		if len(report.Diagnostics) > 0 {
 			message += fmt.Sprintf(" %d bounded diagnostics were kept as incomplete-analysis context.", len(report.Diagnostics))
 		}
@@ -1112,8 +1114,8 @@ func (m model) runAnalysis() (tea.Model, tea.Cmd) {
 	}
 }
 
-// semanticFormView renders the semantic screens.
-func (m model) semanticFormView() string {
+// semanticPage is the content of the semantic screens.
+func (m model) semanticPage() page {
 	d := m.semantic
 	title, body, footer := "", "", ""
 	switch m.screen {
@@ -1148,7 +1150,7 @@ func (m model) semanticFormView() string {
 	case intentReleaseScreen:
 		intent, _ := m.currentIntent()
 		title = "Release this Intent?"
-		body = fmt.Sprintf("Intent %s revision %d\n%s\n\nReleasing ends active coordination for this Intent. Every revision stays in history, and its open collisions become stale.\nOnly the participant that published it can release it.", intent.IntentRevision.IntentID, intent.IntentRevision.Revision, firstLine(intent.IntentRevision.SummaryMarkdown, 200))
+		body = fmt.Sprintf("Intent %s · revision %d\n\nReleasing ends active coordination for this Intent. Every revision stays in history, and its open collisions become stale.\nOnly the participant that published it can release it.", quote(intentTitle(intent.IntentRevision)), intent.IntentRevision.Revision)
 		footer = "  Enter release · Esc back"
 	case evidenceLocatorScreen:
 		title, body, footer = "Attach evidence: locator", "Store a reference, never logs, screenshots, or source.\n\n"+m.input.View(), "  Enter next · Esc back"
@@ -1159,7 +1161,7 @@ func (m model) semanticFormView() string {
 		if key == "" {
 			key = "none (does not cover a criterion)"
 		}
-		body = fmt.Sprintf("Intent: %s\nObjective: %s revision %d\nAcceptance key: %s\nKind: %s\nState: %s\nLocator: %s\nSummary: %s", d.evidence.IntentID, d.evidence.ObjectiveID, d.evidence.ObjectiveRevision, key, d.evidence.Kind, d.evidence.State, clean(d.evidence.Locator), clean(firstNonEmpty(d.evidence.Summary, "none")))
+		body = fmt.Sprintf("Intent: %s\nObjective: %s (revision %d)\nAcceptance key: %s\nKind: %s\nState: %s\nLocator: %s\nSummary: %s", m.intentName(d.evidence.IntentID), m.objectiveTitle(d.evidence.ObjectiveID), d.evidence.ObjectiveRevision, key, d.evidence.Kind, d.evidence.State, clean(d.evidence.Locator), clean(firstNonEmpty(d.evidence.Summary, "none")))
 		title, footer = "Attach this evidence?", "  Enter attach · Esc edit"
 	case analysisWorktreeScreen:
 		title, body, footer = "Analyze locally: worktree", "The TypeScript analyzer runs on this machine. Conn receives only normalized claims, paths, hashes, and code-only diagnostics.\n\n"+m.input.View(), "  Enter next · Esc back"
@@ -1172,7 +1174,7 @@ func (m model) semanticFormView() string {
 		if len(d.analysisPaths) > 0 {
 			paths = strings.Join(d.analysisPaths, ", ")
 		}
-		body = fmt.Sprintf("Intent: %s\nRepository: %s\nWorktree: %s\nAnalyzer: %s\nPaths: %s\n\nThe analyzer receives no Conn credentials. Source text never leaves this machine.", d.analysisIntentID, clean(d.analysisRemote), clean(d.analysisWorktree), clean(d.analysisScript), clean(paths))
+		body = fmt.Sprintf("Intent: %s\nRepository: %s\nWorktree: %s\nAnalyzer: %s\nPaths: %s\n\nThe analyzer receives no Conn credentials. Source text never leaves this machine.", m.intentName(d.analysisIntentID), clean(d.analysisRemote), clean(d.analysisWorktree), clean(d.analysisScript), clean(paths))
 		title, footer = "Run local analysis?", "  Enter analyze and attach claims · Esc edit"
 	case proposalRationaleScreen:
 		title, body, footer = "Propose resolution: rationale", m.area.View(), "  Ctrl+S next · Enter new line · Esc back"
@@ -1180,7 +1182,7 @@ func (m model) semanticFormView() string {
 		title, body, footer = "Propose resolution: references", m.input.View(), "  Enter review · Esc back"
 	case proposalConfirmScreen:
 		collision, _ := m.currentCollision()
-		body = fmt.Sprintf("Collision: %s (%s)\nKind: %s\nRationale:\n%s\nReferences: %s\n\nA proposal is non-binding. It does not change the collision, objectives, blueprints, or charters.", collision.CollisionID, clean(collision.RuleID), d.proposal.Kind, cleanBlock(d.proposal.RationaleMarkdown), clean(firstNonEmpty(strings.Join(d.proposal.References, ", "), "none")))
+		body = fmt.Sprintf("Collision: %s\nKind: %s\nRationale:\n%s\nReferences: %s\n\nA proposal is non-binding. It does not change the collision, objectives, blueprints, or charters.", m.collisionName(collision), d.proposal.Kind, cleanBlock(d.proposal.RationaleMarkdown), clean(firstNonEmpty(strings.Join(d.proposal.References, ", "), "none")))
 		title, footer = "Record this proposal?", "  Enter record proposal · Esc edit"
 	case decisionRationaleScreen:
 		title, body, footer = "Record decision: rationale", m.area.View(), "  Ctrl+S next · Enter new line · Esc back"
@@ -1190,13 +1192,13 @@ func (m model) semanticFormView() string {
 		collision, _ := m.currentCollision()
 		proposal := "none"
 		if d.decisionProposal != nil {
-			proposal = fmt.Sprintf("%s (%s)", d.decisionProposal.ProposalID, d.decisionProposal.Kind)
+			proposal = fmt.Sprintf("%s: %s", m.proposalName(*d.decisionProposal), firstLine(d.decisionProposal.RationaleMarkdown, 120))
 		}
 		authority := "Non-binding record"
 		if d.decision.Binding {
 			authority = "Binding team decision (owner)"
 		}
-		body = fmt.Sprintf("Collision: %s (%s)\nSelected proposal: %s\nKind: %s\nAuthority: %s\nRationale:\n%s\nReferences: %s\n\nThe decision is immutable and attributed to you. The collision stays advisory; this does not merge, block, or assign work.", collision.CollisionID, clean(collision.RuleID), proposal, d.decision.Kind, authority, cleanBlock(d.decision.RationaleMarkdown), clean(firstNonEmpty(strings.Join(d.decision.References, ", "), "none")))
+		body = fmt.Sprintf("Collision: %s\nSelected proposal: %s\nKind: %s\nAuthority: %s\nRationale:\n%s\nReferences: %s\n\nThe decision is immutable and attributed to you. The collision stays advisory; this does not merge, block, or assign work.", m.collisionName(collision), proposal, d.decision.Kind, authority, cleanBlock(d.decision.RationaleMarkdown), clean(firstNonEmpty(strings.Join(d.decision.References, ", "), "none")))
 		title, footer = "Record this decision?", "  Enter record decision · Esc edit"
 	case importSourceScreen:
 		title, body, footer = "Import Kiro specification", "Conn hashes the file locally and stores only its relative reference and SHA-256 digest. The source is never uploaded.\n\n"+m.input.View(), "  Enter next · Esc cancel"
@@ -1226,7 +1228,7 @@ func (m model) semanticFormView() string {
 			importTargetScreen:     "  Form selector: new Objective or explicit refresh · Enter choose · Esc back",
 			importMemberScreen:     "  Form selector: choose the accountable member · Enter choose · Esc back",
 		}
-		return m.selectorView(footers[m.screen])
+		return page{list: selectorList, footer: footers[m.screen]}
 	}
 	if m.formNote != "" {
 		body += "\n\n" + helpStyle.Render(clean(m.formNote))
@@ -1234,7 +1236,7 @@ func (m model) semanticFormView() string {
 	if m.err != nil {
 		body += "\n\n" + errorStyle.Render(clean(m.err.Error()))
 	}
-	return m.header() + "\n\n" + m.card(title, body) + "\n\n" + footerStyle.Render(footer) + "\n"
+	return page{title: title, body: body, footer: footer}
 }
 
 func (m model) intentStep(field string) string {
@@ -1251,37 +1253,15 @@ func (m model) importStep(field string) string {
 	return "Import objective: " + field
 }
 
-func (m model) objectiveTitle(id uuid.UUID) string {
-	for _, objective := range m.radar.Objectives {
-		if objective.ObjectiveID == id {
-			return clean(objective.Title)
-		}
-	}
-	return id.String()
-}
-
-func (m model) repositoryName(id *uuid.UUID) string {
-	if id == nil {
-		return "none"
-	}
-	for _, repository := range m.radar.Repositories {
-		if repository.RepositoryID == *id {
-			return clean(repository.CanonicalRemote)
-		}
-	}
-	return id.String()
-}
-
 func (m model) intentReview() string {
 	d := m.semantic
 	intent := d.intent
 	charter := "none (unpartitioned coordination context)"
 	if intent.CharterID != nil {
-		charter = fmt.Sprintf("%s in Blueprint %s revision %d", *intent.CharterID, *intent.BlueprintID, *intent.BlueprintRevision)
+		charter = fmt.Sprintf("%s (blueprint revision %d)", m.cellTitle(*intent.CharterID), *intent.BlueprintRevision)
 	}
 	lines := []string{
-		fmt.Sprintf("Intent: %s", intent.IntentID),
-		fmt.Sprintf("Objective: %s (%s) revision %d", m.objectiveTitle(intent.ObjectiveID), intent.ObjectiveID, intent.ObjectiveRevision),
+		fmt.Sprintf("Objective: %s (revision %d)", m.objectiveTitle(intent.ObjectiveID), intent.ObjectiveRevision),
 		"Charter: " + charter,
 		"Repository: " + m.repositoryName(intent.RepositoryID),
 		"\nSummary:\n" + cleanBlock(intent.SummaryMarkdown),
@@ -1310,14 +1290,12 @@ func (m model) intentReview() string {
 func (m model) importReview() string {
 	d := m.semantic
 	input := d.importInput
-	lines := []string{
-		fmt.Sprintf("Source: %s (kiro_spec)\nSHA-256: %s", clean(input.SourceRef), input.ContentHash),
-		fmt.Sprintf("Objective: %s", input.ObjectiveID),
-	}
+	lines := []string{fmt.Sprintf("Source: %s (kiro_spec)\nSHA-256: %s", clean(input.SourceRef), input.ContentHash)}
 	if d.importExpected > 0 {
-		lines = append(lines, fmt.Sprintf("Refresh: creates revision %d. Revision %d and earlier stay unchanged.", d.importExpected+1, d.importExpected))
+		lines = append(lines, fmt.Sprintf("Refreshes objective %s: creates revision %d. Revision %d and earlier stay unchanged.",
+			quote(m.objectiveTitle(input.ObjectiveID)), d.importExpected+1, d.importExpected))
 	} else {
-		lines = append(lines, "Creates revision 1.")
+		lines = append(lines, "Creates a new objective at revision 1.")
 	}
 	lines = append(lines, "Title: "+clean(input.Title), "\nSummary:\n"+cleanBlock(input.OverviewMarkdown), "\nKey points:")
 	if len(input.KeyPoints) == 0 {
@@ -1326,7 +1304,7 @@ func (m model) importReview() string {
 	for _, point := range input.KeyPoints {
 		lines = append(lines, fmt.Sprintf("  %s (%s): %s", point.Key, point.Kind, clean(point.Statement)))
 	}
-	lines = append(lines, fmt.Sprintf("\nAccountable human: @%s · %s", clean(d.importMember.Human.GitHubLogin), input.AccountableHumanID),
+	lines = append(lines, fmt.Sprintf("\nAccountable human: @%s", clean(d.importMember.Human.GitHubLogin)),
 		"\nLater changes to the specification never change this Objective; refresh it explicitly.")
 	return strings.Join(lines, "\n")
 }
@@ -1346,7 +1324,7 @@ func (m model) work() string {
 	}
 	for _, intent := range m.intents.Intents {
 		revision := intent.IntentRevision
-		lines = append(lines, fmt.Sprintf("  [%s] %s · revision %d · %s", intent.Status, revision.IntentID, revision.Revision, firstLine(revision.SummaryMarkdown, 60)))
+		lines = append(lines, fmt.Sprintf("  [%s] %s · revision %d · %s", intent.Status, intentTitle(revision), revision.Revision, m.objectiveTitle(revision.ObjectiveID)))
 	}
 	actions := "\nActions: n publish Intent"
 	if len(m.intents.Intents) > 0 {
@@ -1363,9 +1341,9 @@ func (m model) intentListView() string {
 	for i, intent := range m.intents.Intents {
 		marker := "  "
 		if i == m.intentCursor {
-			marker = "> "
+			marker = cursorMarker
 		}
-		lines = append(lines, fmt.Sprintf("%s[%s] %s · revision %d · %s", marker, intent.Status, intent.IntentRevision.IntentID, intent.IntentRevision.Revision, firstLine(intent.IntentRevision.SummaryMarkdown, 50)))
+		lines = append(lines, fmt.Sprintf("%s[%s] %s · revision %d", marker, intent.Status, intentTitle(intent.IntentRevision), intent.IntentRevision.Revision))
 	}
 	intent, ok := m.currentIntent()
 	if !ok {
@@ -1374,12 +1352,12 @@ func (m model) intentListView() string {
 	revision := intent.IntentRevision
 	charter := "none (unpartitioned coordination context)"
 	if revision.CharterID != nil {
-		charter = revision.CharterID.String()
+		charter = m.cellTitle(*revision.CharterID)
 	}
 	lines = append(lines,
-		fmt.Sprintf("\nIntent %s", revision.IntentID),
-		fmt.Sprintf("Status: %s · revision %d · participant %s", intent.Status, revision.Revision, revision.ParticipantID),
-		fmt.Sprintf("Objective: %s revision %d", m.objectiveTitle(revision.ObjectiveID), revision.ObjectiveRevision),
+		fmt.Sprintf("\nIntent %s", quote(intentTitle(revision))),
+		fmt.Sprintf("Status: %s · revision %d", intent.Status, revision.Revision),
+		fmt.Sprintf("Objective: %s (revision %d)", m.objectiveTitle(revision.ObjectiveID), revision.ObjectiveRevision),
 		"Charter: "+charter,
 		"Repository: "+m.repositoryName(revision.RepositoryID),
 		"\nSummary:\n"+cleanBlock(revision.SummaryMarkdown))
@@ -1434,14 +1412,14 @@ func (m model) collisionDetails() string {
 	for _, id := range collision.MatchingClaimRefs {
 		claim, found := claims[id]
 		if !found {
-			lines = append(lines, fmt.Sprintf("  - %s (details unavailable)", id))
+			lines = append(lines, "  - a claim whose details are not loaded; press Esc and r to refresh")
 			continue
 		}
 		confidence := ""
 		if claim.Confidence != nil {
 			confidence = fmt.Sprintf(", confidence %.2f", *claim.Confidence)
 		}
-		lines = append(lines, fmt.Sprintf("  - %s %s %s · %s%s · Intent %s revision %d", claim.SubjectKind, claim.Relation, clean(claim.NormalizedSubject), claim.ProvenanceKind, confidence, claim.IntentID, claim.IntentRevision))
+		lines = append(lines, fmt.Sprintf("  - %s %s %s · %s%s · Intent %s revision %d", claim.SubjectKind, claim.Relation, clean(claim.NormalizedSubject), claim.ProvenanceKind, confidence, m.intentName(claim.IntentID), claim.IntentRevision))
 	}
 	lines = append(lines, "\nProposals (non-binding):")
 	switch {
@@ -1454,11 +1432,7 @@ func (m model) collisionDetails() string {
 	}
 	if m.semantic.proposalsFor == collision.CollisionID {
 		for _, proposal := range m.semantic.proposals {
-			author := "human"
-			if proposal.ProposedByParticipantID != nil {
-				author = "participant " + proposal.ProposedByParticipantID.String()
-			}
-			lines = append(lines, fmt.Sprintf("  - %s %s by %s: %s", proposal.ProposalID, proposal.Kind, author, firstLine(proposal.RationaleMarkdown, 120)))
+			lines = append(lines, fmt.Sprintf("  - %s: %s", m.proposalName(proposal), firstLine(proposal.RationaleMarkdown, 120)))
 		}
 	}
 	return strings.Join(lines, "\n")

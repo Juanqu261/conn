@@ -54,6 +54,7 @@ func TestConformance(t *testing.T) {
 		protocol.EvidenceReferenceSchema:        roundTrip[protocol.EvidenceReference],
 		protocol.ObjectiveImportInputSchema:     roundTrip[protocol.ObjectiveImportInput],
 		protocol.RadarViewSchema:                roundTrip[protocol.RadarView],
+		protocol.WorkContextSchema:              roundTrip[protocol.WorkContext],
 		protocol.HumanSchema:                    roundTrip[protocol.Human],
 		protocol.SessionGrantSchema:             roundTrip[protocol.SessionGrant],
 		protocol.GitHubLoginSchema:              roundTrip[protocol.GitHubLogin],

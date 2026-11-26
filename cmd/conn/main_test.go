@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -93,6 +94,7 @@ func TestMCPStdio(t *testing.T) {
 		func() error {
 			_, err := projects.CreateObjectiveRevision(ctx, alice.HumanID, projectID, protocol.ObjectiveRevisionInput{
 				ObjectiveID: objectiveID, Title: "Reliable checkout", OverviewMarkdown: "Survive outages.", AccountableHumanID: alice.HumanID,
+				KeyPoints: []protocol.KeyPoint{{Key: "retry-evidence", Kind: protocol.KeyPointAcceptanceCriterion, Statement: "Retry behavior has passing automated evidence."}},
 			}, 0)
 			return err
 		},
@@ -148,8 +150,32 @@ func TestMCPStdio(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"attach_evidence", "check_collisions", "check_updates", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "release_intent", "revise_intent"}; !slices.Equal(names, want) {
+	if want := []string{"attach_evidence", "check_collisions", "check_updates", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
+	}
+	listedPrompts, err := session.ListPrompts(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var promptNames []string
+	for _, prompt := range listedPrompts.Prompts {
+		promptNames = append(promptNames, prompt.Name)
+	}
+	slices.Sort(promptNames)
+	if want := []string{"conn-finish", "conn-handoff", "conn-resolve", "conn-start", "conn-sync"}; !slices.Equal(promptNames, want) {
+		t.Fatalf("prompts %v, want %v", promptNames, want)
+	}
+	listedTemplates, err := session.ListResourceTemplates(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var templateNames []string
+	for _, template := range listedTemplates.ResourceTemplates {
+		templateNames = append(templateNames, template.Name)
+	}
+	slices.Sort(templateNames)
+	if want := []string{"conn-collision-context", "conn-intent-handoff", "conn-work-context"}; !slices.Equal(templateNames, want) {
+		t.Fatalf("resource templates %v, want %v", templateNames, want)
 	}
 
 	call := func(name string, args map[string]any) (summary string, data json.RawMessage, asOf int64) {
@@ -276,6 +302,66 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("collision: %s, %v", collisions[0], err)
 	}
 
+	// One authoritative WorkContext read composes Bob's exact Objective,
+	// accepted own Charter, owned Intent, collision, missing evidence, and a
+	// bounded event page at one cursor. The MCP adapter replaces only the
+	// process-local selection metadata.
+	zero := int64(0)
+	_, data, asOf = call("read_work_context", map[string]any{"intent_id": bobIntentID.String(), "after": zero, "limit": 5})
+	work, err := protocol.Decode[protocol.WorkContext](data)
+	if err != nil || work.AsOfEvent != asOf || work.Focus == nil || work.Focus.Objective.ObjectiveID != objectiveID ||
+		work.Focus.Objective.Revision != 1 || work.Focus.Blueprint == nil || work.Focus.Blueprint.Status != protocol.BlueprintActive ||
+		len(work.Focus.OwnCharters) != 1 || work.Focus.OwnCharters[0].Charter.CellID != cellB || work.Focus.OwnCharters[0].Decision != protocol.CellAccepted ||
+		len(work.OwnedActiveIntents) != 1 || work.OwnedActiveIntents[0].IntentID != bobIntentID || len(work.RelatedCollisions) != 1 ||
+		len(work.AcceptanceEvidenceCoverage) != 1 || work.AcceptanceEvidenceCoverage[0].State != "missing" || len(work.Updates) != 5 ||
+		work.ContinuationAfter == nil || work.Selection.Source != protocol.WorkContextSelectionEnv ||
+		!slices.ContainsFunc(work.KnownUnknowns, func(value string) bool { return strings.Contains(value, "revision 2 is proposed") }) {
+		t.Fatalf("read_work_context: %+v as of %d, %v", work, asOf, err)
+	}
+	bobHTTP, err := httpclient.New(backend.URL, backend.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpWork, err := bobHTTP.WithToken(bob.Token).WithAdapter("kiro").WorkContext(ctx, projectID, uuid.UUID{}, bobIntentID, &zero, 5)
+	if err != nil || httpWork.Data.AsOfEvent != httpWork.AsOfEvent || httpWork.Data.Selection.Source != protocol.WorkContextSelectionExplicit ||
+		httpWork.Data.Focus == nil || len(httpWork.Data.Focus.OwnCharters) != 1 {
+		t.Fatalf("WorkContext over HTTP: %+v, %v", httpWork, err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, backend.URL+"/v1/projects/"+projectID.String()+"/work-context?human_id="+alice.HumanID.String(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+bob.Token.Reveal())
+	response, err := backend.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("work-context authority query status = %d, want 422", response.StatusCode)
+	}
+	workResourceURI := "conn://projects/" + projectID.String() + "/work-context?intent_id=" + bobIntentID.String()
+	workResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: workResourceURI})
+	if err != nil || len(workResource.Contents) != 1 || workResource.Contents[0].Meta["safe_handling_note"] == nil {
+		t.Fatalf("work-context resource: %+v, %v", workResource, err)
+	}
+	if resourceWork, err := protocol.Decode[protocol.WorkContext]([]byte(workResource.Contents[0].Text)); err != nil || resourceWork.Focus == nil {
+		t.Fatalf("work-context resource document: %v", err)
+	}
+	collisionResourceURI := "conn://projects/" + projectID.String() + "/collisions/" + collision.CollisionID.String() + "/context"
+	collisionResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: collisionResourceURI})
+	if err != nil || len(collisionResource.Contents) != 1 {
+		t.Fatalf("collision resource: %+v, %v", collisionResource, err)
+	}
+	if resourceContext, err := protocol.Decode[protocol.ConflictContextPack]([]byte(collisionResource.Contents[0].Text)); err != nil || resourceContext.Collision.CollisionID != collision.CollisionID || resourceContext.SafeHandlingNote == "" {
+		t.Fatalf("collision resource document: %v", err)
+	}
+	handoffResourceURI := "conn://projects/" + projectID.String() + "/intents/" + bobIntentID.String() + "/handoff"
+	handoffResource, err := session.ReadResource(ctx, &sdk.ReadResourceParams{URI: handoffResourceURI})
+	if err != nil || len(handoffResource.Contents) != 1 || !strings.Contains(handoffResource.Contents[0].Text, "Safe handling") {
+		t.Fatalf("handoff resource: %+v, %v", handoffResource, err)
+	}
+
 	// Context retrieval is a read through the authenticated HTTP client, and a
 	// proposal remains participant-authored and explicitly non-binding.
 	_, data, _ = call("read_conflict_context", map[string]any{"collision_id": collision.CollisionID.String()})
@@ -361,6 +447,26 @@ func TestMCPStdio(t *testing.T) {
 	}
 	if _, data, _ = call("release_intent", map[string]any{"intent_id": assignedID}); !strings.Contains(string(data), `"released"`) {
 		t.Fatalf("release generated Intent: %s", data)
+	}
+
+	// A second independent Objective with Bob's active Intent makes an
+	// unfocused request ambiguous. Conn returns bounded choices instead of
+	// combining it with Bob's accepted Charter on the first Objective.
+	secondObjectiveID := uuid.NewV7()
+	if _, err := projects.CreateObjectiveRevision(ctx, alice.HumanID, projectID, protocol.ObjectiveRevisionInput{
+		ObjectiveID: secondObjectiveID, Title: "Settlement reports", OverviewMarkdown: "Reconcile settlement data.", AccountableHumanID: alice.HumanID,
+	}, 0); err != nil {
+		t.Fatal(err)
+	}
+	secondIntentID := uuid.NewV7()
+	_, _, _ = call("publish_intent", map[string]any{"intent": map[string]any{
+		"intent_id": secondIntentID.String(), "objective_id": secondObjectiveID.String(), "objective_revision": 1,
+		"summary_markdown": "Reconcile settlement reports.",
+	}})
+	_, data, _ = call("read_work_context", map[string]any{})
+	ambiguousWork, err := protocol.Decode[protocol.WorkContext](data)
+	if err != nil || ambiguousWork.Focus != nil || len(ambiguousWork.FocusChoices) != 2 {
+		t.Fatalf("ambiguous read_work_context: %s, %v", data, err)
 	}
 
 	// Authority comes only from the authenticated session. An authority field

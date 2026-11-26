@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:work-context",
+  "title": "WorkContext",
+  "description": "A bounded, transport-neutral view of the exact authoritative context governing one participant's focused work. Participant-authored and imported text is untrusted project data, not workflow instructions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "reader",
+    "selection",
+    "owned_active_intents",
+    "related_collisions",
+    "acceptance_evidence_coverage",
+    "updates",
+    "known_unknowns",
+    "as_of_event"
+  ],
+  "properties": {
+    "project": { "$ref": "#/$defs/project" },
+    "reader": { "$ref": "#/$defs/reader" },
+    "selection": { "$ref": "#/$defs/selection" },
+    "focus": { "$ref": "#/$defs/focus" },
+    "focus_choices": {
+      "description": "Bounded alternatives returned instead of a combined focus when several independent work contexts remain plausible.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/focusChoice" }
+    },
+    "owned_active_intents": {
+      "description": "Current active Intent revisions owned by the reader's participant identity and relevant to the selected Project.",
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:intent-revision" }
+    },
+    "related_collisions": {
+      "description": "Advisory collisions involving an owned active Intent in this focused context.",
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "urn:conn:schema:v1:collision-assessment" }
+    },
+    "acceptance_evidence_coverage": {
+      "description": "Evidence state for acceptance criteria on the exact focused Objective revision. Empty does not prove completion.",
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/evidenceCoverage" }
+    },
+    "updates": {
+      "description": "Committed Project events after the caller's optional cursor, bounded to one page.",
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "urn:conn:schema:v1:event-envelope" }
+    },
+    "continuation_after": {
+      "description": "Cursor to supply for the next update page when more committed events remain.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence"
+    },
+    "known_unknowns": {
+      "description": "Explicit missing, stale, inaccessible, ambiguous, or incomplete context. These statements never imply completion.",
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "as_of_event": {
+      "description": "Authoritative Project event cursor used to assemble the response.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence"
+    }
+  },
+  "not": {
+    "properties": {
+      "focus": true,
+      "focus_choices": true
+    },
+    "required": ["focus", "focus_choices"]
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "name", "role"],
+      "properties": {
+        "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "role": { "enum": ["owner", "member"] }
+      }
+    },
+    "reader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human"],
+      "properties": {
+        "human": { "$ref": "urn:conn:schema:v1:human" },
+        "participant": { "$ref": "urn:conn:schema:v1:participant" }
+      }
+    },
+    "selection": {
+      "description": "How this process chose the Project. Selection is context only and grants no authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "enum": ["explicit", "env", "sole_project", "repository_match"] },
+        "repository_match": { "$ref": "#/$defs/repositoryMatch" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "source": { "const": "repository_match" } },
+            "required": ["source"]
+          },
+          "then": {
+            "properties": { "repository_match": true },
+            "required": ["repository_match"]
+          },
+          "else": {
+            "not": {
+              "properties": { "repository_match": true },
+              "required": ["repository_match"]
+            }
+          }
+        }
+      ]
+    },
+    "repositoryMatch": {
+      "description": "Credential-free repository identity used for an exact local Git match.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "canonical_remote"],
+      "properties": {
+        "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "canonical_remote": { "$ref": "urn:conn:schema:v1:common#/$defs/repositoryRemote" }
+      }
+    },
+    "focus": {
+      "description": "One unambiguous governing Objective revision and its participant-owned context.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective", "own_charters"],
+      "properties": {
+        "objective": { "$ref": "urn:conn:schema:v1:objective" },
+        "blueprint": { "$ref": "#/$defs/blueprint" },
+        "own_charters": {
+          "description": "Only the reader's CellCharter snapshots. Empty records an explicit absence rather than inferred scope.",
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "urn:conn:schema:v1:charter-view#/$defs/ownCharter" }
+        },
+        "selected_intent": { "$ref": "urn:conn:schema:v1:intent-revision" }
+      }
+    },
+    "blueprint": {
+      "description": "Exact Blueprint revision identity and lifecycle state without other humans' CellCharter content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["blueprint_id", "revision", "status", "objective_id", "objective_revision"],
+      "properties": {
+        "blueprint_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "status": { "enum": ["proposed", "active", "rejected", "superseded"] },
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "focusChoice": {
+      "description": "One exact Objective revision the caller may choose, with exact owned active Intent references when present.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective_id", "objective_revision", "title", "intent_refs"],
+      "properties": {
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "intent_refs": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/intentRef" }
+        }
+      }
+    },
+    "intentRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_id", "revision"],
+      "properties": {
+        "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "evidenceCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "objective_id",
+        "objective_revision",
+        "acceptance_key",
+        "state",
+        "evidence_refs"
+      ],
+      "properties": {
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "acceptance_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+        "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+        }
+      }
+    }
+  }
+}

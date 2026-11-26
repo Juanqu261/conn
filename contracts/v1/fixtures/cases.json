@@ -1667,7 +1667,9 @@
       "at": "",
       "document": {
         "report_version": 1,
-        "repository": { "canonical_remote": "github.com/acme/payments" },
+        "repository": {
+          "canonical_remote": "github.com/acme/payments"
+        },
         "claims": [],
         "diagnostics": [],
         "source_text": "export class PaymentService {}"
@@ -1934,6 +1936,434 @@
         "title": "Make checkout retries safe",
         "overview_markdown": "Review and preserve retry safety.",
         "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "work context accepts exact focused revisions and bounded continuation",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": true,
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          },
+          "participant": {
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "adapter_kind": "kiro",
+            "local_session_ref": "kiro-session-1",
+            "display_label": "Checkout retry cell",
+            "created_at": "2026-11-22T09:00:00Z"
+          }
+        },
+        "selection": {
+          "source": "repository_match",
+          "repository_match": {
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "canonical_remote": "github.com/acme/checkout"
+          }
+        },
+        "focus": {
+          "objective": {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "revision": 2,
+            "title": "Make checkout retries safe",
+            "overview_markdown": "Preserve idempotency while retrying transient failures.",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "key_points": [
+              {
+                "key": "retry-idempotency",
+                "kind": "acceptance_criterion",
+                "statement": "A repeated checkout request creates at most one charge."
+              }
+            ],
+            "created_at": "2026-11-22T08:00:00Z"
+          },
+          "blueprint": {
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "revision": 3,
+            "status": "active",
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2
+          },
+          "own_charters": [
+            {
+              "charter": {
+                "cell_id": "019a8f00-0004-7000-8000-000000000002",
+                "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+                "title": "Retry behavior",
+                "overview_markdown": "Implement retry behavior without changing charge ownership.",
+                "objective_point_refs": ["retry-idempotency"],
+                "boundary_points": [
+                  {
+                    "key": "retry-policy",
+                    "kind": "responsibility",
+                    "statement": "Own retry classification and backoff behavior."
+                  }
+                ]
+              },
+              "decision": "accept"
+            }
+          ],
+          "selected_intent": {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          }
+        },
+        "owned_active_intents": [
+          {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          }
+        ],
+        "related_collisions": [
+          {
+            "collision_id": "019a8f00-0016-7000-8000-000000000016",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 2,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "confidence": 0.9,
+            "state": "open",
+            "matching_claim_refs": [
+              "019a8f00-0014-7000-8000-000000000014",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "explanation_markdown": "Both Intents affect the retry contract.",
+            "created_at": "2026-11-22T09:15:00Z"
+          }
+        ],
+        "acceptance_evidence_coverage": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "acceptance_key": "retry-idempotency",
+            "state": "missing",
+            "evidence_refs": []
+          }
+        ],
+        "updates": [
+          {
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "event_sequence": 18,
+            "event_id": "019a8f00-0020-7000-8000-000000000020",
+            "event_type": "intent.revised",
+            "entity_type": "intent",
+            "entity_id": "019a8f00-0012-7000-8000-000000000012",
+            "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "occurred_at": "2026-11-22T09:12:00Z",
+            "payload": {
+              "revision": 2
+            }
+          }
+        ],
+        "continuation_after": 18,
+        "known_unknowns": ["Additional Project updates remain after event 18."],
+        "as_of_event": 20
+      }
+    },
+    {
+      "name": "work context accepts bounded focus choices without a combined focus",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": true,
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20
+      }
+    },
+    {
+      "name": "work context rejects an authority selector",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20,
+        "human_id": "019a8f00-0000-7000-8000-00000000000a"
+      }
+    },
+    {
+      "name": "work context rejects a credential",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20,
+        "conn_token": "conn_sess_not-a-real-token"
+      }
+    },
+    {
+      "name": "work context rejects raw source",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20,
+        "raw_source": "const secret = true;"
+      }
+    },
+    {
+      "name": "work context rejects prompt or transcript content",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20,
+        "prompt_transcript": "system prompt and transcript"
+      }
+    },
+    {
+      "name": "work context rejects an unbounded diagnostics channel",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          }
+        },
+        "selection": {
+          "source": "explicit"
+        },
+        "focus_choices": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "title": "Make checkout retries safe",
+            "intent_refs": []
+          },
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000002",
+            "objective_revision": 1,
+            "title": "Reconcile settlement reports",
+            "intent_refs": []
+          }
+        ],
+        "owned_active_intents": [],
+        "related_collisions": [],
+        "acceptance_evidence_coverage": [],
+        "updates": [],
+        "known_unknowns": ["Select one Objective before Conn presents governing work context."],
+        "as_of_event": 20,
+        "diagnostics": [
+          {
+            "message": "complete local analyzer output"
+          }
+        ]
       }
     }
   ]

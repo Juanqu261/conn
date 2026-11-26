@@ -193,6 +193,8 @@ type Tx interface {
 	ResolutionDecisions(ctx context.Context, projectID uuid.UUID) ([]protocol.ResolutionDecision, error)
 	// ActiveEvidenceReferences returns evidence for current Objective revisions.
 	ActiveEvidenceReferences(ctx context.Context, projectID uuid.UUID) ([]protocol.EvidenceReference, error)
+	// EvidenceReferences returns evidence for one exact Objective revision.
+	EvidenceReferences(ctx context.Context, projectID, objectiveID uuid.UUID, objectiveRevision int) ([]protocol.EvidenceReference, error)
 	// InsertEvidenceReference stores one immutable, participant-attributed evidence record.
 	InsertEvidenceReference(ctx context.Context, evidence protocol.EvidenceReference) error
 

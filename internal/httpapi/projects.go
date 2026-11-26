@@ -78,6 +78,42 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
+	handle("GET /v1/projects/{project_id}/work-context", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok || !allowQueryParameters(w, r, log, "objective_id", "intent_id", "after", "limit") {
+			return
+		}
+		objectiveID, ok := queryOptionalID(w, r, log, "objective_id")
+		if !ok {
+			return
+		}
+		intentID, ok := queryOptionalID(w, r, log, "intent_id")
+		if !ok {
+			return
+		}
+		var after *int64
+		if _, present := r.URL.Query()["after"]; present {
+			value, ok := queryInt(w, r, log, "after", 0, 9007199254740991, nil)
+			if !ok {
+				return
+			}
+			after = &value
+		}
+		page := int64(defaultEventPage)
+		limit, ok := queryInt(w, r, log, "limit", 1, application.MaxEventPage, &page)
+		if !ok {
+			return
+		}
+		result, err := projects.WorkContext(r.Context(), s.Human, projectID, application.WorkContextQuery{
+			ObjectiveID: objectiveID,
+			IntentID:    intentID,
+			After:       after,
+			Limit:       int(limit),
+			AdapterKind: participantAdapter(r),
+		})
+		respond(w, log, http.StatusOK, result, err)
+	})
+
 	handle("GET /v1/projects/{project_id}/collisions/{collision_id}/context", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
