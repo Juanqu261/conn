@@ -150,7 +150,7 @@ func TestMCPStdio(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"attach_evidence", "check_collisions", "check_updates", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status"}; !slices.Equal(names, want) {
+	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
 	listedPrompts, err := session.ListPrompts(ctx, nil)

@@ -77,6 +77,28 @@ func intentIDToolSchema(description string) map[string]any {
 	})
 }
 
+func analyzeIntentToolSchema() map[string]any {
+	path := canonicalDefinition("urn:conn:schema:v1:common", "relativePath")
+	path["description"] = "Existing repository-relative file or directory to analyze. Parent traversal and symlink escapes are rejected."
+	return objectSchema([]string{"intent_id", "expected_intent_revision"}, map[string]any{
+		"project_id":               idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),
+		"intent_id":                idSchema("Owned active Intent UUID whose exact revision will receive observed claims."),
+		"expected_intent_revision": revisionSchema("Exact current Intent revision required before and during attachment."),
+		"worktree": map[string]any{
+			"type":        "string",
+			"minLength":   1,
+			"maxLength":   4096,
+			"description": "Optional local directory inside the trusted MCP workspace. Defaults to the trusted workspace root.",
+		},
+		"paths": map[string]any{
+			"type":        "array",
+			"maxItems":    500,
+			"items":       path,
+			"description": "Optional bounded repository-relative paths. Omit to analyze configured TypeScript projects in the worktree.",
+		},
+	})
+}
+
 func collisionsToolSchema() map[string]any {
 	return objectSchema(nil, map[string]any{
 		"project_id": idSchema("Project ID. When omitted, Conn resolves the process selection, CONN_PROJECT, sole visible Project, or exact repository match."),

@@ -13,6 +13,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Juanqu261/conn/internal/account"
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/repositorygit"
 )
@@ -33,10 +34,19 @@ type Config struct {
 	// AnalyzerAvailable reports whether the local Node.js analyzer artifact is
 	// available. It performs no analysis and reads no credential.
 	AnalyzerAvailable func() bool
-	// DiscoverRepository reads only normalized, credential-free local Git
-	// identity for Project matching. Nil uses the current worktree.
+	// Analyzer configures the existing bounded Node.js subprocess adapter.
+	// Its program path is trusted local Conn configuration, never tool input.
+	Analyzer analyzer.Config
+	// WorkspaceRoot is the trusted local repository worktree. Empty means the
+	// MCP process working directory. Requested worktrees and paths cannot escape it.
+	WorkspaceRoot string
+	// DiscoverRepository reads normalized, credential-free Git identity from
+	// the current worktree for Project matching. Nil uses the process worktree.
 	DiscoverRepository func(context.Context) (repositorygit.Metadata, error)
-	Log                *slog.Logger
+	// DiscoverRepositoryAt reads normalized, credential-free Git identity from
+	// the trusted analysis worktree. Nil uses repositorygit.Discover.
+	DiscoverRepositoryAt func(context.Context, string) (repositorygit.Metadata, error)
+	Log                  *slog.Logger
 }
 
 const instructions = "Conn tools read your team's shared Objective, Blueprint, charters, Intents, collision assessments, and Radar. " +

@@ -148,6 +148,12 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 		Annotations: writes("Release Intent", true),
 	}, t.releaseIntent)
 	sdk.AddTool(server, &sdk.Tool{
+		Name:        "analyze_intent",
+		Description: "Run bounded local TypeScript analysis for your exact active Intent revision, attach only validated source-free observed claims, reassess collisions, and return the post-commit event cursor.",
+		InputSchema: analyzeIntentToolSchema(),
+		Annotations: writes("Analyze Intent locally", true),
+	}, t.analyzeIntent)
+	sdk.AddTool(server, &sdk.Tool{
 		Name:        "check_collisions",
 		Description: "Read open advisory collision assessments, optionally limited to one Intent. Returns {data: [collisions], as_of_event}.",
 		InputSchema: collisionsToolSchema(),

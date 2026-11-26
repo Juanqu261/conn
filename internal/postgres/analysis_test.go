@@ -40,7 +40,10 @@ func TestStaticAnalysisAttachment(t *testing.T) {
 	if _, err := projects.AttachStaticAnalysis(ctx, owner, projectID, left, leftIntent, unsafe); !errors.Is(err, application.ErrInvalid) {
 		t.Fatalf("unsafe report = %v, want invalid", err)
 	}
-	attached, err := projects.AttachStaticAnalysis(ctx, owner, projectID, left, leftIntent, report)
+	if _, err := projects.AttachStaticAnalysisAtRevision(ctx, owner, projectID, left, leftIntent, 2, report); !errors.Is(err, application.ErrStaleRevision) {
+		t.Fatalf("stale analysis revision = %v, want stale revision", err)
+	}
+	attached, err := projects.AttachStaticAnalysisAtRevision(ctx, owner, projectID, left, leftIntent, 1, report)
 	if err != nil || attached.Data.IntentRevision.IntentID != leftIntent {
 		t.Fatalf("attach = %#v, %v", attached, err)
 	}

@@ -324,6 +324,11 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
+		zero := int64(0)
+		expected, ok := queryInt(w, r, log, "expected_revision", 0, math.MaxInt32-1, &zero)
+		if !ok {
+			return
+		}
 		report, ok := readDocument[protocol.LocalAnalyzerReport](w, r, log)
 		if !ok {
 			return
@@ -333,7 +338,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 			writeProblem(w, log, err)
 			return
 		}
-		result, err := projects.AttachStaticAnalysis(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, intentID, report)
+		result, err := projects.AttachStaticAnalysisAtRevision(r.Context(), s.Human.HumanID, projectID, participant.Data.ParticipantID, intentID, int(expected), report)
 		respond(w, log, http.StatusCreated, result, err)
 	})
 

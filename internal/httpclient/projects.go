@@ -141,6 +141,13 @@ func (c *Client) AttachStaticAnalysis(ctx context.Context, projectID, intentID u
 	return post[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s/analysis", projectPath(projectID), intentID), report)
 }
 
+// AttachStaticAnalysisAtRevision attaches a validated source-free report only
+// while expectedRevision remains the caller's current active Intent revision.
+func (c *Client) AttachStaticAnalysisAtRevision(ctx context.Context, projectID, intentID uuid.UUID, expectedRevision int, report protocol.LocalAnalyzerReport) (Result[protocol.IntentView], error) {
+	path := fmt.Sprintf("%s/intents/%s/analysis?expected_revision=%d", projectPath(projectID), intentID, expectedRevision)
+	return post[protocol.IntentView](ctx, c, path, report)
+}
+
 // Intent reads one current Intent snapshot.
 func (c *Client) Intent(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
 	return read[protocol.IntentView](ctx, c, fmt.Sprintf("%s/intents/%s", projectPath(projectID), intentID))
