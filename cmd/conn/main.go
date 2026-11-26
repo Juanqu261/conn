@@ -46,6 +46,7 @@ func dependencies(devSettings *devenv.Result) cli.Dependencies {
 		Version:     version,
 		DevSettings: devSettings,
 		LookupEnv:   os.LookupEnv,
+		Environ:     os.Environ,
 		Serve:       serve,
 		ServeMCP: func(ctx context.Context, cfg cli.MCPConfig, log *slog.Logger) error {
 			service, err := accountService(cfg.ServerURL)

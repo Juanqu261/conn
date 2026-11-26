@@ -292,40 +292,103 @@ type ResolutionDecision struct {
 func (ResolutionDecision) SchemaID() string { return ResolutionDecisionSchema }
 
 // EvidenceAttachmentInput is participant-authored, reference-only evidence
-// for the caller's own active Intent. Conn derives the evidence identifier,
-// Project, producer, and observation time.
+// for an active Intent owned by any Participant of the caller's Human. Conn
+// derives the evidence identifier, Project, producer, and recording time.
+// Only check_run evidence carries an Observation.
 type EvidenceAttachmentInput struct {
-	IntentID          uuid.UUID `json:"intent_id"`
-	ObjectiveID       uuid.UUID `json:"objective_id"`
-	ObjectiveRevision int       `json:"objective_revision"`
-	AcceptanceKey     string    `json:"acceptance_key,omitempty"`
-	Kind              string    `json:"kind"`
-	State             string    `json:"state"`
-	Locator           string    `json:"locator"`
-	ContentHash       string    `json:"content_hash,omitempty"`
-	Summary           string    `json:"summary,omitempty"`
+	IntentID          uuid.UUID            `json:"intent_id"`
+	ObjectiveID       uuid.UUID            `json:"objective_id"`
+	ObjectiveRevision int                  `json:"objective_revision"`
+	AcceptanceKey     string               `json:"acceptance_key,omitempty"`
+	Kind              string               `json:"kind"`
+	State             string               `json:"state"`
+	Locator           string               `json:"locator"`
+	ContentHash       string               `json:"content_hash,omitempty"`
+	Summary           string               `json:"summary,omitempty"`
+	Observation       *EvidenceObservation `json:"observation,omitempty"`
 }
 
 func (EvidenceAttachmentInput) SchemaID() string { return EvidenceAttachmentInputSchema }
 
+// Evidence kinds, provenance labels, and observation values.
+const (
+	EvidenceKindCheckRun    = "check_run"
+	ProvenanceObservedRun   = "observed_run"
+	ProvenanceReported      = "reported"
+	ObservationMethodCheck  = "conn_check_run"
+	ObservationRunnerLocal  = "local"
+	EvidencePassing         = "passing"
+	EvidenceFailing         = "failing"
+	EvidenceMissing         = "missing"
+	MaxIntentEvidenceListed = 200
+)
+
+// EvidenceObservation records a check run the Conn CLI executed. A local
+// runner means the Intent owner's machine ran the command at Commit; it is
+// not independent CI proof. Only the output hash leaves that machine.
+type EvidenceObservation struct {
+	Method        string    `json:"method"`
+	Runner        string    `json:"runner"`
+	CheckKey      string    `json:"check_key"`
+	ConfigSHA256  string    `json:"config_sha256"`
+	CommandSHA256 string    `json:"command_sha256"`
+	Commit        string    `json:"commit"`
+	WorktreeDirty bool      `json:"worktree_dirty"`
+	ExitCode      int64     `json:"exit_code"`
+	TimedOut      bool      `json:"timed_out"`
+	DurationMS    int64     `json:"duration_ms"`
+	OutputSHA256  string    `json:"output_sha256"`
+	StartedAt     Timestamp `json:"started_at"`
+}
+
 // EvidenceReference links an objective revision to externally held evidence.
 type EvidenceReference struct {
-	EvidenceID            uuid.UUID  `json:"evidence_id"`
-	ProjectID             uuid.UUID  `json:"project_id"`
-	IntentID              *uuid.UUID `json:"intent_id,omitempty"`
-	ObjectiveID           uuid.UUID  `json:"objective_id"`
-	ObjectiveRevision     int        `json:"objective_revision"`
-	AcceptanceKey         string     `json:"acceptance_key,omitempty"`
-	Kind                  string     `json:"kind"`
-	State                 string     `json:"state"`
-	Locator               string     `json:"locator"`
-	ContentHash           string     `json:"content_hash,omitempty"`
-	Summary               string     `json:"summary,omitempty"`
-	ProducerParticipantID *uuid.UUID `json:"producer_participant_id,omitempty"`
-	ObservedAt            Timestamp  `json:"observed_at"`
+	EvidenceID            uuid.UUID            `json:"evidence_id"`
+	ProjectID             uuid.UUID            `json:"project_id"`
+	IntentID              *uuid.UUID           `json:"intent_id,omitempty"`
+	ObjectiveID           uuid.UUID            `json:"objective_id"`
+	ObjectiveRevision     int                  `json:"objective_revision"`
+	AcceptanceKey         string               `json:"acceptance_key,omitempty"`
+	Kind                  string               `json:"kind"`
+	State                 string               `json:"state"`
+	Locator               string               `json:"locator"`
+	ContentHash           string               `json:"content_hash,omitempty"`
+	Summary               string               `json:"summary,omitempty"`
+	ProducerParticipantID *uuid.UUID           `json:"producer_participant_id,omitempty"`
+	Observation           *EvidenceObservation `json:"observation,omitempty"`
+	ObservedAt            Timestamp            `json:"observed_at"`
 }
 
 func (EvidenceReference) SchemaID() string { return EvidenceReferenceSchema }
+
+// Provenance labels evidence as an observed run or a reported state.
+func (e EvidenceReference) Provenance() string {
+	if e.Observation != nil {
+		return ProvenanceObservedRun
+	}
+	return ProvenanceReported
+}
+
+// EvidenceReferenceList lists one Intent's most recent evidence, newest first.
+type EvidenceReferenceList struct {
+	ProjectID uuid.UUID           `json:"project_id"`
+	IntentID  uuid.UUID           `json:"intent_id"`
+	Evidence  []EvidenceReference `json:"evidence"`
+}
+
+func (EvidenceReferenceList) SchemaID() string { return EvidenceReferenceListSchema }
+
+// SameCommit reports whether two Git object IDs name the same commit, where
+// either may be abbreviated.
+func SameCommit(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+	return len(a) >= 7 && b[:len(a)] == a
+}
 
 // ConflictContextPack is the portable, bounded factual context for one collision.
 type ConflictContextPack struct {
@@ -416,4 +479,10 @@ type RadarEvidenceCoverage struct {
 	AcceptanceKey     string      `json:"acceptance_key"`
 	State             string      `json:"state"`
 	EvidenceRefs      []uuid.UUID `json:"evidence_refs"`
+	// Provenance and Commit describe the latest evidence. Stale is true when
+	// that evidence was observed at a commit other than its Intent's recorded
+	// head revision.
+	Provenance string `json:"provenance,omitempty"`
+	Commit     string `json:"commit,omitempty"`
+	Stale      bool   `json:"stale,omitempty"`
 }

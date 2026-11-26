@@ -164,6 +164,61 @@
     "evidenceState": {
       "enum": ["passing", "failing", "missing", "stale", "inaccessible", "unknown"]
     },
+    "evidenceKind": {
+      "enum": [
+        "commit",
+        "pull_request",
+        "ci_run",
+        "test_case",
+        "trace",
+        "artifact",
+        "decision",
+        "external_link",
+        "check_run"
+      ]
+    },
+    "evidenceProvenance": {
+      "description": "observed_run evidence carries an observation record of a command Conn ran; reported evidence states a result Conn did not observe.",
+      "enum": ["observed_run", "reported"]
+    },
+    "evidenceObservation": {
+      "description": "A check run that the Conn CLI executed. A local runner means the Intent owner's machine ran the command at this commit; it is not independent CI proof. Raw output stays on that machine and only its hash is recorded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "runner",
+        "check_key",
+        "config_sha256",
+        "command_sha256",
+        "commit",
+        "worktree_dirty",
+        "exit_code",
+        "timed_out",
+        "duration_ms",
+        "output_sha256",
+        "started_at"
+      ],
+      "properties": {
+        "method": { "const": "conn_check_run" },
+        "runner": { "enum": ["local"] },
+        "check_key": { "$ref": "#/$defs/key" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "command_sha256": { "$ref": "#/$defs/sha256" },
+        "commit": { "$ref": "#/$defs/gitCommit" },
+        "worktree_dirty": { "type": "boolean" },
+        "exit_code": {
+          "description": "The command's exit code, or -1 when Conn stopped it at its timeout.",
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967295
+        },
+        "timed_out": { "type": "boolean" },
+        "duration_ms": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+        "output_sha256": { "$ref": "#/$defs/sha256" },
+        "started_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
     "semanticEventType": {
       "enum": [
         "repository.connected",

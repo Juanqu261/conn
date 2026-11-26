@@ -122,6 +122,12 @@ func commit(ctx context.Context, worktree string, args ...string) (string, error
 // timeout, no terminal prompt, and an environment without Conn or credential
 // variables. Its standard error is discarded because it may echo paths.
 func git(ctx context.Context, worktree string, args ...string) (string, error) {
+	return Output(ctx, worktree, 1<<16, args...)
+}
+
+// Output runs one read-only Git command like git, with a caller-chosen bound
+// on standard output. Callers pass fixed arguments only.
+func Output(ctx context.Context, worktree string, maxBytes int, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", worktree}, args...)...)
@@ -131,11 +137,15 @@ func git(ctx context.Context, worktree string, args ...string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		return "", err
 	}
-	if stdout.Len() > 1<<16 {
+	if stdout.Len() > maxBytes {
 		return "", errors.New("git output exceeds its bound")
 	}
 	return stdout.String(), nil
 }
+
+// Environment returns the minimized environment Conn uses for Git
+// subprocesses.
+func Environment() []string { return gitEnvironment() }
 
 func gitEnvironment() []string {
 	allow := map[string]bool{"PATH": true, "SYSTEMROOT": true, "COMSPEC": true, "TEMP": true, "TMP": true, "HOME": true, "USERPROFILE": true}

@@ -2637,6 +2637,1020 @@
           }
         ]
       }
+    },
+    {
+      "name": "evidence reference accepts an observed local check run",
+      "schema": "urn:conn:schema:v1:evidence-reference",
+      "valid": true,
+      "document": {
+        "evidence_id": "019a8f00-0019-7000-8000-00000000001a",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "check_run",
+        "state": "passing",
+        "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+        "producer_participant_id": "019a8f00-0011-7000-8000-000000000011",
+        "observation": {
+          "method": "conn_check_run",
+          "runner": "local",
+          "check_key": "gateway-tests",
+          "config_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "command_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "worktree_dirty": false,
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 18234,
+          "output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "started_at": "2026-11-22T09:07:40Z"
+        },
+        "observed_at": "2026-11-22T09:08:00Z"
+      }
+    },
+    {
+      "name": "evidence reference rejects a check run without an observation",
+      "schema": "urn:conn:schema:v1:evidence-reference",
+      "valid": false,
+      "at": "",
+      "document": {
+        "evidence_id": "019a8f00-0019-7000-8000-00000000001a",
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "check_run",
+        "state": "passing",
+        "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+        "producer_participant_id": "019a8f00-0011-7000-8000-000000000011",
+        "observed_at": "2026-11-22T09:08:00Z"
+      }
+    },
+    {
+      "name": "evidence attachment input accepts reported evidence",
+      "schema": "urn:conn:schema:v1:evidence-attachment-input",
+      "valid": true,
+      "document": {
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "test_case",
+        "state": "passing",
+        "locator": "ci:retry-test"
+      }
+    },
+    {
+      "name": "evidence attachment input rejects an observation on reported evidence",
+      "schema": "urn:conn:schema:v1:evidence-attachment-input",
+      "valid": false,
+      "at": "",
+      "document": {
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "test_case",
+        "state": "passing",
+        "locator": "ci:retry-test",
+        "observation": {
+          "method": "conn_check_run",
+          "runner": "local",
+          "check_key": "gateway-tests",
+          "config_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "command_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "worktree_dirty": false,
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 18234,
+          "output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "started_at": "2026-11-22T09:07:40Z"
+        }
+      }
+    },
+    {
+      "name": "evidence attachment input rejects a runner other than local",
+      "schema": "urn:conn:schema:v1:evidence-attachment-input",
+      "valid": false,
+      "at": "/observation/runner",
+      "document": {
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "objective_revision": 1,
+        "acceptance_key": "retry-succeeds",
+        "kind": "check_run",
+        "state": "passing",
+        "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+        "observation": {
+          "method": "conn_check_run",
+          "runner": "ci",
+          "check_key": "gateway-tests",
+          "config_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "command_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "worktree_dirty": false,
+          "exit_code": 0,
+          "timed_out": false,
+          "duration_ms": 18234,
+          "output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "started_at": "2026-11-22T09:07:40Z"
+        }
+      }
+    },
+    {
+      "name": "evidence reference list accepts an Intent's evidence",
+      "schema": "urn:conn:schema:v1:evidence-reference-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "intent_id": "019a8f00-0012-7000-8000-000000000012",
+        "evidence": [
+          {
+            "evidence_id": "019a8f00-0019-7000-8000-00000000001a",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 1,
+            "acceptance_key": "retry-succeeds",
+            "kind": "check_run",
+            "state": "passing",
+            "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+            "producer_participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "observation": {
+              "method": "conn_check_run",
+              "runner": "local",
+              "check_key": "gateway-tests",
+              "config_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "command_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+              "worktree_dirty": false,
+              "exit_code": 0,
+              "timed_out": false,
+              "duration_ms": 18234,
+              "output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "started_at": "2026-11-22T09:07:40Z"
+            },
+            "observed_at": "2026-11-22T09:08:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "checks config accepts an argument-array check",
+      "schema": "urn:conn:schema:v1:checks-config",
+      "valid": true,
+      "document": {
+        "version": 1,
+        "checks": {
+          "gateway-tests": {
+            "command": ["pnpm", "--filter", "gateway", "test"],
+            "working_directory": ".",
+            "timeout_seconds": 600,
+            "acceptance_keys": ["gateway-tests"],
+            "env": {
+              "CI": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "checks config rejects a shell string command",
+      "schema": "urn:conn:schema:v1:checks-config",
+      "valid": false,
+      "at": "/checks/gateway-tests/command",
+      "document": {
+        "version": 1,
+        "checks": {
+          "gateway-tests": {
+            "command": "pnpm --filter gateway test && rm -rf /",
+            "working_directory": ".",
+            "timeout_seconds": 600,
+            "acceptance_keys": ["gateway-tests"],
+            "env": {
+              "CI": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "checks config rejects a working directory outside the repository",
+      "schema": "urn:conn:schema:v1:checks-config",
+      "valid": false,
+      "at": "/checks/gateway-tests/working_directory",
+      "document": {
+        "version": 1,
+        "checks": {
+          "gateway-tests": {
+            "command": ["pnpm", "--filter", "gateway", "test"],
+            "working_directory": "apps/../../other",
+            "timeout_seconds": 600,
+            "acceptance_keys": ["gateway-tests"],
+            "env": {
+              "CI": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "checks config rejects an out-of-range timeout",
+      "schema": "urn:conn:schema:v1:checks-config",
+      "valid": false,
+      "at": "/checks/gateway-tests/timeout_seconds",
+      "document": {
+        "version": 1,
+        "checks": {
+          "gateway-tests": {
+            "command": ["pnpm", "--filter", "gateway", "test"],
+            "working_directory": ".",
+            "timeout_seconds": 3601,
+            "acceptance_keys": ["gateway-tests"],
+            "env": {
+              "CI": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "review packet accepts a complete bounded packet",
+      "schema": "urn:conn:schema:v1:review-packet",
+      "valid": true,
+      "document": {
+        "packet_version": 1,
+        "generated_at_event": 42,
+        "project": {
+          "id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability"
+        },
+        "intent": {
+          "id": "019a8f00-0012-7000-8000-000000000012",
+          "revision": 3,
+          "participant_id": "019a8f00-0011-7000-8000-000000000011",
+          "owner_login": "octo-dev",
+          "active": true,
+          "summary": "Change retry eligibility for charges &lt;safely&gt;.",
+          "assumptions": ["The provider keeps its idempotency contract."]
+        },
+        "objective": {
+          "id": "019a8f00-0002-7000-8000-000000000001",
+          "revision": 1,
+          "title": "Reliable checkout retries"
+        },
+        "blueprint": {
+          "id": "019a8f00-0003-7000-8000-000000000001",
+          "revision": 2
+        },
+        "charter": {
+          "id": "019a8f00-0004-7000-8000-000000000002",
+          "accepted": true
+        },
+        "git": {
+          "available": true,
+          "branch": "alice-retry",
+          "base": "1111111111111111111111111111111111111111",
+          "head": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "head_is_worktree": false,
+          "dirty": false,
+          "changed_file_count": 2,
+          "checks_config_changed": true
+        },
+        "acceptance": [
+          {
+            "key": "retry-succeeds",
+            "statement": "Retry behavior has passing automated evidence.",
+            "state": "passing",
+            "provenance": "observed_run",
+            "evidence": [
+              {
+                "id": "019a8f00-0019-7000-8000-00000000001a",
+                "kind": "check_run",
+                "state": "passing",
+                "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+                "provenance": "observed_run",
+                "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+                "stale": false,
+                "dirty": false,
+                "exit_code": 0,
+                "duration_ms": 18234,
+                "observed_at": "2026-11-22T09:08:00Z"
+              }
+            ]
+          }
+        ],
+        "drift": {
+          "analysis": {
+            "status": "incomplete",
+            "intent_revision": 3,
+            "observed_at": "2026-11-22T09:06:00Z",
+            "diagnostic_codes": ["compiler_error"]
+          },
+          "matched": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+              "display_name": "shouldRetryCharge",
+              "relation": "changes"
+            }
+          ],
+          "declared_not_observed": [],
+          "observed_not_declared": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/ChargeAttempt",
+              "display_name": "ChargeAttempt",
+              "relation": "changes"
+            }
+          ],
+          "changed_files_without_claim": [
+            {
+              "path": ".conn/checks.json",
+              "written_by_agent": true
+            }
+          ],
+          "not_observable": [
+            {
+              "subject_kind": "acceptance_criterion",
+              "normalized_subject": "acceptance:checkout:retry-succeeds",
+              "display_name": "Retry behavior has passing automated evidence.",
+              "relation": "verifies",
+              "acceptance_key": "retry-succeeds",
+              "evidence_state": "passing"
+            }
+          ],
+          "omitted": {
+            "matched": 0,
+            "declared_not_observed": 0,
+            "observed_not_declared": 0,
+            "changed_files_without_claim": 0,
+            "not_observable": 0
+          }
+        },
+        "collisions": [
+          {
+            "id": "019a8f00-0016-7000-8000-000000000016",
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "state": "resolved",
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "counterpart": {
+              "intent_id": "019a8f00-0013-7000-8000-000000000013",
+              "revision": 1
+            },
+            "decision": {
+              "kind": "sequencing",
+              "binding": false,
+              "decided_by_login": "octo-owner",
+              "rationale_excerpt": "Land the producer first."
+            },
+            "proposal_count": 1
+          }
+        ],
+        "integrity_notes": [
+          ".conn/checks.json changed on this branch; review the proof definition."
+        ],
+        "open_questions": [],
+        "known_unknowns": [],
+        "truncated": []
+      }
+    },
+    {
+      "name": "review packet rejects a diff",
+      "schema": "urn:conn:schema:v1:review-packet",
+      "valid": false,
+      "at": "",
+      "document": {
+        "packet_version": 1,
+        "generated_at_event": 42,
+        "project": {
+          "id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability"
+        },
+        "intent": {
+          "id": "019a8f00-0012-7000-8000-000000000012",
+          "revision": 3,
+          "participant_id": "019a8f00-0011-7000-8000-000000000011",
+          "owner_login": "octo-dev",
+          "active": true,
+          "summary": "Change retry eligibility for charges &lt;safely&gt;.",
+          "assumptions": ["The provider keeps its idempotency contract."]
+        },
+        "objective": {
+          "id": "019a8f00-0002-7000-8000-000000000001",
+          "revision": 1,
+          "title": "Reliable checkout retries"
+        },
+        "blueprint": {
+          "id": "019a8f00-0003-7000-8000-000000000001",
+          "revision": 2
+        },
+        "charter": {
+          "id": "019a8f00-0004-7000-8000-000000000002",
+          "accepted": true
+        },
+        "git": {
+          "available": true,
+          "branch": "alice-retry",
+          "base": "1111111111111111111111111111111111111111",
+          "head": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "head_is_worktree": false,
+          "dirty": false,
+          "changed_file_count": 2,
+          "checks_config_changed": true
+        },
+        "acceptance": [
+          {
+            "key": "retry-succeeds",
+            "statement": "Retry behavior has passing automated evidence.",
+            "state": "passing",
+            "provenance": "observed_run",
+            "evidence": [
+              {
+                "id": "019a8f00-0019-7000-8000-00000000001a",
+                "kind": "check_run",
+                "state": "passing",
+                "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+                "provenance": "observed_run",
+                "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+                "stale": false,
+                "dirty": false,
+                "exit_code": 0,
+                "duration_ms": 18234,
+                "observed_at": "2026-11-22T09:08:00Z"
+              }
+            ]
+          }
+        ],
+        "drift": {
+          "analysis": {
+            "status": "incomplete",
+            "intent_revision": 3,
+            "observed_at": "2026-11-22T09:06:00Z",
+            "diagnostic_codes": ["compiler_error"]
+          },
+          "matched": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+              "display_name": "shouldRetryCharge",
+              "relation": "changes"
+            }
+          ],
+          "declared_not_observed": [],
+          "observed_not_declared": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/ChargeAttempt",
+              "display_name": "ChargeAttempt",
+              "relation": "changes"
+            }
+          ],
+          "changed_files_without_claim": [
+            {
+              "path": ".conn/checks.json",
+              "written_by_agent": true
+            }
+          ],
+          "not_observable": [
+            {
+              "subject_kind": "acceptance_criterion",
+              "normalized_subject": "acceptance:checkout:retry-succeeds",
+              "display_name": "Retry behavior has passing automated evidence.",
+              "relation": "verifies",
+              "acceptance_key": "retry-succeeds",
+              "evidence_state": "passing"
+            }
+          ],
+          "omitted": {
+            "matched": 0,
+            "declared_not_observed": 0,
+            "observed_not_declared": 0,
+            "changed_files_without_claim": 0,
+            "not_observable": 0
+          }
+        },
+        "collisions": [
+          {
+            "id": "019a8f00-0016-7000-8000-000000000016",
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "state": "resolved",
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "counterpart": {
+              "intent_id": "019a8f00-0013-7000-8000-000000000013",
+              "revision": 1
+            },
+            "decision": {
+              "kind": "sequencing",
+              "binding": false,
+              "decided_by_login": "octo-owner",
+              "rationale_excerpt": "Land the producer first."
+            },
+            "proposal_count": 1
+          }
+        ],
+        "integrity_notes": [
+          ".conn/checks.json changed on this branch; review the proof definition."
+        ],
+        "open_questions": [],
+        "known_unknowns": [],
+        "truncated": [],
+        "diff": "--- a/src/payments/retry.ts"
+      }
+    },
+    {
+      "name": "review packet rejects unsanitized summary markup",
+      "schema": "urn:conn:schema:v1:review-packet",
+      "valid": false,
+      "at": "/intent/summary",
+      "document": {
+        "packet_version": 1,
+        "generated_at_event": 42,
+        "project": {
+          "id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability"
+        },
+        "intent": {
+          "id": "019a8f00-0012-7000-8000-000000000012",
+          "revision": 3,
+          "participant_id": "019a8f00-0011-7000-8000-000000000011",
+          "owner_login": "octo-dev",
+          "active": true,
+          "summary": "<script>alert(1)</script>",
+          "assumptions": ["The provider keeps its idempotency contract."]
+        },
+        "objective": {
+          "id": "019a8f00-0002-7000-8000-000000000001",
+          "revision": 1,
+          "title": "Reliable checkout retries"
+        },
+        "blueprint": {
+          "id": "019a8f00-0003-7000-8000-000000000001",
+          "revision": 2
+        },
+        "charter": {
+          "id": "019a8f00-0004-7000-8000-000000000002",
+          "accepted": true
+        },
+        "git": {
+          "available": true,
+          "branch": "alice-retry",
+          "base": "1111111111111111111111111111111111111111",
+          "head": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+          "head_is_worktree": false,
+          "dirty": false,
+          "changed_file_count": 2,
+          "checks_config_changed": true
+        },
+        "acceptance": [
+          {
+            "key": "retry-succeeds",
+            "statement": "Retry behavior has passing automated evidence.",
+            "state": "passing",
+            "provenance": "observed_run",
+            "evidence": [
+              {
+                "id": "019a8f00-0019-7000-8000-00000000001a",
+                "kind": "check_run",
+                "state": "passing",
+                "locator": "conn-check:gateway-tests@4f1c2e9a7b3d",
+                "provenance": "observed_run",
+                "commit": "4f1c2e9a7b3d4f1c2e9a7b3d4f1c2e9a7b3d4f1c",
+                "stale": false,
+                "dirty": false,
+                "exit_code": 0,
+                "duration_ms": 18234,
+                "observed_at": "2026-11-22T09:08:00Z"
+              }
+            ]
+          }
+        ],
+        "drift": {
+          "analysis": {
+            "status": "incomplete",
+            "intent_revision": 3,
+            "observed_at": "2026-11-22T09:06:00Z",
+            "diagnostic_codes": ["compiler_error"]
+          },
+          "matched": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+              "display_name": "shouldRetryCharge",
+              "relation": "changes"
+            }
+          ],
+          "declared_not_observed": [],
+          "observed_not_declared": [
+            {
+              "subject_kind": "contract",
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/ChargeAttempt",
+              "display_name": "ChargeAttempt",
+              "relation": "changes"
+            }
+          ],
+          "changed_files_without_claim": [
+            {
+              "path": ".conn/checks.json",
+              "written_by_agent": true
+            }
+          ],
+          "not_observable": [
+            {
+              "subject_kind": "acceptance_criterion",
+              "normalized_subject": "acceptance:checkout:retry-succeeds",
+              "display_name": "Retry behavior has passing automated evidence.",
+              "relation": "verifies",
+              "acceptance_key": "retry-succeeds",
+              "evidence_state": "passing"
+            }
+          ],
+          "omitted": {
+            "matched": 0,
+            "declared_not_observed": 0,
+            "observed_not_declared": 0,
+            "changed_files_without_claim": 0,
+            "not_observable": 0
+          }
+        },
+        "collisions": [
+          {
+            "id": "019a8f00-0016-7000-8000-000000000016",
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "state": "resolved",
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "counterpart": {
+              "intent_id": "019a8f00-0013-7000-8000-000000000013",
+              "revision": 1
+            },
+            "decision": {
+              "kind": "sequencing",
+              "binding": false,
+              "decided_by_login": "octo-owner",
+              "rationale_excerpt": "Land the producer first."
+            },
+            "proposal_count": 1
+          }
+        ],
+        "integrity_notes": [
+          ".conn/checks.json changed on this branch; review the proof definition."
+        ],
+        "open_questions": [],
+        "known_unknowns": [],
+        "truncated": []
+      }
+    },
+    {
+      "name": "work context accepts a commit trailer, analysis, and evidence provenance",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": true,
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          },
+          "participant": {
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "adapter_kind": "kiro",
+            "local_session_ref": "kiro-session-1",
+            "display_label": "Checkout retry cell",
+            "created_at": "2026-11-22T09:00:00Z"
+          }
+        },
+        "selection": {
+          "source": "repository_match",
+          "repository_match": {
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "canonical_remote": "github.com/acme/checkout"
+          }
+        },
+        "focus": {
+          "objective": {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "revision": 2,
+            "title": "Make checkout retries safe",
+            "overview_markdown": "Preserve idempotency while retrying transient failures.",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "key_points": [
+              {
+                "key": "retry-idempotency",
+                "kind": "acceptance_criterion",
+                "statement": "A repeated checkout request creates at most one charge."
+              }
+            ],
+            "created_at": "2026-11-22T08:00:00Z"
+          },
+          "blueprint": {
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "revision": 3,
+            "status": "active",
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2
+          },
+          "own_charters": [
+            {
+              "charter": {
+                "cell_id": "019a8f00-0004-7000-8000-000000000002",
+                "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+                "title": "Retry behavior",
+                "overview_markdown": "Implement retry behavior without changing charge ownership.",
+                "objective_point_refs": ["retry-idempotency"],
+                "boundary_points": [
+                  {
+                    "key": "retry-policy",
+                    "kind": "responsibility",
+                    "statement": "Own retry classification and backoff behavior."
+                  }
+                ]
+              },
+              "decision": "accept"
+            }
+          ],
+          "selected_intent": {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          },
+          "commit_trailer": "Conn-Intent: 019a8f00-0012-7000-8000-000000000012@2",
+          "analysis": {
+            "intent_revision": 2,
+            "status": "complete",
+            "observed_at": "2026-11-22T09:13:00Z"
+          }
+        },
+        "owned_active_intents": [
+          {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          }
+        ],
+        "related_collisions": [
+          {
+            "collision_id": "019a8f00-0016-7000-8000-000000000016",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 2,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "confidence": 0.9,
+            "state": "open",
+            "matching_claim_refs": [
+              "019a8f00-0014-7000-8000-000000000014",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "explanation_markdown": "Both Intents affect the retry contract.",
+            "created_at": "2026-11-22T09:15:00Z"
+          }
+        ],
+        "acceptance_evidence_coverage": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "acceptance_key": "retry-idempotency",
+            "state": "passing",
+            "evidence_refs": ["019a8f00-0019-7000-8000-00000000001a"],
+            "provenance": "observed_run",
+            "commit": "4f1c2e9a7b3d",
+            "stale": true
+          }
+        ],
+        "updates": [
+          {
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "event_sequence": 18,
+            "event_id": "019a8f00-0020-7000-8000-000000000020",
+            "event_type": "intent.revised",
+            "entity_type": "intent",
+            "entity_id": "019a8f00-0012-7000-8000-000000000012",
+            "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "occurred_at": "2026-11-22T09:12:00Z",
+            "payload": {
+              "revision": 2
+            }
+          }
+        ],
+        "continuation_after": 18,
+        "known_unknowns": ["Additional Project updates remain after event 18."],
+        "as_of_event": 20
+      }
+    },
+    {
+      "name": "work context rejects a trailer without a revision",
+      "schema": "urn:conn:schema:v1:work-context",
+      "valid": false,
+      "at": "/focus/commit_trailer",
+      "document": {
+        "project": {
+          "project_id": "019a8f00-0001-7000-8000-000000000001",
+          "name": "Checkout reliability",
+          "role": "member"
+        },
+        "reader": {
+          "human": {
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "github_user_id": 424242,
+            "github_login": "octo-reviewer"
+          },
+          "participant": {
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "adapter_kind": "kiro",
+            "local_session_ref": "kiro-session-1",
+            "display_label": "Checkout retry cell",
+            "created_at": "2026-11-22T09:00:00Z"
+          }
+        },
+        "selection": {
+          "source": "repository_match",
+          "repository_match": {
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "canonical_remote": "github.com/acme/checkout"
+          }
+        },
+        "focus": {
+          "objective": {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "revision": 2,
+            "title": "Make checkout retries safe",
+            "overview_markdown": "Preserve idempotency while retrying transient failures.",
+            "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "key_points": [
+              {
+                "key": "retry-idempotency",
+                "kind": "acceptance_criterion",
+                "statement": "A repeated checkout request creates at most one charge."
+              }
+            ],
+            "created_at": "2026-11-22T08:00:00Z"
+          },
+          "blueprint": {
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "revision": 3,
+            "status": "active",
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2
+          },
+          "own_charters": [
+            {
+              "charter": {
+                "cell_id": "019a8f00-0004-7000-8000-000000000002",
+                "accountable_human_id": "019a8f00-0000-7000-8000-00000000000b",
+                "title": "Retry behavior",
+                "overview_markdown": "Implement retry behavior without changing charge ownership.",
+                "objective_point_refs": ["retry-idempotency"],
+                "boundary_points": [
+                  {
+                    "key": "retry-policy",
+                    "kind": "responsibility",
+                    "statement": "Own retry classification and backoff behavior."
+                  }
+                ]
+              },
+              "decision": "accept"
+            }
+          ],
+          "selected_intent": {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          },
+          "commit_trailer": "Conn-Intent: 019a8f00-0012-7000-8000-000000000012",
+          "analysis": {
+            "intent_revision": 2,
+            "status": "complete",
+            "observed_at": "2026-11-22T09:13:00Z"
+          }
+        },
+        "owned_active_intents": [
+          {
+            "intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "revision": 2,
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "blueprint_id": "019a8f00-0003-7000-8000-000000000001",
+            "blueprint_revision": 3,
+            "charter_id": "019a8f00-0004-7000-8000-000000000002",
+            "repository_id": "019a8f00-0010-7000-8000-000000000010",
+            "base_revision_ref": "abcdef1",
+            "branch_ref": "retry-idempotency",
+            "summary_markdown": "Adjust retry classification and preserve idempotency.",
+            "assumptions": ["The charge API keeps its existing idempotency contract."],
+            "created_at": "2026-11-22T09:12:00Z"
+          }
+        ],
+        "related_collisions": [
+          {
+            "collision_id": "019a8f00-0016-7000-8000-000000000016",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 2,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "contract_producer_consumer",
+            "severity": "amber",
+            "confidence": 0.9,
+            "state": "open",
+            "matching_claim_refs": [
+              "019a8f00-0014-7000-8000-000000000014",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "explanation_markdown": "Both Intents affect the retry contract.",
+            "created_at": "2026-11-22T09:15:00Z"
+          }
+        ],
+        "acceptance_evidence_coverage": [
+          {
+            "objective_id": "019a8f00-0002-7000-8000-000000000001",
+            "objective_revision": 2,
+            "acceptance_key": "retry-idempotency",
+            "state": "passing",
+            "evidence_refs": ["019a8f00-0019-7000-8000-00000000001a"],
+            "provenance": "observed_run",
+            "commit": "4f1c2e9a7b3d",
+            "stale": true
+          }
+        ],
+        "updates": [
+          {
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "event_sequence": 18,
+            "event_id": "019a8f00-0020-7000-8000-000000000020",
+            "event_type": "intent.revised",
+            "entity_type": "intent",
+            "entity_id": "019a8f00-0012-7000-8000-000000000012",
+            "actor_human_id": "019a8f00-0000-7000-8000-00000000000b",
+            "occurred_at": "2026-11-22T09:12:00Z",
+            "payload": {
+              "revision": 2
+            }
+          }
+        ],
+        "continuation_after": 18,
+        "known_unknowns": ["Additional Project updates remain after event 18."],
+        "as_of_event": 20
+      }
     }
   ]
 }

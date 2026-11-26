@@ -1,6 +1,9 @@
 package protocol
 
-import "uuid"
+import (
+	"fmt"
+	"uuid"
+)
 
 const WorkContextSchema = "urn:conn:schema:v1:work-context"
 
@@ -68,6 +71,34 @@ type WorkContextFocus struct {
 	Blueprint      *WorkContextBlueprint `json:"blueprint,omitempty"`
 	OwnCharters    []OwnCharter          `json:"own_charters"`
 	SelectedIntent *IntentRevision       `json:"selected_intent,omitempty"`
+	// CommitTrailer names the selected active Intent revision of the
+	// signed-in Human, for git commit --trailer.
+	CommitTrailer string               `json:"commit_trailer,omitempty"`
+	Analysis      *WorkContextAnalysis `json:"analysis,omitempty"`
+}
+
+// WorkContextAnalysis is the latest observed analysis attached to the
+// selected Intent at or before its current revision.
+type WorkContextAnalysis struct {
+	IntentRevision  int       `json:"intent_revision"`
+	Status          string    `json:"status"`
+	ObservedAt      Timestamp `json:"observed_at"`
+	DiagnosticCodes []string  `json:"diagnostic_codes,omitempty"`
+}
+
+// Analysis statuses. Any analyzer diagnostic makes an analysis incomplete.
+const (
+	AnalysisComplete    = "complete"
+	AnalysisIncomplete  = "incomplete"
+	AnalysisNotAnalyzed = "not_analyzed"
+)
+
+// CommitTrailerKey is the Git trailer key that names a Conn Intent.
+const CommitTrailerKey = "Conn-Intent"
+
+// CommitTrailer formats the trailer that names one exact Intent revision.
+func CommitTrailer(intentID uuid.UUID, revision int) string {
+	return fmt.Sprintf("%s: %s@%d", CommitTrailerKey, intentID, revision)
 }
 
 // WorkContextBlueprint identifies an exact Blueprint revision without

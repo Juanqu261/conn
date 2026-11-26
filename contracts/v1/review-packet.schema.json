@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:review-packet",
+  "title": "Review packet",
+  "description": "A generated, non-persisted view of what one Intent set out to do, what it touched, and what was verified. It contains identifiers, subjects, paths, logins, states, and bounded sanitized prose, never source, diffs, prompts, transcripts, credentials, or logs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "packet_version",
+    "generated_at_event",
+    "project",
+    "intent",
+    "objective",
+    "git",
+    "acceptance",
+    "drift",
+    "collisions",
+    "integrity_notes",
+    "open_questions",
+    "known_unknowns",
+    "truncated"
+  ],
+  "properties": {
+    "packet_version": { "const": 1 },
+    "generated_at_event": { "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence" },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "participant_id",
+        "owner_login",
+        "active",
+        "summary",
+        "assumptions"
+      ],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "owner_login": { "$ref": "#/$defs/login" },
+        "active": { "type": "boolean" },
+        "summary": {
+          "description": "Sanitized participant-authored summary: control characters removed and angle brackets escaped.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "pattern": "^[^\\x00<>]*$"
+        },
+        "assumptions": { "$ref": "#/$defs/statements" }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "title"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+      }
+    },
+    "blueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+      }
+    },
+    "charter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "accepted"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "accepted": { "type": "boolean" }
+      }
+    },
+    "git": {
+      "description": "Local Git facts. head_is_worktree means the reviewed head includes uncommitted changes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "head_is_worktree",
+        "dirty",
+        "changed_file_count",
+        "checks_config_changed"
+      ],
+      "properties": {
+        "available": { "type": "boolean" },
+        "branch": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+        "base": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "head": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "head_is_worktree": { "type": "boolean" },
+        "dirty": { "type": "boolean" },
+        "changed_file_count": { "type": "integer", "minimum": 0 },
+        "checks_config_changed": { "type": "boolean" }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/acceptance" }
+    },
+    "drift": { "$ref": "#/$defs/drift" },
+    "collisions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/collision" }
+    },
+    "integrity_notes": { "$ref": "#/$defs/statements" },
+    "open_questions": { "$ref": "#/$defs/statements" },
+    "known_unknowns": { "$ref": "#/$defs/statements" },
+    "truncated": { "$ref": "#/$defs/statements" }
+  },
+  "$defs": {
+    "login": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 39,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$"
+    },
+    "statements": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "statement", "state", "evidence"],
+      "properties": {
+        "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+        "statement": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+        "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
+        "provenance": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceProvenance" },
+        "evidence": {
+          "description": "This Intent's evidence for the key, newest first.",
+          "type": "array",
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "state", "locator", "provenance", "stale", "dirty", "observed_at"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceKind" },
+        "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
+        "locator": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+        "provenance": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceProvenance" },
+        "commit": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "stale": {
+          "description": "The observation was recorded at a commit other than the reviewed head.",
+          "type": "boolean"
+        },
+        "dirty": {
+          "description": "The observation ran on a worktree with uncommitted changes.",
+          "type": "boolean"
+        },
+        "exit_code": { "type": "integer", "minimum": -1, "maximum": 4294967295 },
+        "duration_ms": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+        "observed_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+      }
+    },
+    "drift": {
+      "description": "Advisory comparison of declared and observed code_symbol and contract subjects with changes or removes relations. It never changes an Intent, claim, or collision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analysis",
+        "matched",
+        "declared_not_observed",
+        "observed_not_declared",
+        "changed_files_without_claim",
+        "not_observable",
+        "omitted"
+      ],
+      "properties": {
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": { "enum": ["not_analyzed", "complete", "incomplete"] },
+            "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+            "observed_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+            "diagnostic_codes": {
+              "type": "array",
+              "maxItems": 20,
+              "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+            }
+          }
+        },
+        "matched": { "$ref": "#/$defs/subjects" },
+        "declared_not_observed": { "$ref": "#/$defs/subjects" },
+        "observed_not_declared": { "$ref": "#/$defs/subjects" },
+        "changed_files_without_claim": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "written_by_agent"],
+            "properties": {
+              "path": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+              "written_by_agent": { "type": "boolean" }
+            }
+          }
+        },
+        "not_observable": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subject_kind", "normalized_subject", "display_name", "relation"],
+            "properties": {
+              "subject_kind": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticClaimKind" },
+              "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+              "display_name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+              "relation": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticRelation" },
+              "acceptance_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+              "evidence_state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" }
+            }
+          }
+        },
+        "omitted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "matched",
+            "declared_not_observed",
+            "observed_not_declared",
+            "changed_files_without_claim",
+            "not_observable"
+          ],
+          "properties": {
+            "matched": { "type": "integer", "minimum": 0 },
+            "declared_not_observed": { "type": "integer", "minimum": 0 },
+            "observed_not_declared": { "type": "integer", "minimum": 0 },
+            "changed_files_without_claim": { "type": "integer", "minimum": 0 },
+            "not_observable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subject_kind", "normalized_subject", "display_name", "relation"],
+        "properties": {
+          "subject_kind": { "enum": ["code_symbol", "contract"] },
+          "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+          "display_name": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+          "relation": { "enum": ["changes", "removes"] }
+        }
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rule_id", "severity", "state", "matched_subjects", "counterpart"],
+      "properties": {
+        "id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "rule_id": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+        "severity": { "$ref": "urn:conn:schema:v1:common#/$defs/collisionSeverity" },
+        "state": { "enum": ["open", "under_review", "resolved", "dismissed", "stale"] },
+        "matched_subjects": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" }
+        },
+        "counterpart": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intent_id", "revision"],
+          "properties": {
+            "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+            "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "binding", "rationale_excerpt"],
+          "properties": {
+            "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+            "binding": { "type": "boolean" },
+            "decided_by_login": { "$ref": "#/$defs/login" },
+            "rationale_excerpt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "pattern": "^[^\\x00<>]*$"
+            }
+          }
+        },
+        "proposal_count": {
+          "description": "Non-binding proposals recorded for the collision. Absent when the packet did not load collision details.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

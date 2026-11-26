@@ -186,13 +186,14 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	}, t.proposeResolution)
 	sdk.AddTool(server, &sdk.Tool{
 		Name:        "attach_evidence",
-		Description: "Attach bounded reference-only evidence to your own active Intent. evidence.intent_id defaults to intent_id. Conn never accepts raw logs, source, prompts, or authority fields.",
+		Description: "Attach bounded reference-only reported evidence to an active Intent of the signed-in Human. evidence.intent_id defaults to intent_id. Conn never accepts raw logs, source, prompts, authority fields, or observation records; observed check runs come only from `conn evidence run` in the shell.",
 		InputSchema: evidenceToolSchema(),
 		Annotations: writes("Attach evidence", false),
 	}, t.attachEvidence)
 	registerAccountTools(server, t)
 	registerProjectTools(server, t)
 	registerPreEditTools(server, t)
+	registerReviewTools(server, t)
 	return interactions
 }
 
@@ -603,6 +604,9 @@ func (t tools) attachEvidence(ctx context.Context, _ *sdk.CallToolRequest, in ev
 	evidence, err := decodeToolDocument[protocol.EvidenceAttachmentInput](withDefault(in.Evidence, "intent_id", intentID.String()))
 	if err != nil {
 		return t.fail("attach_evidence", err)
+	}
+	if evidence.Observation != nil || evidence.Kind == protocol.EvidenceKindCheckRun {
+		return t.fail("attach_evidence", errors.New("observed check runs come only from `conn evidence run`; attach_evidence records reported evidence"))
 	}
 	if evidence.IntentID != intentID {
 		return t.fail("attach_evidence", errors.New("evidence.intent_id must match intent_id"))

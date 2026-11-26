@@ -13,6 +13,7 @@ Conn coordinates work. It does not launch agents, supervise people, score produc
 - One Go executable with CLI, `conn app`, `conn server`, warn-only Kiro command hooks, and a Kiro stdio MCP adapter.
 - A local TypeScript analyzer subprocess with planned and diff-based observed modes that receives no Conn credential and returns bounded, source-free JSON.
 - Kiro session diagnostics, login/logout, Project selection, focused work context, workflow prompts, optional resources, local analysis, and generated handoffs.
+- Review proof: repository-defined checks in `.conn/checks.json` that `conn evidence run` executes and attaches as observed evidence, evidence provenance and staleness, `Conn-Intent` commit trailers with an optional Git hook, scope drift, and a bounded review packet for pull-request descriptions.
 
 The MVP requires the authoritative backend. It has no offline outbox, background polling, idle MCP push, or production web application.
 
@@ -89,16 +90,67 @@ Use the normal Kiro agent. A custom agent is not required.
 - `/conn-start`: authenticate if needed, select a Project, load exact context, list concepts, suggest claims for the files you plan to change, publish or resume an Intent, and check collisions before any write.
 - `/conn-sync <cursor>`: pull committed events and reread affected context. Conn does not poll while idle.
 - `/conn-resolve <collision-id>`: inspect source-free context and optionally record a non-binding proposal.
-- `/conn-finish <intent-id>`: verify revisions, analyze the diff against the Intent base, recheck collisions, attach approved evidence references, and revise or release owned work.
+- `/conn-finish <intent-id>`: record the commit as the Intent's head revision, analyze that revision against the Intent base, recheck collisions, offer each configured check for human-approved `conn evidence run`, attach approved reported evidence, read the review packet, and release owned work only when asked.
+- `/conn-review <intent-id>`: produce the review packet as a pull-request description, ready for `gh pr create --body-file`.
 - `/conn-handoff <intent-id>`: generate bounded JSON or Markdown without persisting a handoff record.
 
 Collisions are advisory. A human decision closes them: `false_positive` dismisses; `dependency`, `sequencing`, `contract_agreement`, and `accepted_risk` resolve. A later Intent revision keeps the decision unless it adds a matched subject the decision did not cover. Record decisions with `conn resolution decide` or `conn app`.
+
+## Review proof
+
+Declare the commands that prove your acceptance criteria in a committed `.conn/checks.json`:
+
+```json
+{
+  "version": 1,
+  "checks": {
+    "gateway-tests": {
+      "command": ["pnpm", "--filter", "gateway", "test"],
+      "working_directory": ".",
+      "timeout_seconds": 600,
+      "acceptance_keys": ["gateway-tests"],
+      "env": { "CI": "1" }
+    }
+  }
+}
+```
+
+Each `command` is an argument array that no shell interprets. `working_directory` must stay inside the repository, `timeout_seconds` is 1 to 3,600, `env` holds literal non-secret values and may not name a `CONN_` variable, and the file holds at most 50 checks.
+
+Run a check for the focused Intent, or name one with `--intent`:
+
+```powershell
+conn evidence run gateway-tests
+conn evidence run gateway-tests --intent <intent-id> --acceptance gateway-tests
+```
+
+The command runs without a shell and without any `CONN_` variable, streams its output, keeps the first 10 MiB in `<git dir>/conn/runs/<evidence-id>.log`, and sends only the output hash. It attaches `check_run` evidence per acceptance key, passing only for exit code 0 within the timeout, and exits with the check's exit code. The evidence records the check key, configuration and command hashes, commit, uncommitted-changes flag, exit code, timeout flag, and duration. It is labelled as observed on your machine, which is not independent CI proof. Evidence attached through MCP or `conn evidence attach` without an observation is labelled reported. Any of your Participants may attach evidence to your Intents, so a terminal run can attach to an Intent your Kiro session owns.
+
+Name the Intent in each commit with the trailer `Conn-Intent: <intent-id>@<revision>`. Install the optional hook, which adds it from the local focus record and never blocks a commit:
+
+```powershell
+conn git-hook preview
+conn git-hook install
+# Later: conn git-hook remove
+```
+
+The hook goes into the effective hooks directory, including `core.hooksPath`. Installation refuses to replace a different `prepare-commit-msg` hook and prints the line to add to it instead. Without the hook, agents pass `focus.commit_trailer` from work context to `git commit --trailer`.
+
+Generate the review packet:
+
+```powershell
+conn review --output review.md
+gh pr create --body-file review.md
+conn review --format json
+```
+
+The packet states what the Intent set out to do, each acceptance criterion with its evidence state, provenance, commit, and staleness against the local head, scope drift between declared and observed claims, changed files without a declared claim, collisions with their decisions, and integrity notes, including a changed `.conn/checks.json` on the branch. The Markdown stays under 60,000 characters and contains no source, diffs, prompts, transcripts, credentials, or logs. The packet is generated on demand and never stored. `--analyze` runs observed analysis first when the CLI participant owns the Intent; in Kiro, `/conn-review` asks before running `analyze_intent`.
 
 Project resolution uses explicit tool input, process-local selection, `CONN_PROJECT`, the sole visible Project, or an exact credential-free Git remote match, in that order. Ambiguity stops the workflow.
 
 Interactive Kiro can run Device Flow through `login`. Headless sessions have no mid-session input; use an explicit non-persistent `CONN_TOKEN` and narrowly trusted tools. Do not use `--trust-all-tools` for normal Conn operation.
 
-Read-only tools may be allowed after inspection. Keep login, logout, Intent writes, analysis, evidence, and proposal tools on `ask` unless a specific automation has a reviewed reason to allow them. Kiro permission allows a tool call; it is never a Charter, Objective, Blueprint, membership, risk, or binding resolution decision.
+Read-only tools, including `read_review_packet`, may be allowed after inspection. Keep login, logout, Intent writes, analysis, evidence, and proposal tools on `ask` unless a specific automation has a reviewed reason to allow them. Keep the shell tool on `ask` so each `conn evidence run` needs approval. Kiro permission allows a tool call; it is never a Charter, Objective, Blueprint, membership, risk, or binding resolution decision.
 
 ## Validation and design
 

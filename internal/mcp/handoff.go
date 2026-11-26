@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/protocol"
+	"github.com/Juanqu261/conn/internal/review"
 )
 
 const (
@@ -135,35 +135,14 @@ type handoffEvent struct {
 	OccurredAt    protocol.Timestamp  `json:"occurred_at"`
 }
 
+// loadHandoff reads the handoff records through the shared review loader,
+// which confirms one event cursor across every read and retries once.
 func loadHandoff(ctx context.Context, client *httpclient.Client, projectID, intentID uuid.UUID, after int64) (handoffSnapshot, error) {
-	work, err := client.WorkContext(ctx, projectID, uuid.UUID{}, intentID, &after, maxHandoffUpdates)
+	records, err := review.Load(ctx, client, projectID, intentID, review.LoadOptions{After: &after, UpdateLimit: maxHandoffUpdates, ConflictContexts: true})
 	if err != nil {
 		return handoffSnapshot{}, err
 	}
-	if work.Data.Focus == nil || work.Data.Focus.SelectedIntent == nil || work.Data.Focus.SelectedIntent.IntentID != intentID {
-		return handoffSnapshot{}, errors.New("the selected Intent does not resolve to one exact handoff focus")
-	}
-	radar, err := client.Radar(ctx, projectID)
-	if err != nil {
-		return handoffSnapshot{}, err
-	}
-	if radar.AsOfEvent != work.AsOfEvent || radar.Data.AsOfEvent != radar.AsOfEvent {
-		return handoffSnapshot{}, errors.New("the Project changed while the handoff was being generated; retry from the latest cursor")
-	}
-
-	collisions := intentCollisions(work.Data.RelatedCollisions, intentID, work.Data.Focus.SelectedIntent.Revision)
-	contexts := make(map[uuid.UUID]protocol.ConflictContextPack, len(collisions))
-	for _, collision := range collisions {
-		contextPack, err := client.ConflictContext(ctx, projectID, collision.CollisionID)
-		if err != nil {
-			return handoffSnapshot{}, err
-		}
-		if contextPack.AsOfEvent != work.AsOfEvent {
-			return handoffSnapshot{}, errors.New("the Project changed while collision decisions were being added to the handoff; retry")
-		}
-		contexts[collision.CollisionID] = contextPack.Data
-	}
-	return buildHandoff(work.Data, radar.Data, contexts), nil
+	return buildHandoff(records.Work, records.Radar, records.Contexts), nil
 }
 
 func buildHandoff(work protocol.WorkContext, radar protocol.RadarView, contexts map[uuid.UUID]protocol.ConflictContextPack) handoffSnapshot {

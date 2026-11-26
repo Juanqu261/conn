@@ -89,6 +89,7 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		"logout":                {false, true, true, false},
 		"list_concepts":         {true, true, false, false},
 		"suggest_claims":        {true, true, false, false},
+		"read_review_packet":    {true, true, false, false},
 	}
 	for name, want := range wantAnnotations {
 		tool := tools[name]
@@ -188,6 +189,11 @@ func TestCanonicalToolInputSchemas(t *testing.T) {
 		}})}},
 		{"invalid evidence state", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": mergeMap(validEvidence, "state", "complete")}},
 		{"raw evidence log", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": mergeMap(validEvidence, "raw_log", "all output")}},
+		{"observation record", "attach_evidence", map[string]any{"intent_id": intentID, "evidence": mergeMap(mergeMap(validEvidence, "kind", "check_run"), "observation", map[string]any{
+			"method": "conn_check_run", "runner": "local", "check_key": "retry-tests", "config_sha256": strings.Repeat("a", 64),
+			"command_sha256": strings.Repeat("b", 64), "commit": strings.Repeat("c", 40), "worktree_dirty": false, "exit_code": 0,
+			"timed_out": false, "duration_ms": 10, "output_sha256": strings.Repeat("d", 64), "started_at": "2026-11-22T09:00:00Z",
+		})}},
 		{"binding proposal field", "propose_resolution", map[string]any{"collision_id": collisionID, "proposal": map[string]any{"kind": "sequencing", "rationale_markdown": "Land the producer first.", "binding": true}}},
 		{"zero expected revision", "revise_intent", map[string]any{"intent_id": intentID, "expected_revision": 0, "intent": validIntent}},
 		{"analysis authority selector", "analyze_intent", map[string]any{"intent_id": intentID, "expected_intent_revision": 1, "participant_id": intentID}},

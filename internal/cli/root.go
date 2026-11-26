@@ -52,6 +52,10 @@ type Dependencies struct {
 	// LookupEnv reads configuration from the environment.
 	LookupEnv func(key string) (string, bool)
 
+	// Environ returns the process environment that check commands inherit,
+	// minus every CONN_ variable. Nil uses os.Environ.
+	Environ func() []string
+
 	// Serve runs the backend HTTP service until ctx is cancelled.
 	Serve func(ctx context.Context, cfg ServerConfig, log *slog.Logger) error
 
@@ -98,6 +102,10 @@ func Execute(ctx context.Context, args []string, streams Streams, deps Dependenc
 		return ExitOK
 	case hookCommand(args):
 		return silenceHookFailure(err)
+	case trailerCommand(args):
+		// A commit hook must never block the commit.
+		fmt.Fprintf(streams.Err, "conn: warning: %v; the commit has no Conn-Intent trailer\n", explain(err))
+		return ExitOK
 	case errors.As(err, &exit):
 		return exit.code
 	case errors.Is(err, errReported):
@@ -163,6 +171,9 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newConflictCommand(deps, streams),
 		newResolutionCommand(deps, streams),
 		newEvidenceCommand(deps, streams),
+		newReviewCommand(deps, streams),
+		newTrailerCommand(deps, streams),
+		newGitHookCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
 		newKiroCommand(deps, streams),

@@ -164,10 +164,20 @@ func (c *Client) ReleaseIntent(ctx context.Context, projectID, intentID uuid.UUI
 	return decodeResult[protocol.IntentView](body)
 }
 
-// AttachEvidence attaches a bounded, reference-only evidence item to the
-// caller's own active Intent.
+// AttachEvidence attaches a bounded, reference-only evidence item to an
+// active Intent owned by any Participant of the session's Human.
 func (c *Client) AttachEvidence(ctx context.Context, projectID, intentID uuid.UUID, input protocol.EvidenceAttachmentInput) (Result[protocol.EvidenceReference], error) {
 	return post[protocol.EvidenceReference](ctx, c, fmt.Sprintf("%s/intents/%s/evidence", projectPath(projectID), intentID), input)
+}
+
+// IntentEvidence lists one Intent's most recent evidence references, newest first.
+func (c *Client) IntentEvidence(ctx context.Context, projectID, intentID uuid.UUID) (Result[protocol.EvidenceReferenceList], error) {
+	return read[protocol.EvidenceReferenceList](ctx, c, fmt.Sprintf("%s/intents/%s/evidence", projectPath(projectID), intentID))
+}
+
+// ResolutionDecision reads one immutable human decision.
+func (c *Client) ResolutionDecision(ctx context.Context, projectID, decisionID uuid.UUID) (Result[protocol.ResolutionDecision], error) {
+	return read[protocol.ResolutionDecision](ctx, c, fmt.Sprintf("%s/decisions/%s", projectPath(projectID), decisionID))
 }
 
 // AttachStaticAnalysis attaches a validated source-free local analyzer report

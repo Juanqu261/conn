@@ -146,7 +146,13 @@
           "maxItems": 32,
           "items": { "$ref": "urn:conn:schema:v1:charter-view#/$defs/ownCharter" }
         },
-        "selected_intent": { "$ref": "urn:conn:schema:v1:intent-revision" }
+        "selected_intent": { "$ref": "urn:conn:schema:v1:intent-revision" },
+        "commit_trailer": {
+          "description": "Exact commit trailer naming the selected active Intent revision of the signed-in Human, for git commit --trailer.",
+          "type": "string",
+          "pattern": "^Conn-Intent: [0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@[1-9][0-9]{0,9}$"
+        },
+        "analysis": { "$ref": "#/$defs/analysis" }
       }
     },
     "blueprint": {
@@ -206,6 +212,29 @@
           "type": "array",
           "maxItems": 50,
           "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+        },
+        "provenance": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceProvenance" },
+        "commit": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "stale": {
+          "description": "True when the latest evidence was observed at a commit other than its Intent's recorded head revision.",
+          "type": "boolean"
+        }
+      }
+    },
+    "analysis": {
+      "description": "The latest observed analysis attached to the selected Intent at or before its current revision. Absent means the Intent was never analyzed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_revision", "status", "observed_at"],
+      "properties": {
+        "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "status": { "enum": ["complete", "incomplete"] },
+        "observed_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+        "diagnostic_codes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
         }
       }
     }

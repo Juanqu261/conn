@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:evidence-attachment-input",
   "title": "Evidence attachment input",
-  "description": "Participant-authored, reference-only evidence for the caller's own active Intent. Conn derives identity and observation time.",
+  "description": "Participant-authored, reference-only evidence for an active Intent owned by any Participant of the caller's Human. Conn derives identity, producer, and recording time. Only check_run evidence carries an observation, and the MCP adapter never accepts one.",
   "type": "object",
   "additionalProperties": false,
   "required": ["intent_id", "objective_id", "objective_revision", "kind", "state", "locator"],
@@ -11,21 +11,29 @@
     "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
     "acceptance_key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
-    "kind": {
-      "enum": [
-        "commit",
-        "pull_request",
-        "ci_run",
-        "test_case",
-        "trace",
-        "artifact",
-        "decision",
-        "external_link"
-      ]
-    },
+    "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceKind" },
     "state": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceState" },
     "locator": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
     "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },
-    "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
-  }
+    "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+    "observation": { "$ref": "urn:conn:schema:v1:common#/$defs/evidenceObservation" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "kind": { "const": "check_run" } },
+        "required": ["kind"]
+      },
+      "then": {
+        "properties": { "observation": true },
+        "required": ["observation"]
+      },
+      "else": {
+        "not": {
+          "properties": { "observation": true },
+          "required": ["observation"]
+        }
+      }
+    }
+  ]
 }

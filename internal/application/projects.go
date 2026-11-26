@@ -210,6 +210,14 @@ type Tx interface {
 	EvidenceReferences(ctx context.Context, projectID, objectiveID uuid.UUID, objectiveRevision int) ([]protocol.EvidenceReference, error)
 	// InsertEvidenceReference stores one immutable, participant-attributed evidence record.
 	InsertEvidenceReference(ctx context.Context, evidence protocol.EvidenceReference) error
+	// IntentEvidenceReferences returns at most limit of one Intent's evidence
+	// references, newest first.
+	IntentEvidenceReferences(ctx context.Context, projectID, intentID uuid.UUID, limit int) ([]protocol.EvidenceReference, error)
+	// ResolutionDecision returns one immutable decision in Project scope.
+	ResolutionDecision(ctx context.Context, projectID, decisionID uuid.UUID) (protocol.ResolutionDecision, error)
+	// LatestAnalysis summarizes the latest analyzer report attached to the
+	// Intent at or before maxRevision, or returns ErrNotFound.
+	LatestAnalysis(ctx context.Context, projectID, intentID uuid.UUID, maxRevision int) (protocol.WorkContextAnalysis, error)
 
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.

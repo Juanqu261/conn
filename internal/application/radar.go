@@ -96,6 +96,7 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 		view.DecisionRefs = view.DecisionRefs[len(view.DecisionRefs)-maxRadarDecisionRefs:]
 	}
 	truncatedEvidence := false
+	heads := intentHeads(intents)
 	for _, objective := range objectives {
 		view.Objectives = append(view.Objectives, protocol.RadarObjective{ObjectiveID: objective.ObjectiveID, Revision: objective.Revision, Title: objective.Title})
 		for _, point := range objective.KeyPoints {
@@ -103,7 +104,7 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 			case protocol.KeyPointQuestion:
 				view.OpenQuestions = append(view.OpenQuestions, point.Statement)
 			case protocol.KeyPointAcceptanceCriterion:
-				coverage, truncated := coverageFor(objective, point.Key, evidence)
+				coverage, truncated := coverageFor(objective, point.Key, evidence, heads)
 				truncatedEvidence = truncatedEvidence || truncated
 				view.EvidenceCoverage = append(view.EvidenceCoverage, coverage)
 			}
@@ -112,6 +113,7 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 	if truncatedEvidence {
 		view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Some acceptance criteria have more than %d evidence references; only the most recent are listed, and coverage state uses the latest.", maxRadarCoverageRefs))
 	}
+	view.KnownUnknowns = append(view.KnownUnknowns, coverageNotes(view.EvidenceCoverage)...)
 	if len(view.EvidenceCoverage) > maxRadarCoverage {
 		view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only %d of %d keyed acceptance criteria are shown in evidence coverage.", maxRadarCoverage, len(view.EvidenceCoverage)))
 		view.EvidenceCoverage = view.EvidenceCoverage[:maxRadarCoverage]
@@ -182,10 +184,12 @@ const (
 const optionalBlueprintNote = "No active Blueprint is in force. Blueprints and Charters are optional planning context; collision warnings and evidence work without them."
 
 // coverageFor distinguishes absent evidence from current, stale, inaccessible,
-// or unknown evidence. The most recently observed record supplies the state.
+// or unknown evidence. The most recently observed record supplies the state,
+// provenance, and commit. heads maps active Intents to their recorded head
+// revision; observed evidence at another commit is labelled stale.
 // At most maxRadarCoverageRefs of the most recent matching records are
 // referenced; truncated reports whether older references were omitted.
-func coverageFor(objective protocol.Objective, key string, evidence []protocol.EvidenceReference) (protocol.RadarEvidenceCoverage, bool) {
+func coverageFor(objective protocol.Objective, key string, evidence []protocol.EvidenceReference, heads map[uuid.UUID]string) (protocol.RadarEvidenceCoverage, bool) {
 	coverage := protocol.RadarEvidenceCoverage{ObjectiveID: objective.ObjectiveID, ObjectiveRevision: objective.Revision, AcceptanceKey: key, State: "missing", EvidenceRefs: []uuid.UUID{}}
 	var matching []protocol.EvidenceReference
 	for _, item := range evidence {
@@ -201,7 +205,16 @@ func coverageFor(objective protocol.Objective, key string, evidence []protocol.E
 		return matching[i].EvidenceID.String() < matching[j].EvidenceID.String()
 	})
 	if len(matching) > 0 {
-		coverage.State = matching[len(matching)-1].State
+		latest := matching[len(matching)-1]
+		coverage.State, coverage.Provenance = latest.State, latest.Provenance()
+		if latest.Observation != nil {
+			coverage.Commit = latest.Observation.Commit
+			if latest.IntentID != nil {
+				if head := heads[*latest.IntentID]; head != "" && !protocol.SameCommit(head, coverage.Commit) {
+					coverage.Stale = true
+				}
+			}
+		}
 	}
 	truncated := len(matching) > maxRadarCoverageRefs
 	if truncated {
@@ -212,6 +225,38 @@ func coverageFor(objective protocol.Objective, key string, evidence []protocol.E
 	}
 	sort.Slice(coverage.EvidenceRefs, func(i, j int) bool { return coverage.EvidenceRefs[i].String() < coverage.EvidenceRefs[j].String() })
 	return coverage, truncated
+}
+
+// coverageNotes labels local observations and stale coverage.
+func coverageNotes(coverage []protocol.RadarEvidenceCoverage) []string {
+	var notes []string
+	observed, stale := false, false
+	for _, item := range coverage {
+		observed = observed || item.Provenance == protocol.ProvenanceObservedRun
+		stale = stale || item.Stale
+	}
+	if observed {
+		notes = append(notes, localObservationNote)
+	}
+	if stale {
+		notes = append(notes, "Some acceptance evidence was observed at a commit other than its Intent's recorded head revision and is labelled stale.")
+	}
+	return notes
+}
+
+// localObservationNote labels observed runs at their trust level.
+const localObservationNote = "Observed check runs ran on the Intent owner's machine; they are stronger than reported states but are not independent CI proof."
+
+// intentHeads maps each active Intent to its recorded head revision, so
+// evidence coverage can label observations at other commits stale.
+func intentHeads(intents []protocol.IntentView) map[uuid.UUID]string {
+	heads := map[uuid.UUID]string{}
+	for _, intent := range intents {
+		if intent.Status == "active" && intent.IntentRevision.HeadRevisionRef != "" {
+			heads[intent.IntentRevision.IntentID] = intent.IntentRevision.HeadRevisionRef
+		}
+	}
+	return heads
 }
 
 // boundedStatement fits free text into the Radar statement contract: it trims
