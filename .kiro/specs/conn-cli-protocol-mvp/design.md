@@ -174,7 +174,7 @@ Event sequence is assigned transactionally within one Project. Responses that de
 
 ## Model-generation gate
 
-Decision 0009 intentionally deferred model generation. The implementation sequence therefore begins with schemas and shared fixtures. Before persistent domain records or public handlers are implemented:
+The accepted technical direction intentionally deferred model generation. The implementation sequence therefore begins with schemas and shared fixtures. Before persistent domain records or public handlers are implemented:
 
 1. Validate accepted and rejected fixtures through Ajv and the Go JSON Schema validator.
 2. Review schema names, references, optionality, and error quality.

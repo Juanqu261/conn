@@ -38,7 +38,7 @@ pnpm build
 
 Keep tests limited to public contracts and fundamental invariants. Do not add repetitive generated tests, tests of trivial implementation details, or a coverage-percentage gate. Each new test must name the contract, invariant, security boundary, integration path, migration guarantee, or reproduced defect that it protects.
 
-The complete testing policy is [decision 0003](docs/decisions/0003-minimal-fundamental-testing.md).
+The complete testing policy is [decision 0004](docs/decisions/0004-minimal-fundamental-testing.md).
 
 ## Scope
 

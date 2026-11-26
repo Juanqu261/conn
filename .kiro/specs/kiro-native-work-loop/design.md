@@ -132,15 +132,15 @@ Repository matching uses the existing `repositorygit` normalization and credenti
 
 Existing tool names and successful inputs remain compatible. Add the following tools:
 
-| Tool | Annotation and behavior |
-| --- | --- |
-| `session_status` | Read-only. Reports server reachability, credential source and validity, authenticated Human when available, Project-selection state, and supported Kiro capabilities. It never returns a token. |
-| `login` | Mutating and not auto-approved. Runs GitHub Device Flow through MCP URL elicitation, exchanges the temporary token, and stores only the Conn token in the OS credential store. |
-| `logout` | Destructive and not auto-approved. Uses direct confirmation elicitation, revokes the stored session, and removes the local credential. It does not unset `CONN_TOKEN`. |
-| `list_projects` | Read-only. Lists Projects visible to the authenticated Human with bounded safe repository labels useful for selection. |
-| `select_project` | Process-local and idempotent. Validates membership, then changes only the MCP session selection. |
-| `read_work_context` | Read-only. Returns the focused `WorkContext` record and one authoritative event cursor. |
-| `analyze_intent` | Mutating, non-destructive, and participant-owned. Runs local analysis, validates its output, attaches observed claims to the exact active Intent revision, and returns resulting collision state. |
+| Tool                | Annotation and behavior                                                                                                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_status`    | Read-only. Reports server reachability, credential source and validity, authenticated Human when available, Project-selection state, and supported Kiro capabilities. It never returns a token.   |
+| `login`             | Mutating and not auto-approved. Runs GitHub Device Flow through MCP URL elicitation, exchanges the temporary token, and stores only the Conn token in the OS credential store.                    |
+| `logout`            | Destructive and not auto-approved. Uses direct confirmation elicitation, revokes the stored session, and removes the local credential. It does not unset `CONN_TOKEN`.                            |
+| `list_projects`     | Read-only. Lists Projects visible to the authenticated Human with bounded safe repository labels useful for selection.                                                                            |
+| `select_project`    | Process-local and idempotent. Validates membership, then changes only the MCP session selection.                                                                                                  |
+| `read_work_context` | Read-only. Returns the focused `WorkContext` record and one authoritative event cursor.                                                                                                           |
+| `analyze_intent`    | Mutating, non-destructive, and participant-owned. Runs local analysis, validates its output, attaches observed claims to the exact active Intent revision, and returns resulting collision state. |
 
 The tool list continues to include:
 

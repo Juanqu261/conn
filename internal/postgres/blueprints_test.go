@@ -220,7 +220,7 @@ func TestCharterRatification(t *testing.T) {
 	}
 }
 
-// TestOneBlueprintPerObjective protects decision 0005: an Objective has
+// TestOneBlueprintPerObjective protects decision 0001: an Objective has
 // one Blueprint, so at most one partition of it is ever active.
 //   - a second Blueprint for the same Objective is refused and names the
 //     Blueprint to revise instead;

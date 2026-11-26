@@ -24,7 +24,7 @@
   - If the pinned SDK lacks a required capability, compare two or three practical SDK upgrade or bounded fallback options, record compatibility and operational cost, recommend one, and stop for approval before changing the dependency.
   - Do not implement a custom MCP transport, browser framework, or credential flow during the spike. Requirements: 2, 5, 12.
 
-- [ ] 4. Define the focused work-context and Kiro workflow contracts
+- [x] 4. Define the focused work-context and Kiro workflow contracts
   - Add a Draft 2020-12 schema for the transport-neutral `WorkContext` view, including exact focus revisions, own Charters, owned active Intents, related collisions, evidence coverage, updates, continuation, known unknowns, and selection metadata.
   - Add only any small input or view schemas required for analyzer invocation or handoff that cannot be represented safely by existing canonical contracts.
   - Reject unknown authoritative properties, authority selectors, credentials, raw source, prompts, transcripts, and unbounded diagnostics.
@@ -32,7 +32,7 @@
   - Add matching handwritten Go protocol types and hold them to the canonical fixtures through the existing conformance test.
   - Stop for schema and vocabulary review before adding the backend work-context operation. Requirements: 4, 6, 7, 8, 11.
 
-- [ ] 5. Replace weak MCP nested inputs with precise schemas
+- [x] 5. Replace weak MCP nested inputs with precise schemas
   - Replace unconstrained nested maps for Intent publication and revision, evidence attachment, and any other canonical input with typed wrappers or explicit MCP input schemas.
   - Preserve existing tool names, adapter-generated UUIDv7 behavior, nested ID defaulting, successful inputs, and participant authority.
   - Expose required fields, enum values, descriptions, bounds, and unknown-property rejection without creating a competing protocol vocabulary.
@@ -40,7 +40,7 @@
   - Add one focused schema-compatibility scenario instead of duplicating every canonical fixture at the MCP layer.
   - Correct tool annotations for reads, writes, idempotency, and destructive account actions. Requirements: 6, 10, 11.
 
-- [ ] 6. Add in-Kiro session diagnostics and account operations
+- [x] 6. Add in-Kiro session diagnostics and account operations
   - Extend the MCP adapter dependency boundary so it can use the existing account service without duplicating Device Flow, credential precedence, keyring, or logout behavior.
   - Add `session_status`, including safe backend health, readiness, credential source and validity, authenticated Human, Project-selection state, analyzer availability, and supported capability reporting.
   - Add interactive `login` using the approved multi-round-trip MCP input capability, existing GitHub Device Flow, one-time backend exchange, and OS credential-store persistence.
@@ -50,7 +50,7 @@
   - Handle cancellation, expiry, denial, unavailable keyring, environment override, backend failure, and headless operation with actionable safe errors.
   - Add one fake-GitHub and MCP-client scenario protecting storage, revocation, cancellation, and redaction. Requirements: 2, 6, 11.
 
-- [ ] 7. Implement deterministic Project discovery and session selection
+- [x] 7. Implement deterministic Project discovery and session selection
   - Add a concurrency-safe process-local selection component with explicit source labels and no authoritative or credential data.
   - Add `list_projects` and `select_project` through the existing authenticated HTTP client.
   - Apply the reviewed precedence: explicit request, session selection, `CONN_PROJECT`, sole visible Project, exact safe repository match, then bounded ambiguity.
@@ -59,7 +59,7 @@
   - Return human-readable bounded choices when Objectives, Projects, repositories, or Intents are ambiguous instead of guessing.
   - Add one parameterized selection scenario covering every precedence level, ambiguous repositories, unauthorized IDs, and process restart. Requirements: 3, 6, 11.
 
-- [ ] 8. Implement the authoritative focused work-context read
+- [x] 8. Implement the authoritative focused work-context read
   - Add one application operation that composes the selected Project, reader identity, exact Objective and Blueprint state, the reader's relevant Charters, owned active Intents, related collisions, evidence coverage, bounded updates, continuation, and known unknowns.
   - Add the versioned HTTP route and authenticated client operation using the existing response envelope and one `as_of_event` cursor.
   - Preserve own-Charter privacy while returning the related Project context already visible to authorized members.
@@ -68,7 +68,7 @@
   - Add `read_work_context` to MCP and retain `read_radar` for broad Project inspection.
   - Add one fundamental application/API/MCP scenario covering exact revisions, ambiguity, evidence gaps, related collisions, cursor consistency, and event continuation. Requirements: 4, 6, 8, 11.
 
-- [ ] 9. Register the Kiro workflow prompts and focused resources
+- [x] 9. Register the Kiro workflow prompts and focused resources
   - Register `conn-start`, `conn-sync`, `conn-resolve`, `conn-finish`, and `conn-handoff` as MCP prompts with concise descriptions and bounded arguments.
   - Make prompt instructions use `session_status`, explicit Project selection, `read_work_context`, existing participant-owned write tools, collision reads, and event cursors in the reviewed order.
   - Ensure prompt text stops on ambiguity or stale revisions and never represents tool approval as a binding human decision.
@@ -77,7 +77,7 @@
   - Keep resource output bounded and source-free, and do not implement subscriptions or unsolicited notifications.
   - Add focused discovery and behavioral checks for tool and prompt names, arguments, required tool sequence, cursor handling, authority wording, safe rendering, and resource-to-tool fallback without snapshot-testing incidental prose. Requirements: 1, 4, 5, 8, 9, 10, 11.
 
-- [ ] 10. Expose local TypeScript Intent analysis through MCP
+- [x] 10. Expose local TypeScript Intent analysis through MCP
   - Add `analyze_intent` as a participant-owned MCP operation using an exact Intent ID and expected revision.
   - Reuse `internal/analyzer` and the versioned Node.js subprocess rather than adding a second analyzer path.
   - Resolve the local worktree safely, constrain optional paths to it, reject traversal and unrelated worktrees, and verify that the selected RepositoryConnection has analysis enabled.
@@ -86,7 +86,7 @@
   - Attach accepted observed claims to the exact Intent revision, run the existing deterministic assessor, and return incomplete diagnostics, resulting collisions, and the post-commit event cursor.
   - Add one subprocess scenario for valid source-free analysis and focused cases for traversal, stale revision, disabled analysis, forbidden output, and analyzer failure. Requirements: 7, 8, 11.
 
-- [ ] 11. Complete the start, sync, finish, and handoff work loop
+- [x] 11. Complete the start, sync, finish, and handoff work loop
   - Exercise `/conn-start` from unauthenticated and authenticated states through Project selection, focused context, owned Intent reuse or publication, and initial collision check.
   - Exercise `/conn-sync` from a supplied cursor through pagination and selective rereads without a polling timer.
   - Exercise `/conn-finish` through exact revision comparison, eligible local analysis, collision recheck, evidence-gap explanation, bounded evidence attachment, and participant-owned Intent revision or release.
@@ -95,7 +95,7 @@
   - Keep handoffs generated rather than persisted in this slice and exclude raw prompts, transcripts, source, diffs, and unbounded logs.
   - Add one end-to-end MCP scenario covering a complete participant work loop rather than separate tests for every prompt step. Requirements: 1, 4, 5, 8, 9, 11.
 
-- [ ] 12. Provide an optional, inspectable Kiro integration bundle
+- [x] 12. Provide an optional, inspectable Kiro integration bundle
   - After the integration-surface decision is accepted, prepare optional steering and prompt-hook templates for `SessionStart` and `Stop`.
   - Keep hook content bounded to availability, resume, active-Intent, collision, evidence, and `/conn-finish` guidance.
   - Ensure hooks perform no hidden writes, background polling, blocking supervision, or binding decisions.
@@ -104,7 +104,7 @@
   - Verify that the complete tools-and-prompts workflow still works with the optional bundle absent.
   - Do not add a required custom agent or skill in this task. Requirements: 1, 5, 9, 11.
 
-- [ ] 13. Decide the future direct-human binding-action boundary without implementing it
+- [x] 13. Decide the future direct-human binding-action boundary without implementing it
   - Compare elicitation-gated human review, a browser review page, and retaining CLI or terminal-application approval on directness, auditability, headless behavior, security, implementation cost, and fit with Conn's authority model.
   - Prototype only enough interaction to determine whether the model can be prevented from supplying the outcome and whether the exact immutable record and consequences can be shown directly to the human.
   - Define required audit provenance, cancellation, stale-revision behavior, tool permission behavior, and unsupported-client behavior.
@@ -112,7 +112,7 @@
   - If accepted, record a separate architecture decision and create a focused specification before production implementation.
   - Do not add MCP Charter acceptance, Objective or Blueprint approval, membership mutation, accepted risk, or binding ResolutionDecision tools in this specification. Requirements: 10, 11, 12.
 
-- [ ] 14. Align maintained documentation and integration guidance
+- [x] 14. Align maintained documentation and integration guidance
   - Correct stale README, package comment, CLI help, architecture, code-structure, and accepted-decision text that still describes MCP as read-only or the analyzer as a placeholder.
   - Document one-time binary and MCP setup separately from normal terminal-free Kiro session use.
   - Document interactive login, environment-token headless use, Project-selection precedence, slash workflows, resources, local analysis, event cursors, and the absence of idle MCP push.

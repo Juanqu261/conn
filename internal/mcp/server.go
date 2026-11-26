@@ -1,7 +1,8 @@
 // Package mcp adapts Conn to Kiro through the official MCP Go SDK. It
-// exposes authenticated coordination tools and direct account interactions
-// over stdio, calls the same backend and account boundaries as the CLI, and
-// never touches the database.
+// exposes authenticated tools, guided prompts, optional focused resources,
+// direct account interactions, process-local Project selection, generated
+// handoffs, and bounded local analysis over stdio. It calls the same backend
+// and account boundaries as the CLI and never touches the database.
 package mcp
 
 import (
