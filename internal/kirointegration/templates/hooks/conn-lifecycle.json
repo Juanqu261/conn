@@ -1,0 +1,25 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "conn-session-start",
+      "description": "Offer read-only Conn context at the start of a coordinated session.",
+      "trigger": "SessionStart",
+      "enabled": true,
+      "action": {
+        "type": "agent",
+        "prompt": "Conn session-start reminder. If the human's current objective is coordinated through Conn, call session_status. When authentication and Project selection are unambiguous, call read_work_context before implementation. These are read-only checks. Stop on ambiguity or stale context. Do not publish, revise, release, analyze, attach evidence, propose a resolution, make a binding decision, change membership, or start polling from this hook."
+      }
+    },
+    {
+      "name": "conn-session-stop",
+      "description": "Report Conn continuation state and offer the explicit finish workflow.",
+      "trigger": "Stop",
+      "enabled": true,
+      "action": {
+        "type": "agent",
+        "prompt": "Conn stop reminder. If this turn used Conn, use only read-only Conn tools to report the active Intent revision, authoritative event cursor, unresolved collisions, evidence gaps, and known unknowns. Offer /conn-finish to the human when appropriate, but do not invoke it automatically. Do not publish, revise, release, analyze, attach evidence, propose a resolution, make a binding decision, change membership, poll, or block the user from stopping."
+      }
+    }
+  ]
+}

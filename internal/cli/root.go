@@ -138,6 +138,7 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newEvidenceCommand(deps, streams),
 		newSyncCommand(deps, streams),
 		newDoctorCommand(deps, streams),
+		newKiroCommand(streams),
 		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
 		newMCPCommand(deps, logger),
