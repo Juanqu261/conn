@@ -233,7 +233,7 @@ func startMCP(t *testing.T, ctx context.Context, dir string, env []string) *mcpP
 	cmd.Dir, cmd.Env = dir, env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	session, err := sdk.NewClient(&sdk.Implementation{Name: "pre-edit-test", Version: "0"}, nil).Connect(ctx, &sdk.CommandTransport{Command: cmd}, nil)
+	session, err := sdk.NewClient(&sdk.Implementation{Name: "kiro-pre-edit-test", Version: "0"}, nil).Connect(ctx, &sdk.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		t.Fatalf("start conn mcp: %v\n%s", err, stderr.String())
 	}

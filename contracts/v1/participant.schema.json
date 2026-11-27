@@ -10,7 +10,7 @@
     "participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
-    "adapter_kind": { "enum": ["kiro", "cli", "ci", "github", "other_registered_adapter"] },
+    "adapter_kind": { "enum": ["kiro", "mcp", "cli", "ci", "github", "other_registered_adapter"] },
     "local_session_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
     "display_label": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
     "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },

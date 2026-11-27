@@ -19,6 +19,11 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 	handle := func(pattern string, h func(http.ResponseWriter, *http.Request, application.Session)) {
 		mux.HandleFunc(pattern, authenticated(cfg.Auth, log, h))
 	}
+	// read serves the routes a CI credential may also use, for its own
+	// Project only. Every other route rejects CI credentials.
+	read := func(pattern string, h func(http.ResponseWriter, *http.Request, application.Reader)) {
+		mux.HandleFunc(pattern, readable(cfg, h))
+	}
 
 	handle("GET /v1/projects", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		list, err := projects.ProjectsForHuman(r.Context(), s.Human.HumanID)
@@ -47,12 +52,12 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/members", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/members", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
 		}
-		result, err := projects.ProjectMembers(r.Context(), s.Human.HumanID, projectID)
+		result, err := projects.ProjectMembersAs(r.Context(), reader, projectID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
@@ -69,16 +74,16 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/radar", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/radar", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
 		}
-		result, err := projects.Radar(r.Context(), s.Human.HumanID, projectID)
+		result, err := projects.RadarAs(r.Context(), reader, projectID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/concepts", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/concepts", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok || !allowQueryParameters(w, r, log, "kind", "q", "objective_id", "limit", "after") {
 			return
@@ -97,7 +102,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.Concepts(r.Context(), s.Human.HumanID, projectID, application.ConceptQuery{
+		result, err := projects.ConceptsAs(r.Context(), reader, projectID, application.ConceptQuery{
 			Kind: kind, Query: r.URL.Query().Get("q"), ObjectiveID: objectiveID, Limit: int(limit), After: r.URL.Query().Get("after"),
 		})
 		respond(w, log, http.StatusOK, result, err)
@@ -139,7 +144,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/collisions/{collision_id}/context", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/collisions/{collision_id}/context", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
@@ -148,7 +153,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.ConflictContext(r.Context(), s.Human.HumanID, projectID, collisionID)
+		result, err := projects.ConflictContextAs(r.Context(), reader, projectID, collisionID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
@@ -292,16 +297,16 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/intents", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/intents", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
 		}
-		result, err := projects.Intents(r.Context(), s.Human.HumanID, projectID)
+		result, err := projects.IntentsAs(r.Context(), reader, projectID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/intents/{intent_id}", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/intents/{intent_id}", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
@@ -310,11 +315,11 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.Intent(r.Context(), s.Human.HumanID, projectID, intentID)
+		result, err := projects.IntentAs(r.Context(), reader, projectID, intentID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/intents/{intent_id}/evidence", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/intents/{intent_id}/evidence", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
@@ -323,7 +328,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.IntentEvidence(r.Context(), s.Human.HumanID, projectID, intentID)
+		result, err := projects.IntentEvidenceAs(r.Context(), reader, projectID, intentID)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
@@ -393,10 +398,8 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
-	// GitHub issue import deliberately has no route. It must first bind a
-	// GitHub App installation to an authorized repository, then authenticate
-	// and deduplicate external deliveries. Local Kiro-spec imports below do
-	// not grant or imply that future repository authority.
+	// Imports record a reviewed summary and provenance. The CLI fetches a
+	// GitHub issue itself; no GitHub token ever reaches this backend.
 	handle("POST /v1/projects/{project_id}/objective-imports/kiro-spec", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
@@ -453,7 +456,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
-	handle("GET /v1/projects/{project_id}/objectives/{objective_id}/revisions/{revision}", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	read("GET /v1/projects/{project_id}/objectives/{objective_id}/revisions/{revision}", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
@@ -466,7 +469,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.ObjectiveRevision(r.Context(), s.Human.HumanID, projectID, objectiveID, revision)
+		result, err := projects.ObjectiveRevisionAs(r.Context(), reader, projectID, objectiveID, revision)
 		respond(w, log, http.StatusOK, result, err)
 	})
 
@@ -594,12 +597,14 @@ var semanticClaimKinds = map[string]bool{
 	"code_symbol": true, "dependency": true, "assumption": true, "question": true, "acceptance_criterion": true,
 }
 
-// participantAdapter accepts only Conn's built-in Kiro identifier. It never
-// selects a Human or local session reference; those remain session-derived and
-// unavailable to HTTP/MCP input. Other clients retain the CLI participant.
+// participantAdapter accepts only the Kiro and generic MCP adapter
+// identifiers. It never selects a Human or local session reference; those
+// remain session-derived and unavailable to HTTP/MCP input. Other clients
+// retain the CLI participant. Attribution changes and authority does not.
 func participantAdapter(r *http.Request) string {
-	if r.Header.Get("X-Conn-Participant-Adapter") == "kiro" {
-		return "kiro"
+	switch adapter := r.Header.Get("X-Conn-Participant-Adapter"); adapter {
+	case "kiro", "mcp":
+		return adapter
 	}
 	return "cli"
 }

@@ -217,6 +217,9 @@ func (p *Projects) WorkContext(ctx context.Context, human protocol.Human, projec
 				view.KnownUnknowns = append(view.KnownUnknowns, fmt.Sprintf("Only %d of %d related collisions are included.", maxWorkContextCollisions, len(view.RelatedCollisions)))
 				view.RelatedCollisions = view.RelatedCollisions[:maxWorkContextCollisions]
 			}
+			if err := withCombinationOutcomes(ctx, tx, projectID, view.RelatedCollisions); err != nil {
+				return err
+			}
 			for _, collision := range view.RelatedCollisions {
 				if collision.State == protocol.CollisionOpen || collision.State == protocol.CollisionUnderReview {
 					view.KnownUnknowns = append(view.KnownUnknowns, "Related collision assessments are advisory until a Human records a decision.")

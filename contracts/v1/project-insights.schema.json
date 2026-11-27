@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:project-insights",
+  "title": "Project insights",
+  "description": "Project-level numbers on warnings and evidence for one time window. No property can hold a Human, Participant, or login, and nothing is grouped or ranked by person. Every ratio carries its numerator and denominator and reports insufficient_data when the denominator is below 5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project_id",
+    "since_days",
+    "window_start",
+    "window_end",
+    "minimum_denominator",
+    "collisions_opened",
+    "decisions",
+    "false_positive_share",
+    "median_hours_to_first_decision",
+    "decided_before_release",
+    "undeclared_observed_changes",
+    "acceptance_by_provenance",
+    "combination_checks"
+  ],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "since_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+    "window_start": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+    "window_end": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+    "minimum_denominator": { "const": 5 },
+    "collisions_opened": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "count"],
+        "properties": {
+          "rule_id": { "$ref": "#/$defs/ruleID" },
+          "count": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "kind", "count"],
+        "properties": {
+          "rule_id": { "$ref": "#/$defs/ruleID" },
+          "kind": { "$ref": "urn:conn:schema:v1:common#/$defs/resolutionKind" },
+          "count": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "false_positive_share": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "share"],
+        "properties": {
+          "rule_id": { "$ref": "#/$defs/ruleID" },
+          "share": { "$ref": "#/$defs/ratio" }
+        }
+      }
+    },
+    "median_hours_to_first_decision": { "$ref": "#/$defs/median" },
+    "decided_before_release": { "$ref": "#/$defs/ratio" },
+    "undeclared_observed_changes": { "$ref": "#/$defs/ratio" },
+    "acceptance_by_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observed_run", "reported", "missing"],
+      "properties": {
+        "observed_run": { "$ref": "#/$defs/count" },
+        "reported": { "$ref": "#/$defs/count" },
+        "missing": { "$ref": "#/$defs/count" }
+      }
+    },
+    "combination_checks": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["outcome", "count"],
+        "properties": {
+          "outcome": { "enum": ["passing", "failing", "merge_conflict", "incomplete"] },
+          "count": { "$ref": "#/$defs/count" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "ruleID": {
+      "enum": [
+        "shared_declared_invariant",
+        "shared_exported_symbol",
+        "contract_producer_consumer",
+        "schema_resource_overlap"
+      ]
+    },
+    "ratio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator", "status"],
+      "properties": {
+        "numerator": { "$ref": "#/$defs/count" },
+        "denominator": { "$ref": "#/$defs/count" },
+        "status": { "enum": ["value", "insufficient_data"] },
+        "value": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "median": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_size", "status"],
+      "properties": {
+        "sample_size": { "$ref": "#/$defs/count" },
+        "status": { "enum": ["value", "insufficient_data"] },
+        "value": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

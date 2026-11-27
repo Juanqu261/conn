@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:combination-check",
+  "title": "Combination check",
+  "description": "An immutable, advisory record of testing the two branches of one collision together on a participant's machine. It never changes the collision state. It contains commits, diagnostic codes, paths, exit codes, durations, and output hashes, never source, diffs, or logs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "check_id",
+    "project_id",
+    "collision_id",
+    "left",
+    "right",
+    "merge_result",
+    "conflicted_paths",
+    "diagnostics",
+    "checks",
+    "outcome",
+    "config_source",
+    "runner",
+    "producer_participant_id",
+    "created_at"
+  ],
+  "properties": {
+    "check_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "left": { "$ref": "#/$defs/side" },
+    "right": { "$ref": "#/$defs/side" },
+    "merge_result": { "$ref": "#/$defs/mergeResult" },
+    "conflicted_paths": { "$ref": "#/$defs/conflictedPaths" },
+    "diagnostics": { "$ref": "#/$defs/diagnostics" },
+    "setup": { "$ref": "#/$defs/run" },
+    "checks": { "$ref": "#/$defs/checks" },
+    "outcome": { "$ref": "#/$defs/outcome" },
+    "config_source": { "$ref": "#/$defs/configSource" },
+    "runner": { "$ref": "#/$defs/runner" },
+    "producer_participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  },
+  "$defs": {
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_id", "intent_revision", "branch_ref", "commit", "head_matches_intent"],
+      "properties": {
+        "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "branch_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+        "commit": { "$ref": "urn:conn:schema:v1:common#/$defs/gitCommit" },
+        "head_matches_intent": {
+          "description": "The tested commit equals the Intent revision's head_revision_ref.",
+          "type": "boolean"
+        }
+      }
+    },
+    "mergeResult": { "enum": ["clean", "merge_conflict"] },
+    "conflictedPaths": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" }
+    },
+    "diagnostics": {
+      "description": "TypeScript diagnostic codes whose count in the merged tree exceeds the larger count of either branch alone, per path.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ran", "new_count", "new", "truncated"],
+      "properties": {
+        "ran": { "type": "boolean" },
+        "new_count": { "type": "integer", "minimum": 0 },
+        "new": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code"],
+            "properties": {
+              "code": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+              "path": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" }
+            }
+          }
+        },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exit_code", "timed_out", "duration_ms", "output_sha256"],
+      "properties": {
+        "exit_code": {
+          "description": "The command's exit code, or -1 when Conn stopped it at its timeout.",
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 4294967295
+        },
+        "timed_out": { "type": "boolean" },
+        "duration_ms": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+        "output_sha256": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "exit_code", "timed_out", "duration_ms", "output_sha256", "state"],
+        "properties": {
+          "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
+          "exit_code": { "type": "integer", "minimum": -1, "maximum": 4294967295 },
+          "timed_out": { "type": "boolean" },
+          "duration_ms": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+          "output_sha256": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },
+          "state": { "enum": ["passing", "failing", "timed_out"] }
+        }
+      }
+    },
+    "outcome": { "enum": ["passing", "failing", "merge_conflict", "incomplete"] },
+    "configSource": {
+      "description": "The default-branch .conn/checks.json the pair commands came from, or null when it is absent.",
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ref", "sha256"],
+          "properties": {
+            "ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+            "sha256": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" }
+          }
+        }
+      ]
+    },
+    "runner": {
+      "description": "local means the participant's machine ran the merge and commands; it is not independent CI proof.",
+      "enum": ["local"]
+    }
+  }
+}

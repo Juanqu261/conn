@@ -24,13 +24,13 @@ const (
 
 var allowedResolutionKinds = []string{"dependency", "sequencing", "contract_agreement", "accepted_risk", "false_positive", "revise_objective", "revise_blueprint", "other"}
 
-// ConflictContext returns one bounded, member-authorized portable context pack.
+// ConflictContextAs returns one bounded portable context pack to an authorized reader.
 // It uses the same repeatable-read snapshot inputs as Radar and does not send
 // the pack to any participant or external service.
-func (p *Projects) ConflictContext(ctx context.Context, actor, projectID, collisionID uuid.UUID) (Result[protocol.ConflictContextPack], error) {
+func (p *Projects) ConflictContextAs(ctx context.Context, reader Reader, projectID, collisionID uuid.UUID) (Result[protocol.ConflictContextPack], error) {
 	var result Result[protocol.ConflictContextPack]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		collision, err := tx.CollisionAssessment(ctx, projectID, collisionID)
@@ -110,6 +110,14 @@ func (p *Projects) ConflictContext(ctx context.Context, actor, projectID, collis
 		}
 		radar := buildRadar(project, objectives, blueprint, repositories, intents, activeClaims, openCollisions, decidedCollisions, decisionRefs, allDecisions, evidence)
 		pack := contextPack(collision, objective, left, right, claims, decisions, radar, evidence)
+		checks, err := tx.CombinationChecks(ctx, projectID, collisionID, protocol.MaxContextCombinations)
+		if err != nil {
+			return err
+		}
+		if len(checks) > 0 {
+			pack.CombinationChecks = checks
+			pack.Collision.LatestCombinationOutcome = checks[0].Outcome
+		}
 		if err := validateRecord(pack); err != nil {
 			return err
 		}

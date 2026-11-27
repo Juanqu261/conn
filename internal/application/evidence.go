@@ -98,12 +98,12 @@ func validateObservation(input protocol.EvidenceAttachmentInput) error {
 	return nil
 }
 
-// IntentEvidence lists one Intent's most recent evidence references, newest
-// first, to a Project member.
-func (p *Projects) IntentEvidence(ctx context.Context, actor, projectID, intentID uuid.UUID) (Result[protocol.EvidenceReferenceList], error) {
+// IntentEvidenceAs lists one Intent's most recent evidence references, newest
+// first, to an authorized reader.
+func (p *Projects) IntentEvidenceAs(ctx context.Context, reader Reader, projectID, intentID uuid.UUID) (Result[protocol.EvidenceReferenceList], error) {
 	var result Result[protocol.EvidenceReferenceList]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		if _, err := tx.Intent(ctx, projectID, intentID); err != nil {

@@ -40,7 +40,10 @@
         "resolution.proposed",
         "resolution.decided",
         "evidence.attached",
-        "objective.imported"
+        "objective.imported",
+        "combination.checked",
+        "ci_credential.created",
+        "ci_credential.revoked"
       ]
     },
     "entity_type": {
@@ -56,7 +59,9 @@
         "collision",
         "resolution_proposal",
         "resolution_decision",
-        "evidence_reference"
+        "evidence_reference",
+        "combination_check",
+        "ci_credential"
       ]
     },
     "entity_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
@@ -246,6 +251,32 @@
           "payload": { "$ref": "#/$defs/revisionPayload" }
         }
       }
+    },
+    {
+      "if": {
+        "properties": { "event_type": { "const": "combination.checked" } },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "combination_check" },
+          "payload": { "$ref": "#/$defs/combinationCheckedPayload" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": { "enum": ["ci_credential.created", "ci_credential.revoked"] }
+        },
+        "required": ["event_type"]
+      },
+      "then": {
+        "properties": {
+          "entity_type": { "const": "ci_credential" },
+          "payload": { "$ref": "#/$defs/ciCredentialPayload" }
+        }
+      }
     }
   ],
   "$defs": {
@@ -297,6 +328,24 @@
       "properties": {
         "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
         "cell_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      }
+    },
+    "combinationCheckedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collision_id", "outcome"],
+      "properties": {
+        "collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "outcome": { "enum": ["passing", "failing", "merge_conflict", "incomplete"] }
+      }
+    },
+    "ciCredentialPayload": {
+      "description": "Names the RepositoryConnection the credential is bound to. It never contains the token.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id"],
+      "properties": {
+        "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
       }
     },
     "charterDecisionPayload": {

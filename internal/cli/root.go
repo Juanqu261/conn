@@ -16,6 +16,7 @@ import (
 	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/devenv"
+	"github.com/Juanqu261/conn/internal/secret"
 )
 
 // Streams are the process standard streams.
@@ -80,6 +81,15 @@ type Dependencies struct {
 
 	// RunApp starts the interactive terminal application against serverURL.
 	RunApp func(ctx context.Context, in io.Reader, out, err io.Writer, serverURL string) error
+
+	// GitHubAPIURL overrides https://api.github.com for GitHub issue import
+	// and CI comments. Empty uses GitHub.
+	GitHubAPIURL string
+
+	// SetGitHubSecret stores a CI token as the CONN_CI_TOKEN secret of a
+	// GitHub repository. Nil runs gh secret set with the token on its
+	// standard input.
+	SetGitHubSecret func(ctx context.Context, repo string, token secret.String) error
 }
 
 // exitWith ends a command with a specific exit code and no diagnostic. Hooks
@@ -178,9 +188,14 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newDoctorCommand(deps, streams),
 		newKiroCommand(deps, streams),
 		newHookCommand(deps, streams),
+		newVerifyPairCommand(deps, streams),
+		newCICommand(deps, streams),
+		newAgentsCommand(deps, streams),
+		newStartCommand(deps, streams),
+		newInsightsCommand(deps, streams),
 		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),
-		newMCPCommand(deps, logger),
+		newMCPCommand(deps, streams, logger),
 	)
 	return root
 }
@@ -226,16 +241,19 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 	return cmd
 }
 
-func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
+func newMCPCommand(deps Dependencies, streams Streams, logger *slog.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
-		Short: "Run the Kiro MCP adapter over standard input and output",
-		Long: "Run the Kiro MCP adapter over standard input and output.\n\n" +
+		Short: "Run the MCP adapter for Kiro and other coding agents over standard input and output",
+		Long: "Run the MCP adapter over standard input and output for Kiro or another MCP coding agent.\n" +
+			"Clients other than Kiro are attributed with participant adapter mcp. Print client\n" +
+			"configuration with `conn mcp config`.\n\n" +
 			"It exposes session and Project diagnostics, the concept catalog, pre-edit claim\n" +
 			"suggestions, focused coordination reads, guided start/sync/resolve/finish/handoff prompts,\n" +
-			"participant-owned Intent and evidence writes, non-binding proposals, and bounded local\n" +
-			"TypeScript analysis. It cannot perform Charter, Objective, Blueprint, membership, risk,\n" +
-			"or binding resolution decisions.\n\n" +
+			"participant-owned Intent and evidence writes, non-binding proposals, bounded local\n" +
+			"TypeScript analysis, and the CI workflow file. It cannot perform Charter, Objective, Blueprint,\n" +
+			"membership, risk, or binding resolution decisions, create credentials, run checks, or run\n" +
+			"pair verification.\n\n" +
 			"Authentication uses conn login, interactive MCP login, or an explicit CONN_TOKEN.\n" +
 			"Project selection is process-local and never grants backend access.\n\n" +
 			"Environment:\n" +
@@ -253,5 +271,6 @@ func newMCPCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 		project, _ := deps.LookupEnv(ProjectEnv)
 		return deps.ServeMCP(cmd.Context(), MCPConfig{ServerURL: server(), DefaultProject: project}, logger)
 	}
+	cmd.AddCommand(newMCPConfigCommand(deps, streams))
 	return cmd
 }

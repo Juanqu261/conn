@@ -503,3 +503,41 @@ describe.skipIf(!gitAvailable)(
     });
   },
 );
+
+describe("diagnostics analysis", { timeout: 30_000 }, () => {
+  it("counts diagnostic codes per path without claims or message text", () => {
+    const worktree = worktreeWith({
+      "tsconfig.json": nodeNextProject,
+      "src/retry.ts":
+        "export function shouldRetryCharge(attempt: number, key: string): boolean { return attempt < 3 && key !== ''; }\n",
+      "src/charge.ts":
+        "import { shouldRetryCharge } from './retry.js';\nexport const first = shouldRetryCharge(1);\nexport const second = shouldRetryCharge(2);\n",
+    });
+    try {
+      const report = analyze({
+        request_version: 2,
+        mode: "diagnostics",
+        worktree,
+        canonical_remote: remote,
+      });
+      expectValidReport(report);
+      expect(report.claims).toEqual([]);
+      expect(report.diagnostic_counts).toEqual([
+        { code: "TS2554", path: "src/charge.ts", count: 2 },
+      ]);
+      expect(report.diagnostic_counts_truncated).toBe(false);
+      expect(JSON.stringify(report)).not.toContain("Expected");
+      expect(() =>
+        analyze({
+          request_version: 2,
+          mode: "diagnostics",
+          worktree,
+          canonical_remote: remote,
+          paths: ["src/retry.ts"],
+        }),
+      ).toThrow(AnalyzerRequestError);
+    } finally {
+      rmSync(worktree, { recursive: true, force: true });
+    }
+  });
+});

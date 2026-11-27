@@ -140,9 +140,12 @@ func (IntentRevision) SchemaID() string { return IntentRevisionSchema }
 // IntentView combines an immutable snapshot with its current lifecycle state.
 // Advisory observations deliberately do not alter a Charter or an Intent.
 type IntentView struct {
-	IntentRevision       IntentRevision `json:"intent_revision"`
-	Status               string         `json:"status"`
-	AdvisoryObservations []string       `json:"advisory_observations"`
+	IntentRevision IntentRevision `json:"intent_revision"`
+	Status         string         `json:"status"`
+	// OwnerHumanID is the Human behind the owning Participant. It attributes
+	// work and grants no authority.
+	OwnerHumanID         *uuid.UUID `json:"owner_human_id,omitempty"`
+	AdvisoryObservations []string   `json:"advisory_observations"`
 }
 
 func (IntentView) SchemaID() string { return IntentViewSchema }
@@ -164,15 +167,27 @@ type LocalAnalyzerReport struct {
 	Repository    AnalyzerRepository       `json:"repository"`
 	Claims        []SemanticClaimCandidate `json:"claims"`
 	Diagnostics   []AnalyzerDiagnostic     `json:"diagnostics"`
+	// DiagnosticCounts and DiagnosticCountsTruncated are present only in
+	// diagnostics mode, which is never attached to an Intent.
+	DiagnosticCounts          []AnalyzerDiagnosticCount `json:"diagnostic_counts,omitzero"`
+	DiagnosticCountsTruncated *bool                     `json:"diagnostic_counts_truncated,omitempty"`
+}
+
+// AnalyzerDiagnosticCount counts one compiler diagnostic code at one path.
+type AnalyzerDiagnosticCount struct {
+	Code  string `json:"code"`
+	Path  string `json:"path,omitempty"`
+	Count int    `json:"count"`
 }
 
 func (LocalAnalyzerReport) SchemaID() string { return LocalAnalyzerReportSchema }
 
 // Analyzer report modes and version.
 const (
-	AnalyzerReportVersion = 2
-	AnalyzerModePlanned   = "planned"
-	AnalyzerModeObserved  = "observed"
+	AnalyzerReportVersion   = 2
+	AnalyzerModePlanned     = "planned"
+	AnalyzerModeObserved    = "observed"
+	AnalyzerModeDiagnostics = "diagnostics"
 )
 
 type AnalyzerRepository struct {
@@ -207,9 +222,12 @@ type CollisionAssessment struct {
 	MatchedSubjects       []string    `json:"matched_subjects"`
 	DecisionRef           *uuid.UUID  `json:"decision_ref,omitempty"`
 	SupportingContextRefs []uuid.UUID `json:"supporting_context_refs,omitempty"`
-	ExplanationMarkdown   string      `json:"explanation_markdown"`
-	CreatedAt             Timestamp   `json:"created_at"`
-	SupersededAt          *Timestamp  `json:"superseded_at,omitempty"`
+	// LatestCombinationOutcome is set by read views only; stored assessments
+	// never carry it.
+	LatestCombinationOutcome string     `json:"latest_combination_outcome,omitempty"`
+	ExplanationMarkdown      string     `json:"explanation_markdown"`
+	CreatedAt                Timestamp  `json:"created_at"`
+	SupersededAt             *Timestamp `json:"superseded_at,omitempty"`
 }
 
 func (CollisionAssessment) SchemaID() string { return CollisionAssessmentSchema }
@@ -399,6 +417,7 @@ type ConflictContextPack struct {
 	EvidenceRefs           []uuid.UUID         `json:"evidence_refs,omitempty"`
 	Uncertainties          []string            `json:"uncertainties"`
 	ExistingDecisionRefs   []uuid.UUID         `json:"existing_decision_refs,omitempty"`
+	CombinationChecks      []CombinationCheck  `json:"combination_checks,omitempty"`
 	UnresolvedQuestion     string              `json:"unresolved_question,omitempty"`
 	AllowedResolutionKinds []string            `json:"allowed_resolution_kinds"`
 	SafeHandlingNote       string              `json:"safe_handling_note"`

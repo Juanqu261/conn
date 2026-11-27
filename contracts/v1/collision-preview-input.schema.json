@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:collision-preview-input",
+  "title": "Collision preview input",
+  "description": "Candidate claims to compare with active Intent revisions without publishing anything. Conn gives the candidates an Intent identity that is never stored. With as_intent_id, the candidates stand for the next revision of that active Intent, so its current claims are excluded and human decisions on its collisions can be inherited.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["claims"],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "urn:conn:schema:v1:semantic-claim-candidate" }
+    },
+    "exclude_intent_ids": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+    },
+    "as_intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+  }
+}

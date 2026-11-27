@@ -105,6 +105,8 @@ func writeProblem(w http.ResponseWriter, log *slog.Logger, err error) {
 		writeInvalid(w, log, "The request is invalid.", "")
 	case errors.Is(err, application.ErrNotFound):
 		writeNotFound(w, log)
+	case errors.Is(err, application.ErrHumanDirectOnly):
+		writeError(w, log, http.StatusForbidden, "human_direct_required", "Only a human-direct surface such as the Conn CLI may create CI credentials; MCP tools and agents cannot.")
 	case errors.Is(err, application.ErrForbidden):
 		writeError(w, log, http.StatusForbidden, "forbidden", "Your role in this project does not permit this operation.")
 	case errors.Is(err, application.ErrConflict):

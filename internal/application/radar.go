@@ -12,12 +12,12 @@ import (
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
-// Radar assembles one member-authorized coordination snapshot. All reads run
+// RadarAs assembles one coordination snapshot for an authorized reader. All reads run
 // in the Store's repeatable-read transaction, including its event cursor.
-func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.RadarView], error) {
+func (p *Projects) RadarAs(ctx context.Context, reader Reader, projectID uuid.UUID) (Result[protocol.RadarView], error) {
 	var result Result[protocol.RadarView]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		project, err := tx.Project(ctx, projectID)
@@ -46,6 +46,9 @@ func (p *Projects) Radar(ctx context.Context, actor, projectID uuid.UUID) (Resul
 		}
 		decided, err := tx.DecidedCollisions(ctx, projectID, maxRadarDecidedCollisions)
 		if err != nil {
+			return err
+		}
+		if err := withCombinationOutcomes(ctx, tx, projectID, collisions, decided); err != nil {
 			return err
 		}
 		decisionRefs, err := tx.ResolutionDecisionRefs(ctx, projectID)

@@ -1,11 +1,13 @@
 // Package kirointegration manages Conn's optional, inspectable Kiro guidance
 // bundle. It never edits MCP settings, agents, skills, or authoritative state.
 //
-// Bundle version 2 contains warn-only command hooks and steering. The hook
-// file renders the conn command into each hook. Removal recognizes Conn
-// content by re-rendering the template with the command found in the
-// installed file. An unchanged version 1 agent-prompt hook file is migrated
-// away; a modified one is preserved for manual review.
+// Bundle version 2 contains warn-only command hooks and steering. The steering
+// renders from internal/agentguide, the same source as the AGENTS.md section.
+// The hook file renders the conn command into each hook. Removal recognizes
+// Conn content by re-rendering the template with the command found in the
+// installed file. An unchanged earlier steering file is replaced, and an
+// unchanged version 1 agent-prompt hook file is migrated away; a modified one
+// is preserved for manual review.
 package kirointegration
 
 import (
@@ -19,6 +21,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Juanqu261/conn/internal/agentguide"
 )
 
 type Scope string
@@ -39,6 +43,7 @@ type Action string
 
 const (
 	ActionCreate    Action = "create"
+	ActionReplace   Action = "replace"
 	ActionUnchanged Action = "unchanged"
 	ActionRemove    Action = "remove"
 	ActionAbsent    Action = "absent"
@@ -57,9 +62,9 @@ const CommandPlaceholder = "{{CONN_COMMAND}}"
 const PathCommand = "conn"
 
 const (
-	steeringTemplate = "templates/steering/conn-work-loop.md"
-	hooksTemplate    = "templates/hooks/conn-hooks.json"
-	legacyTemplate   = "templates/legacy/conn-lifecycle.v1.json"
+	hooksTemplate          = "templates/hooks/conn-hooks.json"
+	legacyTemplate         = "templates/legacy/conn-lifecycle.v1.json"
+	legacySteeringTemplate = "templates/legacy/conn-work-loop.v2.md"
 )
 
 var (
@@ -69,7 +74,7 @@ var (
 	LegacyHooksTarget = filepath.Join(".kiro", "hooks", "conn-lifecycle.json")
 )
 
-//go:embed templates/steering/conn-work-loop.md templates/hooks/conn-hooks.json templates/legacy/conn-lifecycle.v1.json
+//go:embed templates/hooks/conn-hooks.json templates/legacy/conn-lifecycle.v1.json templates/legacy/conn-work-loop.v2.md
 var templateFiles embed.FS
 
 type Artifact struct {
@@ -80,6 +85,9 @@ type Artifact struct {
 type Change struct {
 	RelativePath string
 	Action       Action
+	// Previous is set when the target holds an unchanged earlier Conn
+	// version, which the change replaces or removes.
+	Previous []byte
 }
 
 type Plan struct {
@@ -167,10 +175,7 @@ func Artifacts(command string) ([]Artifact, error) {
 	if command == "" || strings.ContainsAny(command, "\r\n\x00") {
 		return nil, errors.New("the hook command must be one non-empty line")
 	}
-	steering, err := fs.ReadFile(templateFiles, steeringTemplate)
-	if err != nil {
-		return nil, err
-	}
+	steering := agentguide.KiroSteering()
 	hooks, err := renderHooks(command)
 	if err != nil {
 		return nil, err
@@ -280,6 +285,12 @@ func Preview(scope Scope, root string, mode Mode, command string) (Plan, error) 
 				action = ActionRemove
 			}
 			plan.Changes = append(plan.Changes, Change{RelativePath: artifact.RelativePath, Action: action})
+		case filepath.Clean(artifact.RelativePath) == filepath.Clean(steeringTarget) && isPreviousSteering(content):
+			action := ActionReplace
+			if mode == ModeRemove {
+				action = ActionRemove
+			}
+			plan.Changes = append(plan.Changes, Change{RelativePath: artifact.RelativePath, Action: action, Previous: content})
 		default:
 			plan.Changes = append(plan.Changes, Change{RelativePath: artifact.RelativePath, Action: ActionConflict})
 		}
@@ -354,6 +365,14 @@ func install(root string, changes []Change, artifacts map[string]Artifact) ([]st
 		}
 	}
 	for _, change := range changes {
+		if change.Action == ActionReplace {
+			artifact := artifacts[filepath.Clean(change.RelativePath)]
+			if err := replace(root, artifact, change.Previous); err != nil {
+				rollback()
+				return nil, err
+			}
+			continue
+		}
 		if change.Action != ActionCreate {
 			continue
 		}
@@ -416,6 +435,9 @@ func remove(root string, changes []Change, artifacts map[string]Artifact, pruneD
 			continue
 		}
 		artifact := artifacts[filepath.Clean(change.RelativePath)]
+		if change.Previous != nil {
+			artifact.Content = change.Previous
+		}
 		target, err := safeTarget(root, artifact.RelativePath)
 		if err != nil {
 			rollback()
@@ -441,6 +463,27 @@ func remove(root string, changes []Change, artifacts map[string]Artifact, pruneD
 		filepath.Join(root, ".kiro"),
 	} {
 		_ = os.Remove(directory)
+	}
+	return nil
+}
+
+// replace swaps an unchanged earlier Conn version for the current content.
+func replace(root string, artifact Artifact, previous []byte) error {
+	target, err := safeTarget(root, artifact.RelativePath)
+	if err != nil {
+		return err
+	}
+	content, err := readExistingTarget(target)
+	if err != nil || !bytes.Equal(content, previous) {
+		return ErrConflict
+	}
+	temporary := target + ".conn-tmp"
+	if err := os.WriteFile(temporary, artifact.Content, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(temporary, target); err != nil {
+		_ = os.Remove(temporary)
+		return err
 	}
 	return nil
 }
@@ -523,4 +566,11 @@ func safeTarget(root, relative string) (string, error) {
 func withinRoot(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
+}
+
+// isPreviousSteering reports whether content is an unchanged earlier Conn
+// steering file.
+func isPreviousSteering(content []byte) bool {
+	previous, err := fs.ReadFile(templateFiles, legacySteeringTemplate)
+	return err == nil && bytes.Equal(content, previous)
 }

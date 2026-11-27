@@ -276,6 +276,9 @@ func renderMarkdown(packet protocol.ReviewPacket, renderNotes []string) string {
 		if collision.ProposalCount != nil {
 			text += fmt.Sprintf(". Proposals: %d", *collision.ProposalCount)
 		}
+		if collision.LatestCombinationOutcome != "" {
+			text += fmt.Sprintf(". Latest combination check: **%s** (run on a participant's machine)", strings.ReplaceAll(collision.LatestCombinationOutcome, "_", " "))
+		}
 		item("%s", text)
 	}
 

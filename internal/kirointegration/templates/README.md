@@ -2,7 +2,7 @@
 
 This directory contains the versioned source for Conn's optional Kiro-specific guidance (bundle version 2):
 
-- `steering/conn-work-loop.md` becomes `.kiro/steering/conn-work-loop.md`.
+- `.kiro/steering/conn-work-loop.md` renders from `internal/agentguide`, the same source as the `AGENTS.md` section for other coding agents. `legacy/conn-work-loop.v2.md` is the previous steering file; an unchanged copy is replaced during installation.
 - `hooks/conn-hooks.json` becomes `.kiro/hooks/conn-hooks.json`, with `{{CONN_COMMAND}}` replaced by the conn command.
 - `legacy/conn-lifecycle.v1.json` is the exact version 1 agent-prompt hook file. It is never installed; it lets installation recognize and retire an unchanged copy.
 

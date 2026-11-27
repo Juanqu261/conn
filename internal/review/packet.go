@@ -27,6 +27,11 @@ type PacketInput struct {
 	Records Records
 	Git     GitFacts
 	Written map[string]bool
+	// Observed, when non-nil, replaces the stored observed claims for drift,
+	// as the CI check does with the claims it observed itself.
+	Observed []protocol.SemanticClaim
+	// OwnerLogin, when set, names the Intent owner instead of the reader.
+	OwnerLogin string
 }
 
 // BuildPacket assembles a schema-valid review packet. It persists nothing.
@@ -42,7 +47,7 @@ func BuildPacket(in PacketInput) (protocol.ReviewPacket, error) {
 		Project:          protocol.ReviewProject{ID: work.Project.ProjectID, Name: SanitizeTitle(work.Project.Name)},
 		Intent: protocol.ReviewIntent{
 			ID: intent.IntentID, Revision: intent.Revision, ParticipantID: intent.ParticipantID,
-			OwnerLogin: work.Reader.Human.GitHubLogin, Active: intentActive(records.Radar, intent),
+			OwnerLogin: ownerLogin(in, work), Active: intentActive(records.Radar, intent),
 			Summary: SanitizeProse(intent.SummaryMarkdown, maxSummaryRunes),
 		},
 		Objective:      protocol.ReviewObjective{ID: objective.ObjectiveID, Revision: objective.Revision, Title: SanitizeTitle(objective.Title)},
@@ -162,9 +167,13 @@ func BuildPacket(in PacketInput) (protocol.ReviewPacket, error) {
 		unknowns = append(unknowns, fmt.Sprintf("%d evidence reference(s) on this Intent name no acceptance key and are not mapped.", unkeyed))
 	}
 
+	observed := records.Radar.SemanticClaims
+	if in.Observed != nil {
+		observed = in.Observed
+	}
 	packet.Drift = Drift(DriftInput{
 		IntentID: intent.IntentID, CurrentRevision: intent.Revision, Declared: intent.DeclaredClaims,
-		Observed: records.Radar.SemanticClaims, Analysis: focus.Analysis, ChangedFiles: git.ChangedFiles,
+		Observed: observed, Analysis: focus.Analysis, ChangedFiles: git.ChangedFiles,
 		Written: in.Written, Acceptance: acceptanceStates,
 	})
 	switch analysis := packet.Drift.Analysis; {
@@ -269,6 +278,7 @@ func reviewCollision(collision protocol.CollisionAssessment, intentID uuid.UUID,
 	item := protocol.ReviewCollision{
 		ID: collision.CollisionID, RuleID: collision.RuleID, Severity: collision.Severity, State: collision.State,
 		MatchedSubjects: append([]string{}, collision.MatchedSubjects...), Counterpart: counterpart,
+		LatestCombinationOutcome: collision.LatestCombinationOutcome,
 	}
 	if count, ok := records.Proposals[collision.CollisionID]; ok {
 		item.ProposalCount = &count
@@ -285,6 +295,13 @@ func reviewCollision(collision protocol.CollisionAssessment, intentID uuid.UUID,
 		}
 	}
 	return item
+}
+
+func ownerLogin(in PacketInput, work protocol.WorkContext) string {
+	if in.OwnerLogin != "" {
+		return in.OwnerLogin
+	}
+	return work.Reader.Human.GitHubLogin
 }
 
 func intentActive(radar protocol.RadarView, intent protocol.IntentRevision) bool {

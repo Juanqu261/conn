@@ -26,6 +26,9 @@ func (p *Projects) AttachStaticAnalysisAtRevision(ctx context.Context, actor, pr
 	if err := validateRecord(report); err != nil {
 		return Result[protocol.IntentView]{}, err
 	}
+	if report.Mode == protocol.AnalyzerModeDiagnostics {
+		return Result[protocol.IntentView]{}, &InvalidError{Pointer: "/mode", Message: "Diagnostics-mode reports are for pair verification and are never attached to an Intent."}
+	}
 	if err := analyzer.ValidateReport(report); err != nil {
 		return Result[protocol.IntentView]{}, &InvalidError{Message: "The analyzer report contains unsafe source, prompt, credential-shaped, or oversized content."}
 	}

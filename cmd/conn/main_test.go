@@ -124,7 +124,7 @@ func TestMCPStdio(t *testing.T) {
 		"CONN_SERVER_URL="+backend.URL, "CONN_TOKEN="+bob.Token.Reveal(), "CONN_PROJECT="+projectID.String())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	client := sdk.NewClient(&sdk.Implementation{Name: "conn-test", Version: "0"}, nil)
+	client := sdk.NewClient(&sdk.Implementation{Name: "kiro-conn-test", Version: "0"}, nil)
 	session, err := client.Connect(ctx, &sdk.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		t.Fatalf("initialize: %v\nstderr:\n%s", err, stderr.String())
@@ -150,7 +150,8 @@ func TestMCPStdio(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	slices.Sort(names)
-	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "list_concepts", "list_projects", "login", "logout", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_review_packet", "read_work_context", "release_intent", "revise_intent", "select_project", "session_status", "suggest_claims"}; !slices.Equal(names, want) {
+	// No tool creates credentials, runs checks, or runs pair verification.
+	if want := []string{"analyze_intent", "attach_evidence", "check_collisions", "check_updates", "install_ci_check", "list_concepts", "list_projects", "login", "logout", "preview_ci_check", "propose_resolution", "publish_intent", "read_blueprint", "read_conflict_context", "read_my_charter", "read_objective", "read_radar", "read_review_packet", "read_work_context", "release_intent", "remove_ci_check", "revise_intent", "select_project", "session_status", "suggest_claims"}; !slices.Equal(names, want) {
 		t.Fatalf("tools %v, want %v", names, want)
 	}
 	listedPrompts, err := session.ListPrompts(ctx, nil)
@@ -259,7 +260,7 @@ func TestMCPStdio(t *testing.T) {
 	aliceCmd.Env = append(os.Environ(), runMainEnv+"=1",
 		"CONN_SERVER_URL="+backend.URL, "CONN_TOKEN="+alice.Token.Reveal(), "CONN_PROJECT="+projectID.String())
 	aliceCmd.Stderr = &aliceStderr
-	aliceClient := sdk.NewClient(&sdk.Implementation{Name: "conn-alice-test", Version: "0"}, nil)
+	aliceClient := sdk.NewClient(&sdk.Implementation{Name: "kiro-alice-test", Version: "0"}, nil)
 	aliceSession, err := aliceClient.Connect(ctx, &sdk.CommandTransport{Command: aliceCmd}, nil)
 	if err != nil {
 		t.Fatalf("initialize Alice MCP: %v\nstderr:\n%s", err, aliceStderr.String())

@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:local-analyzer-report",
   "title": "Local analyzer report",
-  "description": "Bounded local analysis output. It contains normalized claims and diagnostics, never repository source, diffs, or prompts. Planned mode describes files a participant intends to change; observed mode describes the difference between the Intent base revision and the working tree.",
+  "description": "Bounded local analysis output. It contains normalized claims and diagnostics, never repository source, diffs, or prompts. Planned mode describes files a participant intends to change; observed mode describes the difference between the Intent base revision and the working tree; diagnostics mode counts compiler diagnostic codes per path for pair verification, has no claims, and is never attached to an Intent.",
   "type": "object",
   "additionalProperties": false,
   "required": ["report_version", "mode", "repository", "claims", "diagnostics"],
   "properties": {
     "report_version": { "const": 2 },
-    "mode": { "enum": ["planned", "observed"] },
+    "mode": { "enum": ["planned", "observed", "diagnostics"] },
     "repository": {
       "type": "object",
       "additionalProperties": false,
@@ -48,6 +48,44 @@
           "line": { "type": "integer", "minimum": 1 }
         }
       }
+    },
+    "diagnostic_counts": {
+      "description": "Diagnostics mode only: compiler diagnostic codes aggregated over every discovered program. Message text is never included.",
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "count"],
+        "properties": {
+          "code": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
+          "path": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+          "count": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "diagnostic_counts_truncated": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "mode": { "const": "diagnostics" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "required": ["diagnostic_counts", "diagnostic_counts_truncated"],
+        "properties": {
+          "claims": { "type": "array", "maxItems": 0 },
+          "diagnostic_counts": { "type": "array" },
+          "diagnostic_counts_truncated": { "type": "boolean" }
+        }
+      },
+      "else": {
+        "properties": {
+          "diagnostic_counts": false,
+          "diagnostic_counts_truncated": false
+        }
+      }
     }
-  }
+  ]
 }

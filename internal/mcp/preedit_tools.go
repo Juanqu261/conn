@@ -31,6 +31,8 @@ type suggestClaimsInput struct {
 	Symbols     map[string][]string `json:"symbols,omitempty"`
 	Focus       string              `json:"focus,omitempty"`
 	Worktree    string              `json:"worktree,omitempty"`
+	Preview     bool                `json:"preview_collisions,omitempty"`
+	IntentID    string              `json:"intent_id,omitempty"`
 }
 
 func registerPreEditTools(server *sdk.Server, t tools) {
@@ -48,6 +50,7 @@ func registerPreEditTools(server *sdk.Server, t tools) {
 	sdk.AddTool(server, &sdk.Tool{
 		Name: "suggest_claims",
 		Description: "Before editing, turn planned repository-relative paths, optional export names, an Objective, and a task focus into declared-claim candidates: changes for planned exports, consumes for repository contracts the files import, Objective invariants, and catalog matches. " +
+			"With preview_collisions, also returns the collisions the candidates would open against active Intents, including inherited decisions, still without publishing. " +
 			"Nothing is persisted; include the chosen candidates as intent.declared_claims in publish_intent or revise_intent.",
 		InputSchema: suggestClaimsToolSchema(),
 		Annotations: reads("Suggest claims before editing"),
@@ -91,10 +94,19 @@ func (t tools) suggestClaims(ctx context.Context, _ *sdk.CallToolRequest, in sug
 	if err != nil {
 		return t.fail("suggest_claims", err)
 	}
+	var asIntent *uuid.UUID
+	if in.IntentID != "" {
+		id, err := parseID("intent_id", in.IntentID)
+		if err != nil {
+			return t.fail("suggest_claims", err)
+		}
+		asIntent = &id
+	}
 	suggestions, err := preedit.SuggestClaims(ctx, preedit.SuggestDeps{
 		Client: client, Analyzer: t.cfg.Analyzer, AnalyzerAvailable: t.analyzerAvailable(), Discover: t.discoverAt(),
 	}, preedit.SuggestRequest{
 		ProjectID: projectID, ObjectiveID: objectiveID, Worktree: worktree, Paths: in.Paths, Symbols: in.Symbols, Focus: in.Focus,
+		PreviewCollisions: in.Preview, AsIntentID: asIntent,
 	})
 	if err != nil {
 		return t.fail("suggest_claims", err)
@@ -112,6 +124,9 @@ func (t tools) suggestClaims(ctx context.Context, _ *sdk.CallToolRequest, in sug
 	}
 	if len(suggestions.NewPaths) > 0 {
 		summary += fmt.Sprintf(" New planned file(s): %s.", strings.Join(suggestions.NewPaths, ", "))
+	}
+	if preview := suggestions.Preview; preview != nil {
+		summary += fmt.Sprintf(" The candidates would open %d advisory collision(s); nothing was published.", len(preview.Collisions))
 	}
 	return envelope(summary, data, suggestions.AsOfEvent)
 }
@@ -199,6 +214,7 @@ func (t tools) rememberFocus(ctx context.Context, client *httpclient.Client, pro
 		sameIntent := focus.IntentID != nil && *focus.IntentID == intent.IntentID
 		focus.ServerURL, focus.ProjectID, focus.RepositoryID = client.URL(), &projectCopy, &repositoryCopy
 		focus.IntentID, focus.IntentRevision, focus.ParticipantID = &intentCopy, intent.Revision, &participantCopy
+		focus.ParticipantAdapter = t.cfg.adapter.kind()
 		if known || !sameIntent {
 			focus.KnownCollisions, focus.KnownPairs = states, pairs
 		}

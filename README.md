@@ -14,6 +14,8 @@ Conn coordinates work. It does not launch agents, supervise people, score produc
 - A local TypeScript analyzer subprocess with planned and diff-based observed modes that receives no Conn credential and returns bounded, source-free JSON.
 - Kiro session diagnostics, login/logout, Project selection, focused work context, workflow prompts, optional resources, local analysis, and generated handoffs.
 - Review proof: repository-defined checks in `.conn/checks.json` that `conn evidence run` executes and attaches as observed evidence, evidence provenance and staleness, `Conn-Intent` commit trailers with an optional Git hook, scope drift, and a bounded review packet for pull-request descriptions.
+- Verification and CI: `conn verify-pair` tests the two branches of a collision together and records an advisory combination check; a report-only GitHub Actions check that Conn installs shows Intents, previewed collisions, and review packets on every pull request through a narrow CI credential.
+- Adoption: an `AGENTS.md` section and printed MCP configuration for other coding agents, `conn start` from a Kiro spec, GitHub issue, or Objective, GitHub issue import, and Project-level insights.
 
 The MVP requires the authoritative backend. It has no offline outbox, background polling, idle MCP push, or production web application.
 
@@ -151,6 +153,84 @@ Project resolution uses explicit tool input, process-local selection, `CONN_PROJ
 Interactive Kiro can run Device Flow through `login`. Headless sessions have no mid-session input; use an explicit non-persistent `CONN_TOKEN` and narrowly trusted tools. Do not use `--trust-all-tools` for normal Conn operation.
 
 Read-only tools, including `read_review_packet`, may be allowed after inspection. Keep login, logout, Intent writes, analysis, evidence, and proposal tools on `ask` unless a specific automation has a reviewed reason to allow them. Keep the shell tool on `ask` so each `conn evidence run` needs approval. Kiro permission allows a tool call; it is never a Charter, Objective, Blueprint, membership, risk, or binding resolution decision.
+
+## Pair verification
+
+When two Intents collide, test their branches together before either merges:
+
+```powershell
+conn verify-pair <collision-id>
+conn verify-pair <collision-id> --fetch --yes
+```
+
+Conn resolves both `branch_ref` values from local branches or `origin/<branch>` (fetching only with `--fetch`), shows the two commits and the commands, and asks for confirmation because it runs code from both branches on this machine. It merges them in temporary detached worktrees, compares TypeScript diagnostics of the merged tree with each branch alone, then runs the setup and checks of the `pair_verification` section of `.conn/checks.json` on the default branch, never from either feature branch:
+
+```json
+{
+  "pair_verification": {
+    "setup": { "command": ["pnpm", "install", "--frozen-lockfile"], "timeout_seconds": 900 },
+    "checks": ["gateway-tests", "order-tests"]
+  }
+}
+```
+
+The outcome is `merge_conflict`, `failing` for a new diagnostic or a failing check, `incomplete` when setup failed, a run timed out, or the analyzer was unavailable, and `passing` otherwise. Conn records an immutable combination check with commits, the diagnostic delta, exit codes, durations, and output hashes, and shows its latest outcome in conflict context, Radar, and review packets. It never changes the collision state. Commands run without a shell and without any `CONN_` variable, and the worktrees are removed after success, failure, or cancellation unless `--keep-worktree` is passed. `/conn-resolve` suggests the command; agents run it only through the shell with your approval.
+
+## Pull-request check
+
+Conn installs a report-only GitHub Actions workflow at `.github/workflows/conn-check.yml`:
+
+```powershell
+conn ci preview                 # workflow, target, and prerequisites; writes nothing
+conn ci install --comment       # also keep one pull-request comment up to date
+# Later: conn ci remove
+```
+
+In Kiro or another MCP client, `preview_ci_check` and `install_ci_check` do the same and only write the workflow file. The workflow builds Conn from the pinned source revision (this build's commit, or `--conn-ref`), checks out the pull request at its head, and runs `conn ci check`, which reports the Intents named by `Conn-Intent` trailers with one review packet each, drift against the changes observed in CI, unregistered work, and collisions previewed for the observed changes. It never fails the pull request for a finding or an error, runs no pull-request code, and writes nothing to Conn. Fork pull requests receive no secret and report that the check was skipped.
+
+Prerequisites, which `conn ci preview` prints with exact values:
+
+1. A Conn backend reachable from GitHub-hosted runners over HTTPS. A local development server is not reachable unless you use a self-hosted runner on the same network.
+2. A readable Conn source repository; the template assumes the public `Juanqu261/conn`.
+3. A Project owner creates the CI credential and stores it as the `CONN_CI_TOKEN` secret: `conn ci credential create --repository <repository-id> --github-secret <owner/name>`.
+4. `gh variable set CONN_SERVER_URL --body <https-url> --repo <owner/name>`.
+5. Commit and push the workflow.
+
+A CI credential is bound to one Project and RepositoryConnection, reads only the routes the check needs plus the collision preview, expires after 1 to 365 days (90 by default), and is stored as a SHA-256 hash. `--github-secret` writes the token to the standard input of `gh secret set`; `--print` writes it to standard output; without either the command refuses. List and revoke credentials with `conn ci credential list` and `conn ci credential revoke <credential-id>`. Agents never create CI credentials, and the backend refuses creation from MCP.
+
+## Other coding agents
+
+Any MCP coding agent can use the same loop:
+
+```powershell
+conn mcp config --client generic   # mcpServers JSON with this conn executable
+conn mcp config --client kiro      # the kiro-cli mcp add command
+conn agents preview
+conn agents install                # one marker-delimited Conn section in AGENTS.md
+# Later: conn agents remove
+```
+
+Conn prints configuration and never writes MCP client settings. The `AGENTS.md` section comes from the same source as the Kiro steering; content outside its markers is never changed, and a modified section is preserved as a conflict. A client that identifies itself as something other than Kiro is recorded with participant adapter `mcp`; this changes attribution, not authority. Kiro command hooks remain Kiro-only.
+
+## Starting work and importing issues
+
+```powershell
+conn start .kiro/specs/checkout-retries --paths src/payments/retry.ts
+conn start acme/shop#218 --paths src/payments/retry.ts --publish
+conn objective import-github-issue acme/shop#218
+```
+
+`conn start` resolves the Project, then reads an Objective by ID or imports a Kiro spec or GitHub issue after showing its content and suggested acceptance criteria. An unchanged earlier import is reused and a changed one becomes a new revision. It then suggests claims for the planned paths, previews their collisions without publishing, and offers to publish a CLI Intent with the local focus, to continue in Kiro with `/conn-start <objective-id>`, or to quit. Non-interactive runs need `--publish` or `--import-only`.
+
+Issue import calls the GitHub REST API from your machine, using `GH_TOKEN` or `GITHUB_TOKEN` only when set. The token is never stored or sent to Conn. Pull requests and bodies over 32,768 characters are refused, and an issue from a repository the Project does not connect produces a warning.
+
+## Insights
+
+```powershell
+conn insights --since-days 30
+```
+
+Insights report collisions opened per rule, decisions per kind and rule, the false-positive share, the median time to a first decision, decisions made before either Intent was released, analyzed revisions with undeclared observed changes, acceptance criteria by evidence provenance, and combination checks by outcome. They are Project-level only and never include a person; any ratio with fewer than five samples reports insufficient data.
 
 ## Validation and design
 

@@ -196,7 +196,7 @@ func ownedActiveIntent(work protocol.WorkContext, intentID uuid.UUID) (protocol.
 			return intent, nil
 		}
 	}
-	return protocol.IntentRevision{}, errors.New("the selected Intent is not an active Intent owned by this Kiro participant")
+	return protocol.IntentRevision{}, errors.New("the selected Intent is not an active Intent owned by this MCP participant")
 }
 
 func analysisRepository(repositories []protocol.RepositoryConnection, repositoryID uuid.UUID) (protocol.RepositoryConnection, error) {

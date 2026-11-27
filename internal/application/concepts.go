@@ -195,8 +195,8 @@ func jaccard(left, right map[string]bool) (float64, []string) {
 	return float64(len(shared)) / float64(union), shared
 }
 
-// Concepts returns one bounded, member-authorized catalog page at one cursor.
-func (p *Projects) Concepts(ctx context.Context, actor, projectID uuid.UUID, query ConceptQuery) (Result[protocol.ConceptList], error) {
+// ConceptsAs returns one bounded catalog page at one cursor to an authorized reader.
+func (p *Projects) ConceptsAs(ctx context.Context, reader Reader, projectID uuid.UUID, query ConceptQuery) (Result[protocol.ConceptList], error) {
 	if query.Limit == 0 {
 		query.Limit = DefaultConceptPage
 	}
@@ -216,7 +216,7 @@ func (p *Projects) Concepts(ctx context.Context, actor, projectID uuid.UUID, que
 	}
 	var result Result[protocol.ConceptList]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		objectives, err := tx.CurrentObjectives(ctx, projectID)

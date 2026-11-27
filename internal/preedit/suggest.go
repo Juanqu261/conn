@@ -39,6 +39,11 @@ type SuggestRequest struct {
 	Paths    []string
 	Symbols  map[string][]string
 	Focus    string
+	// PreviewCollisions also previews the collisions the candidates would
+	// open, without publishing anything. AsIntentID treats them as the next
+	// revision of that active Intent.
+	PreviewCollisions bool
+	AsIntentID        *uuid.UUID
 }
 
 // SuggestDeps are the local and backend capabilities suggestions use.
@@ -72,7 +77,10 @@ type Suggestions struct {
 	Diagnostics  []protocol.AnalyzerDiagnostic `json:"diagnostics"`
 	Analysis     AnalysisStatus                `json:"analysis"`
 	RepositoryID *uuid.UUID                    `json:"repository_id,omitempty"`
-	AsOfEvent    int64                         `json:"-"`
+	// Preview lists the collisions the candidates would open. Nothing was
+	// persisted.
+	Preview   *protocol.CollisionPreview `json:"preview,omitempty"`
+	AsOfEvent int64                      `json:"-"`
 }
 
 // SuggestClaims turns planned paths, optional symbols, an Objective, and a
@@ -153,6 +161,18 @@ func SuggestClaims(ctx context.Context, deps SuggestDeps, request SuggestRequest
 		}
 	}
 	result.Candidates, result.OmittedCount = merged.bounded(MaxCandidates)
+	if request.PreviewCollisions {
+		claims := make([]protocol.SemanticClaimCandidate, 0, len(result.Candidates))
+		for _, candidate := range result.Candidates {
+			claims = append(claims, candidate.Claim)
+		}
+		preview, err := deps.Client.PreviewCollisions(ctx, request.ProjectID, protocol.CollisionPreviewInput{Claims: claims, AsIntentID: request.AsIntentID})
+		if err != nil {
+			return Suggestions{}, err
+		}
+		result.Preview = &preview.Data
+		result.AsOfEvent = max(result.AsOfEvent, preview.AsOfEvent)
+	}
 	return result, nil
 }
 

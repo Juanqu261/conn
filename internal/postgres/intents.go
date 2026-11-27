@@ -72,11 +72,13 @@ func (t projectTx) InsertIntentRevision(ctx context.Context, revision protocol.I
 
 func (t projectTx) Intent(ctx context.Context, projectID, intentID uuid.UUID) (protocol.IntentView, error) {
 	var status string
+	var owner uuid.UUID
 	var document []byte
 	err := t.tx.QueryRow(ctx, `
-		SELECT i.status, r.document FROM intents i
+		SELECT i.status, p.human_id, r.document FROM intents i
 		JOIN intent_revisions r ON r.intent_id = i.intent_id AND r.revision = i.current_revision
-		WHERE i.project_id = $1 AND i.intent_id = $2`, projectID, intentID).Scan(&status, &document)
+		JOIN participants p ON p.participant_id = i.participant_id
+		WHERE i.project_id = $1 AND i.intent_id = $2`, projectID, intentID).Scan(&status, &owner, &document)
 	if err != nil {
 		return protocol.IntentView{}, notFound(err)
 	}
@@ -84,13 +86,14 @@ func (t projectTx) Intent(ctx context.Context, projectID, intentID uuid.UUID) (p
 	if err != nil {
 		return protocol.IntentView{}, fmt.Errorf("stored intent revision: %w", err)
 	}
-	return intentView(revision, status), nil
+	return intentView(revision, status, owner), nil
 }
 
 func (t projectTx) Intents(ctx context.Context, projectID uuid.UUID) ([]protocol.IntentView, error) {
 	rows, err := t.tx.Query(ctx, `
-		SELECT i.status, r.document FROM intents i
+		SELECT i.status, p.human_id, r.document FROM intents i
 		JOIN intent_revisions r ON r.intent_id = i.intent_id AND r.revision = i.current_revision
+		JOIN participants p ON p.participant_id = i.participant_id
 		WHERE i.project_id = $1 ORDER BY i.created_at, i.intent_id`, projectID)
 	if err != nil {
 		return nil, err
@@ -99,15 +102,16 @@ func (t projectTx) Intents(ctx context.Context, projectID uuid.UUID) ([]protocol
 	items := []protocol.IntentView{}
 	for rows.Next() {
 		var status string
+		var owner uuid.UUID
 		var document []byte
-		if err := rows.Scan(&status, &document); err != nil {
+		if err := rows.Scan(&status, &owner, &document); err != nil {
 			return nil, err
 		}
 		revision, err := protocol.Decode[protocol.IntentRevision](document)
 		if err != nil {
 			return nil, fmt.Errorf("stored intent revision: %w", err)
 		}
-		items = append(items, intentView(revision, status))
+		items = append(items, intentView(revision, status, owner))
 	}
 	return items, rows.Err()
 }
@@ -133,8 +137,8 @@ func (t projectTx) ReleaseIntent(ctx context.Context, projectID, intentID, parti
 	return err == nil && tag.RowsAffected() == 1, err
 }
 
-func intentView(revision protocol.IntentRevision, status string) protocol.IntentView {
-	return protocol.IntentView{IntentRevision: revision, Status: status, AdvisoryObservations: []string{application.IntentCharterObservation(revision)}}
+func intentView(revision protocol.IntentRevision, status string, owner uuid.UUID) protocol.IntentView {
+	return protocol.IntentView{IntentRevision: revision, Status: status, OwnerHumanID: &owner, AdvisoryObservations: []string{application.IntentCharterObservation(revision)}}
 }
 
 var _ application.Tx = projectTx{}

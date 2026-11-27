@@ -34,8 +34,10 @@ var (
 
 // Request is the source-free, credential-free subprocess input contract.
 // Planned requests name the paths a participant intends to change; observed
-// requests compare BaseRevisionRef with the worktree. BaseRevisionRef is sent
-// only in observed mode and Symbols only in planned mode.
+// requests compare BaseRevisionRef with the worktree; diagnostics requests
+// count compiler diagnostics of every discovered program. BaseRevisionRef is
+// sent only in observed mode, Symbols only in planned mode, and Paths never
+// in diagnostics mode.
 type Request struct {
 	RequestVersion  int                 `json:"request_version"`
 	Mode            string              `json:"mode"`
@@ -90,8 +92,10 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 			return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: the base revision reference is not a commit or safe ref name", ErrInvalid)
 		}
 		request.Symbols = nil
+	case protocol.AnalyzerModeDiagnostics:
+		request.Paths, request.Symbols, request.BaseRevisionRef = nil, nil, ""
 	default:
-		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: mode must be planned or observed", ErrInvalid)
+		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: mode must be planned, observed, or diagnostics", ErrInvalid)
 	}
 	input, err := json.Marshal(request)
 	if err != nil || len(input) > MaxInputBytes {
@@ -139,7 +143,11 @@ func Run(ctx context.Context, cfg Config, request Request) (protocol.LocalAnalyz
 	if err != nil {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: report does not match Conn's local-analyzer-report contract", ErrInvalid)
 	}
-	if err := ValidateReport(report); err != nil {
+	validate := ValidateReport
+	if request.Mode == protocol.AnalyzerModeDiagnostics {
+		validate = validateDiagnosticsReport
+	}
+	if err := validate(report); err != nil {
 		return protocol.LocalAnalyzerReport{}, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if report.Mode != request.Mode {
@@ -217,9 +225,28 @@ func ValidateReport(report protocol.LocalAnalyzerReport) error {
 	return nil
 }
 
+// validateDiagnosticsReport enforces the diagnostics-mode subset: no claims,
+// bounded counts, and no credential-shaped values. These reports are never
+// sent to Conn.
+func validateDiagnosticsReport(report protocol.LocalAnalyzerReport) error {
+	if report.ReportVersion != protocol.AnalyzerReportVersion || report.Mode != protocol.AnalyzerModeDiagnostics || len(report.Claims) > 0 ||
+		len(report.DiagnosticCounts) > MaxDiagnosticCounts || report.DiagnosticCountsTruncated == nil {
+		return errors.New("diagnostics report exceeds a fixed contract bound")
+	}
+	for _, count := range report.DiagnosticCounts {
+		if hasSensitiveValue(count.Code) || hasSensitiveValue(count.Path) {
+			return errors.New("diagnostics report contains unsafe data")
+		}
+	}
+	return nil
+}
+
+// MaxDiagnosticCounts bounds a diagnostics-mode report.
+const MaxDiagnosticCounts = 2000
+
 func hasSensitiveValue(value string) bool {
 	lower := strings.ToLower(value)
-	return strings.Contains(lower, "conn_sess_") || strings.Contains(lower, "ghp_") ||
+	return strings.Contains(lower, "conn_sess_") || strings.Contains(lower, "conn_ci_") || strings.Contains(lower, "ghp_") ||
 		strings.Contains(lower, "github_pat_") || strings.Contains(lower, "bearer ") ||
 		strings.Contains(lower, "password=") || strings.Contains(lower, "secret=") ||
 		strings.Contains(lower, "prompt:") || strings.Contains(lower, "source_text")

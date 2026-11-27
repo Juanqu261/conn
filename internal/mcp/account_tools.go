@@ -64,16 +64,19 @@ type analyzerStatus struct {
 }
 
 type clientCapabilityStatus struct {
-	ProtocolVersion   string `json:"protocol_version,omitempty"`
-	ClientName        string `json:"client_name,omitempty"`
-	FormInput         bool   `json:"form_input"`
-	URLInput          bool   `json:"url_input"`
-	StructuredResult  bool   `json:"structured_result"`
-	Prompts           bool   `json:"prompts"`
-	ResourceTemplates bool   `json:"resource_templates"`
-	IdlePush          bool   `json:"idle_push"`
-	InteractiveLogin  bool   `json:"interactive_login"`
-	ConfirmedLogout   bool   `json:"confirmed_logout"`
+	ProtocolVersion string `json:"protocol_version,omitempty"`
+	ClientName      string `json:"client_name,omitempty"`
+	// ParticipantAdapter is the attribution of this client's Participant:
+	// kiro for Kiro, mcp for other MCP clients.
+	ParticipantAdapter string `json:"participant_adapter"`
+	FormInput          bool   `json:"form_input"`
+	URLInput           bool   `json:"url_input"`
+	StructuredResult   bool   `json:"structured_result"`
+	Prompts            bool   `json:"prompts"`
+	ResourceTemplates  bool   `json:"resource_templates"`
+	IdlePush           bool   `json:"idle_push"`
+	InteractiveLogin   bool   `json:"interactive_login"`
+	ConfirmedLogout    bool   `json:"confirmed_logout"`
 }
 
 type loginOutput struct {
@@ -389,16 +392,22 @@ func elicitationResponse(req *sdk.CallToolRequest, id string) (*sdk.ElicitResult
 
 func clientCapabilities(req *sdk.CallToolRequest) clientCapabilityStatus {
 	status := clientCapabilityStatus{StructuredResult: true, Prompts: true, ResourceTemplates: true}
+	status.ParticipantAdapter = adapterKiro
 	if req == nil || req.Session == nil {
 		return status
 	}
+	if info := req.ClientInfo(); info != nil {
+		status.ClientName = info.Name
+	}
+	status.ParticipantAdapter = adapterKind(status.ClientName)
 	params := req.Session.InitializeParams()
 	if params == nil {
 		return status
 	}
 	status.ProtocolVersion = params.ProtocolVersion
-	if params.ClientInfo != nil {
+	if params.ClientInfo != nil && status.ClientName == "" {
 		status.ClientName = params.ClientInfo.Name
+		status.ParticipantAdapter = adapterKind(status.ClientName)
 	}
 	if params.Capabilities != nil && params.Capabilities.Elicitation != nil {
 		input := params.Capabilities.Elicitation
