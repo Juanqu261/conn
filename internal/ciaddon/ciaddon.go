@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+
+	"github.com/Juanqu261/conn/internal/lineend"
 )
 
 // TargetPath is the workflow path inside the repository.
@@ -157,7 +159,7 @@ func Preview(root string, mode Mode, options Options) (Plan, error) {
 			plan.Action = ActionAbsent
 			return plan, nil
 		}
-		installed, ok := installedOptions(existing)
+		installed, ok := installedOptions(lineend.Normalize(existing))
 		if !ok {
 			plan.Action = ActionConflict
 			return plan, nil
@@ -168,7 +170,8 @@ func Preview(root string, mode Mode, options Options) (Plan, error) {
 			return plan, nil
 		}
 		plan.Action = ActionConflict
-		if bytes.Equal(existing, plan.Content) {
+		// A committed workflow checked out with CRLF is still Conn's content.
+		if lineend.Equal(existing, plan.Content) {
 			plan.Action = ActionRemove
 		}
 		return plan, nil
@@ -179,7 +182,7 @@ func Preview(root string, mode Mode, options Options) (Plan, error) {
 	switch {
 	case errors.Is(readErr, fs.ErrNotExist):
 		plan.Action = ActionCreate
-	case bytes.Equal(existing, plan.Content):
+	case lineend.Equal(existing, plan.Content):
 		plan.Action = ActionUnchanged
 	default:
 		plan.Action = ActionConflict

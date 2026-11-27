@@ -136,7 +136,7 @@ conn git-hook install
 # Later: conn git-hook remove
 ```
 
-The hook goes into the effective hooks directory, including `core.hooksPath`. Installation refuses to replace a different `prepare-commit-msg` hook and prints the line to add to it instead. Without the hook, agents pass `focus.commit_trailer` from work context to `git commit --trailer`.
+The hook goes into the effective hooks directory, including `core.hooksPath`. The hook is `commit-msg`, so it runs after you edit the message and leaves an empty message empty for Git to abort. Installation refuses to replace a different `commit-msg` hook and prints the line to add to it instead, and it removes an unchanged `prepare-commit-msg` hook left by an earlier Conn version. Without the hook, agents pass `focus.commit_trailer` from work context to `git commit --trailer`.
 
 Generate the review packet:
 

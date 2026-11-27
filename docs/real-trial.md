@@ -278,15 +278,114 @@ NO_CONN_APP_FOR_PARTICIPANT_LOOP=
 
 Task 15 is complete only after three real participants fill this record and every value is supported by observed evidence.
 
+## Two-session pre-edit trial
+
+This trial is the acceptance test for milestone 1 (`pre-edit-collision-warnings`): two Kiro sessions whose participants never exchange subject strings receive a correct advisory warning before the second agent edits code that conflicts with the first agent's in-progress Intent. It needs two people, two GitHub accounts, and two worktrees. The automated scenario in `cmd/conn/pre_edit_test.go` does not replace it.
+
+### Setup
+
+1. Start the backend as in section 1. Build `conn` once and keep its absolute path: `go build -o conn.exe ./cmd/conn`. Build the analyzer with `pnpm build`, or set `CONN_ANALYZER_PATH` to `packages/typescript-analyzer/dist/cli.js`.
+2. Person A creates a Project, adds person B, and records an Objective with key `checkout` and the keyed invariant `one-charge-per-attempt`. No Blueprint is needed.
+3. Create a GitHub repository from `fixtures/pre-edit-two-sessions`, connect it with local analysis enabled and `default_branch` set, and give each person a clone on their own branch.
+4. In each clone, add the MCP server with `kiro-cli mcp add` as in section 2, then run `conn kiro integration preview --scope workspace --root .` and `conn kiro integration install --scope workspace --root .`. Confirm `.kiro/hooks/conn-hooks.json` names the absolute `conn` path.
+
+### Steps
+
+1. A runs `/conn-start` planning to change `src/payments/retry.ts`. Expected: `list_concepts` shows `invariant:checkout:one-charge-per-attempt`, `suggest_claims` proposes `changes` on `contract:typescript:src/payments/retry.ts/shouldRetryCharge`, and `publish_intent` reports filled `repository_id`, `branch_ref`, and `base_revision_ref`.
+2. B runs `/conn-start` planning to change `src/orders/checkout.ts`. Expected: `suggest_claims` proposes `consumes` on the same contract, and `check_collisions` lists `contract_producer_consumer` and `shared_declared_invariant` before B writes anything.
+3. B asks the agent to edit `src/orders/checkout.ts`. Expected: the pre-write hook shows a labelled warning naming the collision, and the write continues.
+4. A submits the next prompt. Expected: the prompt-submit hook reports both new collisions once; a second prompt reports nothing.
+5. B records `false_positive` on the invariant collision with `conn resolution decide`, then revises the Intent without new subjects. Expected: `check_collisions` lists it as decided, and A's next prompt reports `is now dismissed (false_positive)`.
+6. Run `conn doctor` in each clone and confirm the analyzer, Node.js, and hook-diagnostics checks.
+
+### Record
+
+Record sanitized identifiers, the exact warning text each person saw, the prompt-submit output, and hook latency. Do not mark the trial complete from expected results alone.
+
+| Area                                     | A       | B       | Finding |
+| ---------------------------------------- | ------- | ------- | ------- |
+| Subjects reused without typing           | pending | pending | pending |
+| Collisions before the first write        | pending | pending | pending |
+| Pre-write warning shown, write continued | pending | pending | pending |
+| Prompt-submit reported once              | pending | pending | pending |
+| Dismissal kept after revision            | pending | pending | pending |
+| Hook latency with a warm index (p95 ms)  | pending | pending | pending |
+| Exit code 1 display in Kiro CLI and IDE  | pending | pending | pending |
+| Friction                                 | pending | pending | pending |
+
+## Review-proof reviewer trial
+
+This trial is the acceptance test for milestone 2 (`review-proof`): a reviewer who did not see the agent session decides whether to trust an agent-produced pull request from the Conn review packet alone. The automated scenario in `cmd/conn/review_proof_test.go` does not replace it.
+
+### Setup
+
+1. Use person A's clone from the pre-edit trial. Commit a `.conn/checks.json` on the default branch with one check whose `acceptance_keys` names an acceptance criterion of the Objective.
+2. Run `conn git-hook preview`, then `conn git-hook install`, and confirm the hook path honors `core.hooksPath` when it is set.
+
+### Steps
+
+1. A runs `/conn-start` and lets the agent implement a small change that also touches one export the Intent did not declare.
+2. A runs `/conn-finish`. Expected: the agent records the head revision, analyzes that revision, checks collisions, and asks before each `conn evidence run`.
+3. A runs `/conn-review` and writes the Markdown to `review.md`, then opens the pull request with `gh pr create --body-file review.md`.
+4. A reviewer who did not see the session reviews the pull request from its description, then looks up anything the packet did not answer.
+
+### Record
+
+Record the pull-request link, the reviewer's decision, every question the packet left open, and each piece of information the reviewer had to find elsewhere. Do not mark the trial complete from expected results alone.
+
+| Area                                               | Finding |
+| -------------------------------------------------- | ------- |
+| Drift shown for the undeclared export              | pending |
+| Observed evidence labelled, commit and stale shown | pending |
+| Commits carry the Conn-Intent trailer              | pending |
+| Packet length and rendering on GitHub              | pending |
+| Questions the packet left open                     | pending |
+| Information looked up elsewhere                    | pending |
+| Reviewer's trust decision and why                  | pending |
+
+## Verification, CI, and adoption trial
+
+This trial validates milestone 3 ([decision 0008](decisions/0008-verification-ci-and-adoption.md)) on a real GitHub repository. It needs a Conn backend deployed behind HTTPS and reachable from GitHub-hosted runners.
+
+### Setup
+
+1. In Kiro, call `preview_ci_check`, review the workflow and prerequisites, then call `install_ci_check`. Confirm that no secret, variable, commit, or push was made.
+2. As the Project owner, run `conn ci credential create --repository <repository-id> --github-secret <owner/name>` and `gh variable set CONN_SERVER_URL --body <https-url> --repo <owner/name>`. Commit and push the workflow.
+3. Add a `pair_verification` section to `.conn/checks.json` on the default branch.
+
+### Steps
+
+1. Open a pull request whose commits carry `Conn-Intent` trailers. Expected: the job summary shows the Intent, its review packet, and its collisions, and the check passes.
+2. Open a pull request without trailers that changes a contract another active Intent consumes. Expected: unregistered work with the previewed collision.
+3. Open a pull request from a fork. Expected: the check reports that it was skipped and passes.
+4. Run `conn verify-pair <collision-id>` on a real collision and inspect the combination check in `/conn-resolve`.
+5. Run `session_status` from Kiro and record the reported `client_name` and `participant_adapter`.
+
+### Record
+
+Record sanitized summaries, comment behavior, build time, and friction. Do not mark the trial complete from expected results alone.
+
+| Area                                                   | Finding |
+| ------------------------------------------------------ | ------- |
+| Workflow installed from MCP without secrets or commits | pending |
+| Summary for a trailer-named Intent                     | pending |
+| Unregistered work with a previewed collision           | pending |
+| Fork pull request skipped                              | pending |
+| Comment created once and updated by marker             | pending |
+| Workflow build time                                    | pending |
+| Pair verification on a real collision                  | pending |
+| Kiro `client_name` and attributed adapter              | pending |
 ## Automated baseline
 
-The repository suite covers contracts and invariants but not the three-human claim:
+The repository suite covers contracts and invariants but not the multi-human claims:
 
 ```powershell
 pnpm exec tsc --noEmit --pretty false -p fixtures/semantic-intent-radar-two-intents/apps/gateway
 pnpm exec tsc --noEmit --pretty false -p fixtures/semantic-intent-radar-two-intents/apps/orders
+pnpm exec tsc --noEmit --pretty false -p fixtures/pre-edit-two-sessions
 go test ./internal/mcp -run TestParticipantWorkLoopEndToEnd -count=1
-go test ./cmd/conn -run TestMCPStdio -count=1
+go test ./cmd/conn -run 'TestMCPStdio|TestPreEditTwoSessions|TestReviewProofMilestone|TestCommitTrailerHook|TestPairVerificationMilestone|TestCICredentialAndPullRequestCheck|TestGitHubIssueImportAndStart' -count=1
+go test ./internal/hooks ./internal/checkrun ./internal/review ./internal/cicheck ./internal/ciaddon ./internal/agentguide -count=1
 ```
 
-`TestParticipantWorkLoopEndToEnd` exercises the full MCP work loop with a fake backend and real analyzer subprocess. `TestMCPStdio` uses isolated PostgreSQL and authenticated MCP subprocesses when the development database is available. Neither test claims real GitHub Device Flow or three live Kiro sessions.
+`TestParticipantWorkLoopEndToEnd` exercises the full MCP work loop with a fake backend and a fake analyzer subprocess. `TestMCPStdio`, `TestPreEditTwoSessions`, and `TestReviewProofMilestone` use isolated PostgreSQL and authenticated MCP subprocesses when the development database is available; the pre-edit and review-proof scenarios also run the built analyzer, and the review-proof scenario runs `conn evidence run`, `conn review`, and the Git hook. `TestCommitTrailerHook` and the `checkrun` scenario need only Git. None of them claims real GitHub Device Flow, live Kiro sessions, or a human reviewer.

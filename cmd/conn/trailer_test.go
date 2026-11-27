@@ -22,6 +22,11 @@ import (
 // focused Intent gets the trailer once; an existing Conn-Intent trailer is
 // kept; a commit without a focus still succeeds with one warning; and the
 // shared parser reads the latest trailer per Intent from the range.
+//
+// It also reproduces a defect of the version 1 prepare-commit-msg hook: the
+// trailer was added before the editor opened, so closing the editor without
+// a message committed a message made of the trailer alone instead of letting
+// Git abort. Installation replaces an unchanged version 1 hook.
 func TestCommitTrailerHook(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is required")
@@ -59,7 +64,8 @@ func TestCommitTrailerHook(t *testing.T) {
 	gitOK("init", "--quiet", "-b", "main")
 	gitOK("commit", "--quiet", "--allow-empty", "-m", "base")
 	base := gitOK("rev-parse", "HEAD")
-	hook := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	hook := filepath.Join(repo, ".git", "hooks", "commit-msg")
+	legacyHook := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
 
 	store, err := hookstate.Open(ctx, repo)
 	if err != nil {
@@ -79,8 +85,25 @@ func TestCommitTrailerHook(t *testing.T) {
 	if _, err := os.Stat(hook); !os.IsNotExist(err) {
 		t.Fatal("preview wrote the hook")
 	}
+	if err := os.MkdirAll(filepath.Dir(legacyHook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyHook, []byte("#!/bin/sh\n# conn prepare-commit-msg v1\nconn trailer \"$1\" \"$2\" || true\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if code, stdout, stderr := conn("git-hook", "install"); code != 0 {
 		t.Fatalf("install exited %d: %s %s", code, stdout, stderr)
+	}
+	if _, err := os.Stat(legacyHook); !os.IsNotExist(err) {
+		t.Fatal("install kept the unchanged version 1 prepare-commit-msg hook")
+	}
+
+	// Closing the editor without writing a message must still abort.
+	before := gitOK("rev-parse", "HEAD")
+	abandoned := exec.Command("git", "commit", "--allow-empty")
+	abandoned.Dir, abandoned.Env = repo, append(append([]string{}, env...), "GIT_EDITOR=true")
+	if output, err := abandoned.CombinedOutput(); err == nil || gitOK("rev-parse", "HEAD") != before {
+		t.Fatalf("an abandoned commit message was committed: %s", output)
 	}
 
 	gitOK("commit", "--quiet", "--allow-empty", "-m", "first")
@@ -125,7 +148,7 @@ func TestCommitTrailerHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, stdout, _ := conn("git-hook", "install")
-	if data, _ := os.ReadFile(hook); code == 0 || !bytes.Equal(data, custom) || !strings.Contains(stdout, `trailer "$1" "$2" || true`) {
+	if data, _ := os.ReadFile(hook); code == 0 || !bytes.Equal(data, custom) || !strings.Contains(stdout, `trailer "$1" || true`) {
 		t.Fatalf("install over a team hook exited %d and left %q: %s", code, data, stdout)
 	}
 	if code, _, _ := conn("git-hook", "remove"); code == 0 {
@@ -133,10 +156,10 @@ func TestCommitTrailerHook(t *testing.T) {
 	}
 
 	gitOK("config", "core.hooksPath", ".githooks")
-	if code, stdout, stderr := conn("git-hook", "install"); code != 0 || !strings.Contains(filepath.ToSlash(stdout), ".githooks/prepare-commit-msg") {
+	if code, stdout, stderr := conn("git-hook", "install"); code != 0 || !strings.Contains(filepath.ToSlash(stdout), ".githooks/commit-msg") {
 		t.Fatalf("install with core.hooksPath exited %d: %s %s", code, stdout, stderr)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".githooks", "prepare-commit-msg")); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, ".githooks", "commit-msg")); err != nil {
 		t.Fatalf("core.hooksPath hook: %v", err)
 	}
 }

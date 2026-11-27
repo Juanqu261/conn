@@ -1,8 +1,14 @@
-// Package githook manages Conn's optional prepare-commit-msg hook and adds
-// the Conn-Intent commit trailer. Conn writes to the repository hooks
-// directory only through explicit installation, which targets the effective
-// hooks directory including core.hooksPath, never overwrites a different
-// hook, and removes only byte-identical Conn content.
+// Package githook manages Conn's optional commit-msg hook and adds the
+// Conn-Intent commit trailer. Conn writes to the repository hooks directory
+// only through explicit installation, which targets the effective hooks
+// directory including core.hooksPath, never overwrites a different hook, and
+// removes only byte-identical Conn content.
+//
+// The hook runs after the commit message is edited, and a message that is
+// empty apart from comments is left untouched, so Git still aborts it.
+// Version 1 used prepare-commit-msg, which runs before the editor; its
+// trailer made an abandoned message non-empty and Git committed it.
+// Installation and removal delete an unchanged version 1 hook.
 package githook
 
 import (
@@ -21,10 +27,19 @@ import (
 )
 
 // HookName is the Git hook Conn installs.
-const HookName = "prepare-commit-msg"
+const HookName = "commit-msg"
 
 // marker identifies Conn's hook content and its version.
-const marker = "# conn prepare-commit-msg v1"
+const marker = "# conn commit-msg v2"
+
+// LegacyHookName is the hook Conn installed in version 1.
+const LegacyHookName = "prepare-commit-msg"
+
+const (
+	legacyMarker = "# conn prepare-commit-msg v1"
+	legacySuffix = ` trailer "$1" "$2" || true`
+	hookSuffix   = ` trailer "$1" || true`
+)
 
 // PathCommand runs conn from PATH.
 const PathCommand = "conn"
@@ -57,6 +72,13 @@ type Plan struct {
 	Action   Action
 	Content  []byte
 	existing []byte
+	// LegacyPath is the version 1 prepare-commit-msg hook. LegacyAction is
+	// ActionRemove for unchanged version 1 content, ActionConflict for a
+	// modified version 1 hook left for manual review, and ActionAbsent
+	// otherwise, including for any hook that is not Conn's.
+	LegacyPath     string
+	LegacyAction   Action
+	legacyExisting []byte
 }
 
 // HasConflict reports whether a different hook occupies the target.
@@ -77,12 +99,17 @@ func RenderCommand(executable string) string {
 
 // HookLine is the hook command: it never fails the commit.
 func HookLine(command string) string {
-	return command + ` trailer "$1" "$2" || true`
+	return command + hookSuffix
 }
 
 // Content renders the complete hook file for command.
 func Content(command string) []byte {
 	return []byte("#!/bin/sh\n" + marker + "\n" + HookLine(command) + "\n")
+}
+
+// legacyContent renders the version 1 prepare-commit-msg hook.
+func legacyContent(command string) []byte {
+	return []byte("#!/bin/sh\n" + legacyMarker + "\n" + command + legacySuffix + "\n")
 }
 
 // HooksDir returns the effective hooks directory of the worktree, honoring
@@ -117,6 +144,9 @@ func Preview(ctx context.Context, worktree string, mode Mode, command string) (P
 		return Plan{}, fmt.Errorf("read %s: %w", plan.Path, err)
 	}
 	plan.existing = existing
+	if err := plan.inspectLegacy(); err != nil {
+		return Plan{}, err
+	}
 	switch mode {
 	case ModeInstall:
 		plan.Content = Content(command)
@@ -129,7 +159,7 @@ func Preview(ctx context.Context, worktree string, mode Mode, command string) (P
 			plan.Action = ActionConflict
 		}
 	case ModeRemove:
-		switch installed, ok := installedCommand(existing); {
+		switch installed, ok := installedCommand(existing, marker, hookSuffix); {
 		case existing == nil:
 			plan.Action = ActionAbsent
 		case ok && bytes.Equal(existing, Content(installed)):
@@ -141,18 +171,39 @@ func Preview(ctx context.Context, worktree string, mode Mode, command string) (P
 	return plan, nil
 }
 
-// Apply performs a conflict-free plan, rechecking that the target has not
-// changed since it was previewed.
+// inspectLegacy plans the removal of an unchanged version 1 hook.
+func (p *Plan) inspectLegacy() error {
+	p.LegacyPath, p.LegacyAction = filepath.Join(p.HooksDir, LegacyHookName), ActionAbsent
+	existing, err := os.ReadFile(p.LegacyPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", p.LegacyPath, err)
+	}
+	p.legacyExisting = existing
+	if installed, ok := installedCommand(existing, legacyMarker, legacySuffix); ok && bytes.Equal(existing, legacyContent(installed)) {
+		p.LegacyAction = ActionRemove
+	} else if bytes.Contains(existing, []byte(legacyMarker)) {
+		p.LegacyAction = ActionConflict
+	}
+	return nil
+}
+
+// Apply performs a conflict-free plan, rechecking that the targets have not
+// changed since they were previewed.
 func Apply(plan Plan) error {
 	if plan.HasConflict() {
 		return errors.New("the hook target contains a different hook")
 	}
-	current, err := os.ReadFile(plan.Path)
-	if errors.Is(err, fs.ErrNotExist) {
-		current, err = nil, nil
+	if err := unchanged(plan.Path, plan.existing); err != nil {
+		return err
 	}
-	if err != nil || !bytes.Equal(current, plan.existing) {
-		return errors.New("the hook target changed after it was inspected; preview again")
+	removeLegacy := plan.LegacyAction == ActionRemove
+	if removeLegacy {
+		if err := unchanged(plan.LegacyPath, plan.legacyExisting); err != nil {
+			return err
+		}
 	}
 	switch plan.Action {
 	case ActionCreate:
@@ -164,19 +215,70 @@ func Apply(plan Plan) error {
 			return err
 		}
 		_, writeErr := file.Write(plan.Content)
-		return errors.Join(writeErr, file.Close())
+		if err := errors.Join(writeErr, file.Close()); err != nil {
+			return err
+		}
 	case ActionRemove:
-		return os.Remove(plan.Path)
+		if err := os.Remove(plan.Path); err != nil {
+			return err
+		}
+	}
+	// The version 1 hook goes only after the current hook is in place, so a
+	// failed installation never leaves the worktree without either.
+	if removeLegacy {
+		return os.Remove(plan.LegacyPath)
 	}
 	return nil
 }
 
-func installedCommand(content []byte) (string, bool) {
+// unchanged reports an error when path no longer holds inspected.
+func unchanged(path string, inspected []byte) error {
+	current, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		current, err = nil, nil
+	}
+	if err != nil || !bytes.Equal(current, inspected) {
+		return errors.New("the hook target changed after it was inspected; preview again")
+	}
+	return nil
+}
+
+func installedCommand(content []byte, wantMarker, suffix string) (string, bool) {
 	lines := strings.Split(string(content), "\n")
-	if len(lines) != 4 || lines[0] != "#!/bin/sh" || lines[1] != marker || lines[3] != "" {
+	if len(lines) != 4 || lines[0] != "#!/bin/sh" || lines[1] != wantMarker || lines[3] != "" {
 		return "", false
 	}
-	return strings.CutSuffix(lines[2], ` trailer "$1" "$2" || true`)
+	return strings.CutSuffix(lines[2], suffix)
+}
+
+// scissors is the line below which `git commit --verbose` shows the diff.
+const scissors = "------------------------ >8 ------------------------"
+
+// MessageEmpty reports whether a commit message file holds nothing but
+// whitespace, comments, and the verbose diff below the scissors line: the
+// message Git aborts as empty. `git stripspace` removes the comments so
+// core.commentChar is honored.
+func MessageEmpty(ctx context.Context, messageFile string) (bool, error) {
+	data, err := os.ReadFile(messageFile)
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		if trimmed := strings.TrimSpace(line); strings.HasSuffix(trimmed, scissors) && len(trimmed) <= len(scissors)+3 {
+			lines = lines[:i]
+			break
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "stripspace", "--strip-comments")
+	cmd.Env, cmd.Stdin = repositorygit.Environment(), strings.NewReader(strings.Join(lines, "\n"))
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git stripspace failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)) == "", nil
 }
 
 // AppendTrailer adds trailer to the commit message file unless the message

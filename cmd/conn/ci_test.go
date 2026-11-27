@@ -28,6 +28,11 @@ import (
 // or is revoked. conn ci check reports a trailer-named Intent with its review
 // packet, unregistered work with a previewed collision, a released Intent,
 // and a missing credential, always exits 0, and writes nothing to Conn.
+//
+// It also reproduces a defect: a trailer is typed by the commit author, and
+// a pull request that named a teammate's conflicting Intent had that Intent
+// excluded from the preview, hiding the collision, and borrowed its review
+// packet. Only an Intent that declares the pull request's head branch counts.
 func TestCICredentialAndPullRequestCheck(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
 	defer cancel()
@@ -187,12 +192,12 @@ func TestCICredentialAndPullRequestCheck(t *testing.T) {
 		gitOutput(t, repo, append(identity, "commit", "--quiet", "-m", message)...)
 		return gitOutput(t, repo, "rev-parse", "HEAD")
 	}
-	check := func(head string, env ...string) (string, int) {
+	check := func(branch, head string, env ...string) (string, int) {
 		t.Helper()
 		directory := t.TempDir()
 		event, summary := filepath.Join(directory, "event.json"), filepath.Join(directory, "summary.md")
 		document, _ := json.Marshal(map[string]any{
-			"pull_request": map[string]any{"number": 7, "base": map[string]any{"sha": mainCommit}, "head": map[string]any{"sha": head}},
+			"pull_request": map[string]any{"number": 7, "base": map[string]any{"sha": mainCommit}, "head": map[string]any{"sha": head, "ref": branch}},
 			"repository":   map[string]any{"full_name": "conn-fixtures/pre-edit-two-sessions"},
 		})
 		if err := os.WriteFile(event, document, 0o644); err != nil {
@@ -217,7 +222,7 @@ func TestCICredentialAndPullRequestCheck(t *testing.T) {
 	}
 	ci := "CONN_CI_TOKEN=" + token
 	named := branchCommit("alice-retry", "Widen retries\n\n"+protocol.CommitTrailer(aliceIntent, 1))
-	report, _ := check(named, ci)
+	report, _ := check("alice-retry", named, ci)
 	for _, want := range []string{cicheck.Marker, "| 1 | 1 |", "Review packet: Intent <code>" + aliceIntent.String() + "</code> revision 1", "contract_producer_consumer", "by @alice", "Drift compares declared claims with analysis observed in CI"} {
 		if want == "Drift compares declared claims with analysis observed in CI" && !analyzed {
 			continue
@@ -229,7 +234,7 @@ func TestCICredentialAndPullRequestCheck(t *testing.T) {
 
 	// Unregistered work that changes a contract an active Intent consumes.
 	unregistered := branchCommit("dave-retry", "Widen retries without an Intent")
-	report, _ = check(unregistered, ci)
+	report, _ = check("dave-retry", unregistered, ci)
 	if !strings.Contains(report, "Unregistered work") {
 		t.Errorf("unregistered report:\n%s", report)
 	}
@@ -237,16 +242,26 @@ func TestCICredentialAndPullRequestCheck(t *testing.T) {
 		t.Errorf("unregistered report omits the previewed collision with Intent %s:\n%s", bobIntent, report)
 	}
 
+	// The same change naming Bob's conflicting Intent from another branch.
+	borrowed := branchCommit("dave-borrow", "Widen retries\n\n"+protocol.CommitTrailer(bobIntent, 1))
+	report, _ = check("dave-borrow", borrowed, ci)
+	if !strings.Contains(report, "not this pull request's head branch `dave-borrow`") || strings.Contains(report, "Review packet: Intent") {
+		t.Errorf("a trailer naming another branch's Intent was trusted:\n%s", report)
+	}
+	if analyzed && !strings.Contains(report, "with Intent `"+bobIntent.String()+"`") {
+		t.Errorf("a trailer naming Bob's Intent hid its collision:\n%s", report)
+	}
+
 	// Missing credential, unreachable backend, and a released Intent.
-	if report, _ = check(named); !strings.Contains(report, cicheck.SkippedMessage) {
+	if report, _ = check("alice-retry", named); !strings.Contains(report, cicheck.SkippedMessage) {
 		t.Errorf("report without a credential:\n%s", report)
 	}
-	if report, _ = check(named, ci, "CONN_SERVER_URL=http://127.0.0.1:1"); !strings.Contains(report, "unreachable") {
+	if report, _ = check("alice-retry", named, ci, "CONN_SERVER_URL=http://127.0.0.1:1"); !strings.Contains(report, "unreachable") {
 		t.Errorf("report with an unreachable backend:\n%s", report)
 	}
 	aliceParticipant, _ := projects.ResolveParticipant(ctx, alice.HumanID, projectID, "kiro", "")
 	must(projects.ReleaseIntent(ctx, alice.HumanID, projectID, aliceParticipant.Data.ParticipantID, aliceIntent))
-	if report, _ = check(named, ci); !strings.Contains(report, "which is released") {
+	if report, _ = check("alice-retry", named, ci); !strings.Contains(report, "which is released") {
 		t.Errorf("report for a released Intent:\n%s", report)
 	}
 
