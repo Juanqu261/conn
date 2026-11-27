@@ -77,8 +77,11 @@ type Event struct {
 	Number int
 	Base   string
 	Head   string
-	Owner  string
-	Name   string
+	// HeadRef is the pull request's head branch, or empty when the event
+	// names no valid branch.
+	HeadRef string
+	Owner   string
+	Name    string
 }
 
 var commitPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
@@ -163,6 +166,7 @@ func ReadEvent(path string) (Event, error) {
 			} `json:"base"`
 			Head struct {
 				SHA string `json:"sha"`
+				Ref string `json:"ref"`
 			} `json:"head"`
 		} `json:"pull_request"`
 		Repository struct {
@@ -178,6 +182,9 @@ func ReadEvent(path string) (Event, error) {
 	event := Event{Number: document.PullRequest.Number, Base: document.PullRequest.Base.SHA, Head: document.PullRequest.Head.SHA}
 	if event.Number < 1 || !commitPattern.MatchString(event.Base) || !commitPattern.MatchString(event.Head) {
 		return Event{}, errors.New("the pull_request event has no valid number, base SHA, or head SHA")
+	}
+	if ref := document.PullRequest.Head.Ref; repositorygit.ValidBranchName(ref) {
+		event.HeadRef = ref
 	}
 	owner, name, found := strings.Cut(document.Repository.FullName, "/")
 	if found && validRepositoryPart(owner) && validRepositoryPart(name) {
@@ -199,6 +206,12 @@ type namedIntent struct {
 	packet   *protocol.ReviewPacket
 	markdown string
 	note     string
+	// verified means the Intent declares this pull request's head branch.
+	// A trailer is typed by the commit author, so only a verified Intent is
+	// treated as this pull request's: it is excluded from the collision
+	// preview and gets a review packet. Any other named Intent keeps its
+	// collisions visible and lends this pull request none of its evidence.
+	verified bool
 }
 
 type builder struct {
@@ -302,6 +315,19 @@ func (b *builder) readIntents(ctx context.Context, client *httpclient.Client) {
 		}
 		named.view = &view.Data
 		revision := view.Data.IntentRevision.Revision
+		branch := view.Data.IntentRevision.BranchRef
+		named.verified = branch != "" && branch == b.event.HeadRef
+		switch {
+		case !named.verified && branch == "":
+			named.note = fmt.Sprintf("Trailer names Intent `%s`, which declares no branch, so Conn cannot confirm it belongs to this pull request; its review packet is not shown and collisions with it stay in the preview.", id)
+		case !named.verified && b.event.HeadRef == "":
+			named.note = fmt.Sprintf("Trailer names Intent `%s` on branch `%s`, but the event names no head branch to compare; its review packet is not shown and collisions with it stay in the preview.", id, text(branch))
+		case !named.verified:
+			named.note = fmt.Sprintf("Trailer names Intent `%s` on branch `%s`, not this pull request's head branch `%s`; its review packet is not shown and collisions with it stay in the preview.", id, text(branch), text(b.event.HeadRef))
+		}
+		if named.note != "" {
+			continue
+		}
 		switch {
 		case view.Data.Status != "active":
 			named.note = fmt.Sprintf("Trailer names Intent `%s`, which is %s; its coordination no longer applies.", id, view.Data.Status)
@@ -320,6 +346,9 @@ func (b *builder) previewCollisions(ctx context.Context, client *httpclient.Clie
 	input := protocol.CollisionPreviewInput{Claims: b.observed.Claims, ExcludeIntentIDs: []uuid.UUID{}}
 	var active []uuid.UUID
 	for _, named := range b.named {
+		if !named.verified {
+			continue
+		}
 		input.ExcludeIntentIDs = append(input.ExcludeIntentIDs, named.trailer.IntentID)
 		if named.view != nil && named.view.Status == "active" {
 			active = append(active, named.trailer.IntentID)
@@ -347,7 +376,7 @@ func (b *builder) packets(ctx context.Context, client *httpclient.Client) {
 	}
 	git := review.ReadGit(ctx, b.cfg.Worktree, b.base)
 	for _, named := range b.named {
-		if named.view == nil {
+		if named.view == nil || !named.verified {
 			continue
 		}
 		records, err := review.LoadIndependent(ctx, client, b.context.ProjectID, named.trailer.IntentID)

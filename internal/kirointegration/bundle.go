@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/Juanqu261/conn/internal/agentguide"
+	"github.com/Juanqu261/conn/internal/lineend"
 )
 
 type Scope string
@@ -279,7 +280,7 @@ func Preview(scope Scope, root string, mode Mode, command string) (Plan, error) 
 			plan.Changes = append(plan.Changes, Change{RelativePath: artifact.RelativePath, Action: action})
 		case err != nil:
 			return Plan{}, err
-		case bytes.Equal(content, artifact.Content):
+		case lineend.Equal(content, artifact.Content):
 			action := ActionUnchanged
 			if mode == ModeRemove {
 				action = ActionRemove
@@ -301,7 +302,7 @@ func Preview(scope Scope, root string, mode Mode, command string) (Plan, error) 
 	case errors.Is(err, fs.ErrNotExist):
 	case err != nil:
 		return Plan{}, err
-	case bytes.Equal(content, legacy.Content):
+	case lineend.Equal(content, legacy.Content):
 		plan.Changes = append(plan.Changes, Change{RelativePath: legacy.RelativePath, Action: ActionRemove})
 	default:
 		plan.Changes = append(plan.Changes, Change{RelativePath: legacy.RelativePath, Action: ActionConflict})
@@ -444,7 +445,7 @@ func remove(root string, changes []Change, artifacts map[string]Artifact, pruneD
 			return err
 		}
 		content, err := readExistingTarget(target)
-		if err != nil || !bytes.Equal(content, artifact.Content) {
+		if err != nil || !lineend.Equal(content, artifact.Content) {
 			rollback()
 			return ErrConflict
 		}
@@ -572,5 +573,5 @@ func withinRoot(root, candidate string) bool {
 // steering file.
 func isPreviousSteering(content []byte) bool {
 	previous, err := fs.ReadFile(templateFiles, legacySteeringTemplate)
-	return err == nil && bytes.Equal(content, previous)
+	return err == nil && lineend.Equal(content, previous)
 }

@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/Juanqu261/conn/internal/lineend"
 )
 
 //go:embed templates/guide.md
@@ -134,6 +136,12 @@ func Preview(root, file string, mode Mode) (Plan, error) {
 		return Plan{}, err
 	}
 	plan.Existing = existing
+	// A file checked out with CRLF keeps CRLF: the section is compared
+	// without line endings and written in the file's own convention.
+	newline, section := "\n", lineend.Match([]byte(Section()), existing)
+	if lineend.UsesCRLF(existing) {
+		newline = "\r\n"
+	}
 	start, end, found, broken := locate(existing)
 	switch {
 	case broken:
@@ -145,18 +153,18 @@ func Preview(root, file string, mode Mode) (Plan, error) {
 	case !found:
 		separator := ""
 		if len(existing) > 0 && !bytes.HasSuffix(existing, []byte("\n")) {
-			separator = "\n"
+			separator = newline
 		}
 		if len(existing) > 0 {
-			separator += "\n"
+			separator += newline
 		}
-		plan.Action, plan.Result = ActionAppend, append(append(append([]byte{}, existing...), separator...), Section()...)
+		plan.Action, plan.Result = ActionAppend, append(append(append([]byte{}, existing...), separator...), section...)
 		return plan, nil
 	}
-	current := string(existing[start:end])
+	current := string(lineend.Normalize(existing[start:end]))
 	known := false
-	for _, section := range knownSections() {
-		known = known || current == section
+	for _, version := range knownSections() {
+		known = known || current == version
 	}
 	if !known {
 		plan.Action, plan.Reason = ActionConflict, "the Conn section differs from every version Conn wrote"
@@ -168,13 +176,13 @@ func Preview(root, file string, mode Mode) (Plan, error) {
 			return plan, nil
 		}
 		plan.Action = ActionReplace
-		plan.Result = append(append(append([]byte{}, existing[:start]...), Section()...), existing[end:]...)
+		plan.Result = append(append(append([]byte{}, existing[:start]...), section...), existing[end:]...)
 		return plan, nil
 	}
 	before, after := existing[:start], existing[end:]
 	// Undo the blank line that installation added before the section.
-	if bytes.HasSuffix(before, []byte("\n\n")) {
-		before = before[:len(before)-1]
+	if blank := newline + newline; bytes.HasSuffix(before, []byte(blank)) {
+		before = before[:len(before)-len(newline)]
 	}
 	if len(bytes.TrimSpace(before)) == 0 && len(bytes.TrimSpace(after)) == 0 {
 		plan.Action = ActionDeleteFile
@@ -202,7 +210,9 @@ func locate(content []byte) (start, end int, found, broken bool) {
 		return 0, 0, false, true
 	}
 	end = endMarker + len(EndMarker)
-	if end < len(content) && content[end] == '\n' {
+	if bytes.HasPrefix(content[end:], []byte("\r\n")) {
+		end += 2
+	} else if end < len(content) && content[end] == '\n' {
 		end++
 	}
 	return start, end, true, false

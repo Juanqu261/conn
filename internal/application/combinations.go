@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 
 	"uuid"
 
@@ -63,16 +64,22 @@ func (p *Projects) RecordCombinationCheck(ctx context.Context, actor, projectID,
 }
 
 // validateCombinationOutcome keeps the outcome consistent with the facts the
-// record states, so a submitted record cannot claim more than it shows.
+// record states, so a submitted record cannot claim more than it shows. The
+// outcome is derived from the facts exactly as conn verify-pair derives it:
+// failing for a new diagnostic or a failing check; otherwise incomplete when
+// diagnostics did not run, setup failed, or a check timed out; otherwise
+// passing.
 func validateCombinationOutcome(input protocol.CombinationCheckInput) error {
-	failingCheck := false
+	failingCheck, timedOut := false, false
 	for _, check := range input.Checks {
 		passing := check.ExitCode == 0 && !check.TimedOut
 		if (check.State == protocol.EvidencePassing) != passing || (check.State == protocol.CombinationCheckTimedOut) != check.TimedOut {
 			return &InvalidError{Pointer: "/checks", Message: "A pair check is passing only when it exited 0 in time, timed_out when it timed out, and failing otherwise."}
 		}
 		failingCheck = failingCheck || check.State == protocol.EvidenceFailing
+		timedOut = timedOut || check.TimedOut
 	}
+	setupFailed := input.Setup != nil && (input.Setup.ExitCode != 0 || input.Setup.TimedOut)
 	conflict := input.MergeResult == protocol.CombinationMergeConflict
 	switch {
 	case conflict != (input.Outcome == protocol.CombinationMergeConflict):
@@ -81,10 +88,25 @@ func validateCombinationOutcome(input protocol.CombinationCheckInput) error {
 		return &InvalidError{Pointer: "/checks", Message: "A merge conflict runs no diagnostics, setup, or checks."}
 	case !conflict && len(input.ConflictedPaths) > 0:
 		return &InvalidError{Pointer: "/conflicted_paths", Message: "Only a merge conflict lists conflicted paths."}
-	case input.Outcome == protocol.CombinationPassing && (failingCheck || input.Diagnostics.NewCount > 0):
-		return &InvalidError{Pointer: "/outcome", Message: "A combination check with a new diagnostic or a failing check is failing."}
 	case input.Diagnostics.NewCount < len(input.Diagnostics.New):
 		return &InvalidError{Pointer: "/diagnostics/new_count", Message: "new_count cannot be smaller than the listed new diagnostics."}
+	case !input.Diagnostics.Ran && input.Diagnostics.NewCount > 0:
+		return &InvalidError{Pointer: "/diagnostics/new_count", Message: "Diagnostics that did not run report no new diagnostic."}
+	case setupFailed && len(input.Checks) > 0:
+		return &InvalidError{Pointer: "/checks", Message: "No pair check runs after a failed setup."}
+	case conflict:
+		return nil
+	}
+	want := protocol.CombinationPassing
+	switch {
+	case failingCheck || input.Diagnostics.NewCount > 0:
+		want = protocol.CombinationFailing
+	case !input.Diagnostics.Ran || setupFailed || timedOut:
+		want = protocol.CombinationIncomplete
+	}
+	if input.Outcome != want {
+		return &InvalidError{Pointer: "/outcome", Message: fmt.Sprintf(
+			"The facts in this record make its outcome %s: failing for a new diagnostic or a failing check, otherwise incomplete when diagnostics did not run, setup failed, or a check timed out, and passing only when all of them ran and passed.", want)}
 	}
 	return nil
 }

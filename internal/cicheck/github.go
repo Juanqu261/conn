@@ -25,6 +25,10 @@ const (
 	gitHubAPIVersion  = "2022-11-28"
 	maxCommentPages   = 10
 	maxGitHubResponse = 8 << 20
+	// CommentAuthor is the identity of the workflow's github.token. Only its
+	// comments can be Conn's: anyone may post a comment that carries the
+	// marker, and updating theirs would put the report under their control.
+	CommentAuthor = "github-actions[bot]"
 )
 
 func (b *builder) comment(ctx context.Context, body string) error {
@@ -42,11 +46,15 @@ func (b *builder) comment(ctx context.Context, body string) error {
 	return client.UpsertComment(ctx, secret.New(token), b.event.Owner, b.event.Name, b.event.Number, body)
 }
 
-// UpsertComment updates the comment that contains Marker, or creates one.
+// UpsertComment updates the comment that CommentAuthor wrote with Marker, or
+// creates one.
 func (c *GitHubClient) UpsertComment(ctx context.Context, token secret.String, owner, name string, number int, body string) error {
 	type comment struct {
 		ID   int64  `json:"id"`
 		Body string `json:"body"`
+		User *struct {
+			Login string `json:"login"`
+		} `json:"user"`
 	}
 	for page := 1; page <= maxCommentPages; page++ {
 		var comments []comment
@@ -55,7 +63,7 @@ func (c *GitHubClient) UpsertComment(ctx context.Context, token secret.String, o
 			return err
 		}
 		for _, existing := range comments {
-			if strings.Contains(existing.Body, Marker) {
+			if existing.User != nil && existing.User.Login == CommentAuthor && strings.Contains(existing.Body, Marker) {
 				return c.call(ctx, token, http.MethodPatch, fmt.Sprintf("/repos/%s/%s/issues/comments/%d", owner, name, existing.ID), map[string]string{"body": body}, nil)
 			}
 		}

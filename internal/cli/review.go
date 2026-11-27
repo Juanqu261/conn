@@ -314,10 +314,10 @@ func newTrailerCommand(deps Dependencies, streams Streams) *cobra.Command {
 		Use:   "trailer <message-file> [<source>]",
 		Short: "Add the Conn-Intent trailer for the focused Intent to a commit message",
 		Long: "Add `Conn-Intent: <intent-id>@<revision>` for the worktree's focused Intent to a commit\n" +
-			"message file, unless the message already has a Conn-Intent trailer. The prepare-commit-msg\n" +
-			"hook installed by `conn git-hook install` runs this command. It reads only the local focus\n" +
-			"record, makes no network call, and always exits 0 so the commit continues; problems are\n" +
-			"printed as one warning.",
+			"message file, unless the message already has a Conn-Intent trailer or is empty apart from\n" +
+			"comments, so Git still aborts an abandoned commit. The commit-msg hook installed by\n" +
+			"`conn git-hook install` runs this command. It reads only the local focus record, makes no\n" +
+			"network call, and always exits 0 so the commit continues; problems are printed as one warning.",
 		Args: cobra.RangeArgs(1, 3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			directory, err := os.Getwd()
@@ -326,6 +326,11 @@ func newTrailerCommand(deps Dependencies, streams Streams) *cobra.Command {
 			}
 			store, err := hookstate.Open(cmd.Context(), directory)
 			if err != nil {
+				return err
+			}
+			// An empty message must stay empty: Git aborts it, and a trailer
+			// alone would turn an abandoned commit into a real one.
+			if empty, err := githook.MessageEmpty(cmd.Context(), args[0]); err != nil || empty {
 				return err
 			}
 			focus := store.Focus()
@@ -342,11 +347,13 @@ func newGitHookCommand(deps Dependencies, streams Streams) *cobra.Command {
 	var commandOnPath bool
 	cmd := &cobra.Command{
 		Use:   "git-hook",
-		Short: "Manage the optional prepare-commit-msg hook that adds Conn-Intent trailers",
-		Long: "Preview, install, or remove Conn's optional prepare-commit-msg hook in the effective hooks\n" +
-			"directory, including core.hooksPath. The hook runs `conn trailer` and never blocks a commit.\n" +
-			"Installation refuses to overwrite a different hook and prints the line to add to it instead;\n" +
-			"removal deletes only byte-identical Conn content. Preview writes nothing.",
+		Short: "Manage the optional commit-msg hook that adds Conn-Intent trailers",
+		Long: "Preview, install, or remove Conn's optional commit-msg hook in the effective hooks\n" +
+			"directory, including core.hooksPath. The hook runs `conn trailer` after the message is\n" +
+			"edited and never blocks a commit. Installation refuses to overwrite a different hook and\n" +
+			"prints the line to add to it instead; removal deletes only byte-identical Conn content.\n" +
+			"Both also delete an unchanged prepare-commit-msg hook from an earlier Conn version, which\n" +
+			"added the trailer before editing. Preview writes nothing.",
 		Args: cobra.NoArgs,
 	}
 	cmd.PersistentFlags().StringVar(&worktree, "worktree", ".", "local repository worktree")
@@ -373,6 +380,12 @@ func newGitHookCommand(deps Dependencies, streams Streams) *cobra.Command {
 		if plan.Mode == githook.ModeInstall && plan.HasConflict() {
 			fmt.Fprintf(out, "A different %s hook exists. To chain Conn manually, add this line to it:\n  %s\n", githook.HookName, plan.Snippet())
 		}
+		switch plan.LegacyAction {
+		case githook.ActionRemove:
+			fmt.Fprintf(out, "  %-9s %s (earlier Conn hook, which added the trailer before editing)\n", githook.ActionRemove, filepath.ToSlash(plan.LegacyPath))
+		case githook.ActionConflict:
+			fmt.Fprintf(out, "  %-9s %s is a modified earlier Conn hook; remove its `conn trailer` line by hand\n", "review", filepath.ToSlash(plan.LegacyPath))
+		}
 	}
 	preview := &cobra.Command{
 		Use:   "preview",
@@ -390,7 +403,7 @@ func newGitHookCommand(deps Dependencies, streams Streams) *cobra.Command {
 	}
 	install := &cobra.Command{
 		Use:   "install",
-		Short: "Install the prepare-commit-msg hook after showing its plan",
+		Short: "Install the commit-msg hook after showing its plan",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			proposed, err := plan(c, githook.ModeInstall)
@@ -399,12 +412,12 @@ func newGitHookCommand(deps Dependencies, streams Streams) *cobra.Command {
 			}
 			render(streams.Out, proposed)
 			if proposed.HasConflict() {
-				return errors.New("installation stopped: a different prepare-commit-msg hook exists and was preserved")
+				return errors.New("installation stopped: a different commit-msg hook exists and was preserved")
 			}
 			if err := githook.Apply(proposed); err != nil {
 				return err
 			}
-			fmt.Fprintln(streams.Out, "Installed the Conn prepare-commit-msg hook. Remove it with `conn git-hook remove`.")
+			fmt.Fprintln(streams.Out, "Installed the Conn commit-msg hook. Remove it with `conn git-hook remove`.")
 			return nil
 		},
 	}
@@ -422,13 +435,13 @@ func newGitHookCommand(deps Dependencies, streams Streams) *cobra.Command {
 			}
 			render(streams.Out, proposed)
 			if proposed.HasConflict() {
-				return errors.New("removal stopped: the prepare-commit-msg hook is not unchanged Conn content and was preserved")
+				return errors.New("removal stopped: the commit-msg hook is not unchanged Conn content and was preserved")
 			}
 			if err := githook.Apply(proposed); err != nil {
 				return err
 			}
-			if proposed.Action == githook.ActionRemove {
-				fmt.Fprintln(streams.Out, "Removed the Conn prepare-commit-msg hook.")
+			if proposed.Action == githook.ActionRemove || proposed.LegacyAction == githook.ActionRemove {
+				fmt.Fprintln(streams.Out, "Removed the Conn Git hook.")
 			}
 			return nil
 		},
