@@ -64,6 +64,16 @@ func TestConformance(t *testing.T) {
 		protocol.SessionGrantSchema:             roundTrip[protocol.SessionGrant],
 		protocol.GitHubLoginSchema:              roundTrip[protocol.GitHubLogin],
 		protocol.ErrorSchema:                    roundTrip[protocol.Error],
+		protocol.CollisionPreviewInputSchema:    roundTrip[protocol.CollisionPreviewInput],
+		protocol.CollisionPreviewSchema:         roundTrip[protocol.CollisionPreview],
+		protocol.CombinationCheckSchema:         roundTrip[protocol.CombinationCheck],
+		protocol.CombinationCheckInputSchema:    roundTrip[protocol.CombinationCheckInput],
+		protocol.CICredentialSchema:             roundTrip[protocol.CICredential],
+		protocol.CICredentialListSchema:         roundTrip[protocol.CICredentialList],
+		protocol.CICredentialCreateSchema:       roundTrip[protocol.CICredentialCreate],
+		protocol.CICredentialGrantSchema:        roundTrip[protocol.CICredentialGrant],
+		protocol.CICredentialContextSchema:      roundTrip[protocol.CICredentialContext],
+		protocol.ProjectInsightsSchema:          roundTrip[protocol.ProjectInsights],
 	}
 
 	for _, tc := range loadFixtures(t) {

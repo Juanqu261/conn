@@ -12,7 +12,8 @@ import (
 
 // requestLog collects the safe facts of one request for its access log line.
 type requestLog struct {
-	actor uuid.UUID
+	actor        uuid.UUID
+	ciCredential uuid.UUID
 }
 
 type requestLogKey struct{}
@@ -21,6 +22,13 @@ type requestLogKey struct{}
 func setActor(r *http.Request, human uuid.UUID) {
 	if entry, ok := r.Context().Value(requestLogKey{}).(*requestLog); ok {
 		entry.actor = human
+	}
+}
+
+// setCICredential records the authenticated CI credential for the access log.
+func setCICredential(r *http.Request, credential uuid.UUID) {
+	if entry, ok := r.Context().Value(requestLogKey{}).(*requestLog); ok {
+		entry.ciCredential = credential
 	}
 }
 
@@ -48,6 +56,9 @@ func withAccessLog(log *slog.Logger, next http.Handler) http.Handler {
 		}
 		if entry.actor != (uuid.UUID{}) {
 			attrs = append(attrs, "actor_human_id", entry.actor.String())
+		}
+		if entry.ciCredential != (uuid.UUID{}) {
+			attrs = append(attrs, "ci_credential_id", entry.ciCredential.String())
 		}
 		if project, err := uuid.Parse(r.PathValue("project_id")); err == nil {
 			attrs = append(attrs, "project_id", project.String())

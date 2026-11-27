@@ -1,4 +1,5 @@
-// Package mcp adapts Conn to Kiro through the official MCP Go SDK. It
+// Package mcp adapts Conn to Kiro and other MCP coding agents through the
+// official MCP Go SDK. It
 // exposes authenticated tools, guided prompts, optional focused resources,
 // direct account interactions, process-local Project selection, generated
 // handoffs, and bounded local analysis over stdio. It calls the same backend
@@ -51,6 +52,10 @@ type Config struct {
 	// the trusted analysis worktree. Nil uses repositorygit.Discover.
 	DiscoverRepositoryAt func(context.Context, string) (repositorygit.Metadata, error)
 	Log                  *slog.Logger
+
+	// adapter attributes Participants from the reported client name. Nil
+	// attributes them to Kiro.
+	adapter *adapterIdentity
 }
 
 const instructions = "Conn tells you, before you edit, when other in-progress work changes the same behavior, contract, or data. " +
@@ -58,6 +63,7 @@ const instructions = "Conn tells you, before you edit, when other in-progress wo
 	"Tools read your team's Objectives, optional Blueprints and Charters, Intents, collision assessments, and Radar. " +
 	"They may publish, revise, or release only the signed-in human's participant-owned Intents and may attach bounded reference-only evidence or non-binding resolution proposals. " +
 	"Before review, read_review_packet states what the change intended, touched, and verified; observed check runs come only from `conn evidence run` in the shell, with the human's approval. " +
+	"Never create CI credentials, set secrets, or run conn verify-pair without the human's approval; install_ci_check only writes the workflow file. " +
 	"Humans alone make binding decisions. Your human identity comes from the Conn session, not from tool input."
 
 // Serve runs one MCP session over in and out until the client disconnects or
@@ -67,6 +73,8 @@ func Serve(ctx context.Context, in io.ReadCloser, out io.WriteCloser, cfg Config
 		Instructions: instructions,
 		Logger:       cfg.Log,
 	})
+	cfg.adapter = &adapterIdentity{}
+	detectAdapter(server, cfg.adapter)
 	interactions := registerTools(server, cfg)
 	registerWorkflows(server, cfg)
 	defer interactions.clear()

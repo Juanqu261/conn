@@ -158,7 +158,7 @@ func (t tools) client() (*httpclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.WithAdapter("kiro"), nil
+	return client.WithAdapter(t.cfg.adapter.kind()), nil
 }
 
 func (t tools) resolveProject(ctx context.Context, client *httpclient.Client, explicit string) (selectedProject, error) {

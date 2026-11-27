@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:collision-preview",
+  "title": "Collision preview",
+  "description": "The collisions the deterministic assessor would open for candidate claims against active Intent revisions. Nothing was persisted and no event was appended. state is open unless an existing human decision would be inherited, in which case decision_ref names it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "claim_count", "collisions", "truncated"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "claim_count": { "type": "integer", "minimum": 0, "maximum": 500 },
+    "collisions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/previewedCollision" }
+    },
+    "truncated": { "type": "boolean" }
+  },
+  "$defs": {
+    "previewedCollision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "severity", "state", "matched_subjects", "counterpart"],
+      "properties": {
+        "rule_id": {
+          "enum": [
+            "shared_declared_invariant",
+            "shared_exported_symbol",
+            "contract_producer_consumer",
+            "schema_resource_overlap"
+          ]
+        },
+        "severity": { "$ref": "urn:conn:schema:v1:common#/$defs/collisionSeverity" },
+        "state": { "enum": ["open", "resolved", "dismissed"] },
+        "matched_subjects": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" }
+        },
+        "counterpart": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intent_id", "revision"],
+          "properties": {
+            "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+            "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" }
+          }
+        },
+        "decision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "inherited_from_collision_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      }
+    }
+  }
+}

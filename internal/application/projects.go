@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"time"
 	"uuid"
@@ -219,6 +220,32 @@ type Tx interface {
 	// Intent at or before maxRevision, or returns ErrNotFound.
 	LatestAnalysis(ctx context.Context, projectID, intentID uuid.UUID, maxRevision int) (protocol.WorkContextAnalysis, error)
 
+	// InsertCombinationCheck appends one immutable combination check.
+	InsertCombinationCheck(ctx context.Context, check protocol.CombinationCheck) error
+	// CombinationChecks returns at most limit of a collision's combination
+	// checks, newest first.
+	CombinationChecks(ctx context.Context, projectID, collisionID uuid.UUID, limit int) ([]protocol.CombinationCheck, error)
+	// LatestCombinationOutcomes maps each named collision that has a
+	// combination check to its most recent outcome.
+	LatestCombinationOutcomes(ctx context.Context, projectID uuid.UUID, collisionIDs []uuid.UUID) (map[uuid.UUID]string, error)
+
+	// InsertCICredential stores a credential and the SHA-256 hash of its token.
+	InsertCICredential(ctx context.Context, credential protocol.CICredential, tokenHash [32]byte) error
+	// CICredentials lists at most limit of a Project's credentials, newest first.
+	CICredentials(ctx context.Context, projectID uuid.UUID, limit int) ([]protocol.CICredential, error)
+	CICredential(ctx context.Context, projectID, credentialID uuid.UUID) (protocol.CICredential, error)
+	// RevokeCICredential records revocation and reports false when the
+	// credential was already revoked.
+	RevokeCICredential(ctx context.Context, projectID, credentialID uuid.UUID, at time.Time) (bool, error)
+	// CICredentialByTokenHash finds a credential in any Project, with its
+	// repository's canonical remote and default branch.
+	CICredentialByTokenHash(ctx context.Context, tokenHash [32]byte) (protocol.CICredential, protocol.RepositoryConnection, error)
+	// TouchCICredential records last use unless it was recorded after notBefore.
+	TouchCICredential(ctx context.Context, credentialID uuid.UUID, at, notBefore time.Time) error
+
+	// InsightCounts reads the Project-level facts insights are computed from.
+	InsightCounts(ctx context.Context, projectID uuid.UUID, since, until time.Time) (InsightCounts, error)
+
 	// AppendEvent assigns the Project's next event sequence to event, stores
 	// it, and returns the sequence.
 	AppendEvent(ctx context.Context, event protocol.EventEnvelope) (int64, error)
@@ -306,11 +333,11 @@ func (p *Projects) ProjectsForHuman(ctx context.Context, actor uuid.UUID) (proto
 	return result, err
 }
 
-// ProjectMembers returns every Project member to a current member.
-func (p *Projects) ProjectMembers(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.ProjectMemberList], error) {
+// ProjectMembersAs returns every Project member to an authorized reader.
+func (p *Projects) ProjectMembersAs(ctx context.Context, reader Reader, projectID uuid.UUID) (Result[protocol.ProjectMemberList], error) {
 	var result Result[protocol.ProjectMemberList]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		members, err := tx.ProjectMembers(ctx, projectID)
@@ -568,14 +595,34 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 // is an explicit optimistic-concurrency revision; no external change can
 // mutate a stored Objective.
 func (p *Projects) ImportKiroSpecObjective(ctx context.Context, actor, projectID uuid.UUID, input protocol.ObjectiveImportInput, expectedRevision int) (Result[protocol.Objective], error) {
+	return p.ImportObjective(ctx, actor, projectID, SourceKiroSpec, input, expectedRevision)
+}
+
+// Objective import source kinds.
+const (
+	SourceKiroSpec    = "kiro_spec"
+	SourceGitHubIssue = "github_issue"
+)
+
+// githubIssueRef is the stable source reference of an imported GitHub issue.
+var githubIssueRef = regexp.MustCompile(`^github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[1-9][0-9]{0,9}$`)
+
+// ImportObjective records a human-reviewed Objective revision with immutable
+// provenance for a local Kiro specification or a GitHub issue. sourceKind is
+// fixed by the route, and the input must name the same kind. The server never
+// receives the source itself or a GitHub token.
+func (p *Projects) ImportObjective(ctx context.Context, actor, projectID uuid.UUID, sourceKind string, input protocol.ObjectiveImportInput, expectedRevision int) (Result[protocol.Objective], error) {
 	if err := validateRecord(input); err != nil {
 		return Result[protocol.Objective]{}, err
 	}
 	if expectedRevision < 0 {
 		return Result[protocol.Objective]{}, &InvalidError{Message: "The expected revision cannot be negative."}
 	}
-	if input.SourceKind != "kiro_spec" {
-		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_kind", Message: "Only local Kiro specification imports are available. GitHub issue imports require a future GitHub App and repository authorization."}
+	if input.SourceKind != sourceKind {
+		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_kind", Message: fmt.Sprintf("This import route accepts source_kind %s only.", sourceKind)}
+	}
+	if sourceKind == SourceGitHubIssue && !githubIssueRef.MatchString(input.SourceRef) {
+		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_ref", Message: "A GitHub issue source_ref must be github.com/<owner>/<name>/issues/<number>."}
 	}
 	if err := uniqueKeys(input.KeyPoints, func(k protocol.KeyPoint) string { return k.Key }, "/key_points", "Key-point"); err != nil {
 		return Result[protocol.Objective]{}, err
@@ -654,11 +701,11 @@ func replay[T any](revision int, load func(revision int) (T, error), same func(T
 	return zero, ErrStaleRevision
 }
 
-// ObjectiveRevision returns one immutable Objective revision to a member.
-func (p *Projects) ObjectiveRevision(ctx context.Context, actor, projectID, objectiveID uuid.UUID, revision int) (Result[protocol.Objective], error) {
+// ObjectiveRevisionAs returns one immutable Objective revision to an authorized reader.
+func (p *Projects) ObjectiveRevisionAs(ctx context.Context, reader Reader, projectID, objectiveID uuid.UUID, revision int) (Result[protocol.Objective], error) {
 	var result Result[protocol.Objective]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		var err error

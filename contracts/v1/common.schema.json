@@ -231,7 +231,10 @@
         "resolution.proposed",
         "resolution.decided",
         "evidence.attached",
-        "objective.imported"
+        "objective.imported",
+        "combination.checked",
+        "ci_credential.created",
+        "ci_credential.revoked"
       ]
     }
   }

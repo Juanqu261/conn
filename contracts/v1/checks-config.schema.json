@@ -19,6 +19,30 @@
         "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
       },
       "additionalProperties": { "$ref": "#/$defs/check" }
+    },
+    "pair_verification": {
+      "description": "Commands `conn verify-pair` runs in the merged tree of two collided branches. Conn reads this section only from the repository default branch, never from either feature branch.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks"],
+      "properties": {
+        "setup": {
+          "description": "Optional dependency setup that runs once in the merged tree before the pair checks.",
+          "$ref": "#/$defs/check"
+        },
+        "checks": {
+          "description": "Keys of checks defined in this file.",
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          }
+        }
+      }
     }
   },
   "$defs": {

@@ -149,7 +149,7 @@ func renderKiroPlan(out io.Writer, plan kirointegration.Plan) {
 	}
 	for _, change := range plan.Changes {
 		fmt.Fprintf(out, "  %-9s %s\n", change.Action, filepath.ToSlash(change.RelativePath))
-		if plan.Mode == kirointegration.ModeInstall && (change.Action == kirointegration.ActionCreate || change.Action == kirointegration.ActionConflict) {
+		if plan.Mode == kirointegration.ModeInstall && (change.Action == kirointegration.ActionCreate || change.Action == kirointegration.ActionReplace || change.Action == kirointegration.ActionConflict) {
 			if content := plan.Content(change.RelativePath); content != nil {
 				fmt.Fprintf(out, "--- proposed %s ---\n%s--- end proposed %s ---\n", filepath.ToSlash(change.RelativePath), content, filepath.ToSlash(change.RelativePath))
 			}

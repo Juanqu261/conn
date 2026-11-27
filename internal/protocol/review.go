@@ -11,8 +11,16 @@ const (
 
 // ChecksConfig is the committed .conn/checks.json file.
 type ChecksConfig struct {
-	Version int                        `json:"version"`
-	Checks  map[string]CheckDefinition `json:"checks"`
+	Version          int                        `json:"version"`
+	Checks           map[string]CheckDefinition `json:"checks"`
+	PairVerification *PairVerification          `json:"pair_verification,omitempty"`
+}
+
+// PairVerification names the commands `conn verify-pair` runs in a merged
+// tree. Conn reads it only from the default branch.
+type PairVerification struct {
+	Setup  *CheckDefinition `json:"setup,omitempty"`
+	Checks []string         `json:"checks"`
 }
 
 func (ChecksConfig) SchemaID() string { return ChecksConfigSchema }
@@ -174,6 +182,8 @@ type ReviewCollision struct {
 	Counterpart     ReviewIntentRef `json:"counterpart"`
 	Decision        *ReviewDecision `json:"decision,omitempty"`
 	ProposalCount   *int            `json:"proposal_count,omitempty"`
+	// LatestCombinationOutcome is the most recent combination check outcome.
+	LatestCombinationOutcome string `json:"latest_combination_outcome,omitempty"`
 }
 
 type ReviewIntentRef struct {

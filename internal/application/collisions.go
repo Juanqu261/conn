@@ -30,6 +30,9 @@ type collisionCandidate struct {
 	subjects      map[string]struct{}
 	claims        map[uuid.UUID]struct{}
 	provenance    map[string]struct{}
+	// inherited is the decided assessment whose state this candidate would
+	// carry forward, or nil.
+	inherited *protocol.CollisionAssessment
 }
 
 // persistDeclaredClaims turns the transport candidates in an IntentRevision
@@ -105,57 +108,21 @@ func (p *Projects) assessActiveIntentCollisions(ctx context.Context, tx Tx, acto
 	if len(claims) > maxAssessorClaims {
 		return &InvalidError{Message: fmt.Sprintf("The active claim set exceeds the bounded assessor limit of %d claims.", maxAssessorClaims)}
 	}
-	sort.Slice(claims, func(i, j int) bool {
-		if claims[i].NormalizedSubject != claims[j].NormalizedSubject {
-			return claims[i].NormalizedSubject < claims[j].NormalizedSubject
-		}
-		return claims[i].ClaimID.String() < claims[j].ClaimID.String()
-	})
-
-	bySubject := make(map[string][]protocol.SemanticClaim)
+	var own, others []protocol.SemanticClaim
 	for _, claim := range claims {
-		bySubject[claim.NormalizedSubject] = append(bySubject[claim.NormalizedSubject], claim)
-	}
-	subjects := make([]string, 0, len(bySubject))
-	for subject := range bySubject {
-		subjects = append(subjects, subject)
-	}
-	sort.Strings(subjects)
-
-	candidates := map[string]*collisionCandidate{}
-	pairCount := 0
-	for _, subject := range subjects {
-		group := bySubject[subject]
-		for i := range group {
-			for j := i + 1; j < len(group); j++ {
-				left, right := group[i], group[j]
-				if left.IntentID == right.IntentID ||
-					(left.IntentID != changed.IntentID && right.IntentID != changed.IntentID) {
-					continue
-				}
-				pairCount++
-				if pairCount > maxAssessorPairs {
-					return &InvalidError{Message: fmt.Sprintf("The active claim comparison exceeds the bounded assessor limit of %d matching pairs.", maxAssessorPairs)}
-				}
-				for _, ruleID := range matchingRules(left, right) {
-					addCollisionCandidate(candidates, ruleID, subject, left, right)
-				}
-			}
+		if claim.IntentID == changed.IntentID {
+			own = append(own, claim)
+		} else {
+			others = append(others, claim)
 		}
 	}
-
-	keys := make([]string, 0, len(candidates))
-	for key := range candidates {
-		keys = append(keys, key)
+	candidates, err := assessCandidates(own, others, txDecisionIndex(ctx, tx, changed.ProjectID))
+	if err != nil {
+		return err
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		candidate := candidates[key]
+	for _, candidate := range candidates {
 		assessment := candidate.assessment(changed.ProjectID, at)
-		inherited, err := p.inheritDecision(ctx, tx, candidate, &assessment)
-		if err != nil {
-			return err
-		}
+		inherited := candidate.inherit(&assessment)
 		inserted, err := tx.InsertCollisionAssessment(ctx, assessment)
 		if err != nil {
 			return err
@@ -179,27 +146,92 @@ func (p *Projects) assessActiveIntentCollisions(ctx context.Context, tx Tx, acto
 	return nil
 }
 
-// inheritDecision carries a human decision forward to a new assessment for
-// the same Intent pair and rule. The new assessment inherits the decided
-// state only when every subject it matched was covered by the decision, so a
-// new matching subject always reopens the warning. A decided subject list at
-// its bound may have been truncated and is never treated as complete.
-func (p *Projects) inheritDecision(ctx context.Context, tx Tx, candidate *collisionCandidate, assessment *protocol.CollisionAssessment) (bool, error) {
-	prior, err := tx.LatestDecidedCollision(ctx, assessment.ProjectID, candidate.leftIntentID, candidate.rightIntentID, candidate.ruleID)
-	if errors.Is(err, ErrNotFound) {
-		return false, nil
+// DecisionIndex returns the most recent resolved or dismissed assessment for
+// one ordered Intent pair and rule, across revisions, or nil.
+type DecisionIndex func(leftIntentID, rightIntentID uuid.UUID, ruleID string) (*protocol.CollisionAssessment, error)
+
+func txDecisionIndex(ctx context.Context, tx Tx, projectID uuid.UUID) DecisionIndex {
+	return func(leftIntentID, rightIntentID uuid.UUID, ruleID string) (*protocol.CollisionAssessment, error) {
+		prior, err := tx.LatestDecidedCollision(ctx, projectID, leftIntentID, rightIntentID, ruleID)
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &prior, nil
 	}
-	if err != nil {
-		return false, err
+}
+
+// assessCandidates is the pure assessor core that persistence and previews
+// share. It compares the claims of one changed Intent revision with the
+// active claims of other Intents by normalized subject, applies the rules,
+// and resolves which human decision each candidate would inherit. Results
+// are sorted by Intent pair, revisions, and rule.
+func assessCandidates(changed, active []protocol.SemanticClaim, prior DecisionIndex) ([]*collisionCandidate, error) {
+	bySubject := make(map[string][]protocol.SemanticClaim)
+	for _, claim := range active {
+		bySubject[claim.NormalizedSubject] = append(bySubject[claim.NormalizedSubject], claim)
 	}
-	if prior.DecisionRef == nil || len(prior.MatchedSubjects) >= protocol.MaxMatchedSubjects || !subjectsCovered(candidate.subjects, prior.MatchedSubjects) {
-		return false, nil
+	ordered := append([]protocol.SemanticClaim(nil), changed...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].NormalizedSubject != ordered[j].NormalizedSubject {
+			return ordered[i].NormalizedSubject < ordered[j].NormalizedSubject
+		}
+		return ordered[i].ClaimID.String() < ordered[j].ClaimID.String()
+	})
+	candidates := map[string]*collisionCandidate{}
+	pairCount := 0
+	for _, mine := range ordered {
+		for _, theirs := range bySubject[mine.NormalizedSubject] {
+			if theirs.IntentID == mine.IntentID {
+				continue
+			}
+			pairCount++
+			if pairCount > maxAssessorPairs {
+				return nil, &InvalidError{Message: fmt.Sprintf("The active claim comparison exceeds the bounded assessor limit of %d matching pairs.", maxAssessorPairs)}
+			}
+			for _, ruleID := range matchingRules(mine, theirs) {
+				addCollisionCandidate(candidates, ruleID, mine.NormalizedSubject, mine, theirs)
+			}
+		}
 	}
+	keys := make([]string, 0, len(candidates))
+	for key := range candidates {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]*collisionCandidate, 0, len(keys))
+	for _, key := range keys {
+		candidate := candidates[key]
+		decided, err := prior(candidate.leftIntentID, candidate.rightIntentID, candidate.ruleID)
+		if err != nil {
+			return nil, err
+		}
+		// A decided subject list at its bound may have been truncated and is
+		// never treated as complete.
+		if decided != nil && decided.DecisionRef != nil && len(decided.MatchedSubjects) < protocol.MaxMatchedSubjects && subjectsCovered(candidate.subjects, decided.MatchedSubjects) {
+			candidate.inherited = decided
+		}
+		result = append(result, candidate)
+	}
+	return result, nil
+}
+
+// inherit carries a human decision forward to a new assessment for the same
+// Intent pair and rule. The new assessment inherits the decided state only
+// when every subject it matched was covered by the decision, so a new
+// matching subject always reopens the warning.
+func (c *collisionCandidate) inherit(assessment *protocol.CollisionAssessment) bool {
+	if c.inherited == nil {
+		return false
+	}
+	prior := c.inherited
 	assessment.State = prior.State
 	decision := *prior.DecisionRef
 	assessment.DecisionRef = &decision
 	assessment.ExplanationMarkdown += fmt.Sprintf(" Human decision %s on collision %s covered every matched subject, so this assessment inherits the %s state.", decision, prior.CollisionID, prior.State)
-	return true, nil
+	return true
 }
 
 func subjectsCovered(subjects map[string]struct{}, decided []string) bool {
@@ -214,7 +246,6 @@ func subjectsCovered(subjects map[string]struct{}, decided []string) bool {
 	}
 	return true
 }
-
 func matchingRules(left, right protocol.SemanticClaim) []string {
 	// A model inference is never enough to open an assessment. Task 7 only
 	// stores declared claims, but retaining this guard keeps the assessor safe

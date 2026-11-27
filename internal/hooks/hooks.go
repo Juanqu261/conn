@@ -205,8 +205,8 @@ func (r *runner) diagnose(ctx context.Context, err error) {
 }
 
 // client authenticates with CONN_TOKEN, then the credential store entry for
-// the server URL. Hooks use the Kiro participant adapter so reads see the
-// same participant as the MCP adapter.
+// the server URL. Hooks read as the participant adapter the MCP adapter
+// recorded in the focus, Kiro by default, so reads see the same participant.
 func (r *runner) client(serverURL string) (*httpclient.Client, error) {
 	if serverURL == "" {
 		serverURL = httpclient.DefaultServerURL
@@ -226,7 +226,13 @@ func (r *runner) client(serverURL string) (*httpclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.WithToken(token).WithAdapter(adapterKind), nil
+	adapter := adapterKind
+	if r.state != nil {
+		if recorded := r.state.Focus().ParticipantAdapter; recorded == "kiro" || recorded == "mcp" {
+			adapter = recorded
+		}
+	}
+	return base.WithToken(token).WithAdapter(adapter), nil
 }
 
 // connection reports the Project and repository this worktree belongs to.

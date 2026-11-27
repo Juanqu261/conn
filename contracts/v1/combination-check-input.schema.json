@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:combination-check-input",
+  "title": "Combination check input",
+  "description": "The result of `conn verify-pair` for one collision. Conn derives the check identifier, Project, collision, producing Participant, and recording time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "left",
+    "right",
+    "merge_result",
+    "conflicted_paths",
+    "diagnostics",
+    "checks",
+    "outcome",
+    "config_source",
+    "runner"
+  ],
+  "properties": {
+    "left": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/side" },
+    "right": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/side" },
+    "merge_result": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/mergeResult" },
+    "conflicted_paths": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/conflictedPaths" },
+    "diagnostics": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/diagnostics" },
+    "setup": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/run" },
+    "checks": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/checks" },
+    "outcome": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/outcome" },
+    "config_source": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/configSource" },
+    "runner": { "$ref": "urn:conn:schema:v1:combination-check#/$defs/runner" }
+  }
+}

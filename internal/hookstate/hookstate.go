@@ -50,15 +50,18 @@ var ErrLocked = errors.New("the Conn hook state is locked")
 
 // Focus names the Intent that belongs to this worktree. It grants no access.
 type Focus struct {
-	Version         int               `json:"version"`
-	ServerURL       string            `json:"server_url,omitempty"`
-	ProjectID       *uuid.UUID        `json:"project_id,omitempty"`
-	RepositoryID    *uuid.UUID        `json:"repository_id,omitempty"`
-	IntentID        *uuid.UUID        `json:"intent_id,omitempty"`
-	IntentRevision  int               `json:"intent_revision,omitempty"`
-	ParticipantID   *uuid.UUID        `json:"participant_id,omitempty"`
-	LastEvent       int64             `json:"last_event,omitempty"`
-	KnownCollisions map[string]string `json:"known_collisions,omitempty"`
+	Version        int        `json:"version"`
+	ServerURL      string     `json:"server_url,omitempty"`
+	ProjectID      *uuid.UUID `json:"project_id,omitempty"`
+	RepositoryID   *uuid.UUID `json:"repository_id,omitempty"`
+	IntentID       *uuid.UUID `json:"intent_id,omitempty"`
+	IntentRevision int        `json:"intent_revision,omitempty"`
+	ParticipantID  *uuid.UUID `json:"participant_id,omitempty"`
+	// ParticipantAdapter is the adapter kind of that Participant, so hooks
+	// read as the same Participant.
+	ParticipantAdapter string            `json:"participant_adapter,omitempty"`
+	LastEvent          int64             `json:"last_event,omitempty"`
+	KnownCollisions    map[string]string `json:"known_collisions,omitempty"`
 	// KnownPairs maps "rule|counterpart Intent ID" to the last known state,
 	// so a collision that continues under a new identity after a revision is
 	// not reported as new.

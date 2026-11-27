@@ -62,6 +62,10 @@
       "maxItems": 50,
       "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
     },
+    "latest_combination_outcome": {
+      "description": "Read views only: the outcome of the most recent combination check of this collision. Stored assessments never carry it.",
+      "enum": ["passing", "failing", "merge_conflict", "incomplete"]
+    },
     "explanation_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/markdown" },
     "created_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
     "superseded_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }

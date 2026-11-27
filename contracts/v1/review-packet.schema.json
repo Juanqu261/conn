@@ -319,6 +319,10 @@
           "description": "Non-binding proposals recorded for the collision. Absent when the packet did not load collision details.",
           "type": "integer",
           "minimum": 0
+        },
+        "latest_combination_outcome": {
+          "description": "Outcome of the most recent combination check of this collision, run on a participant's machine.",
+          "enum": ["passing", "failing", "merge_conflict", "incomplete"]
         }
       }
     }

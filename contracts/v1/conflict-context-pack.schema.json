@@ -58,6 +58,12 @@
       "maxItems": 20,
       "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
     },
+    "combination_checks": {
+      "description": "The five most recent combination checks of this collision, newest first. They are advisory and never change the collision state.",
+      "type": "array",
+      "maxItems": 5,
+      "items": { "$ref": "urn:conn:schema:v1:combination-check" }
+    },
     "unresolved_question": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
     "allowed_resolution_kinds": {
       "type": "array",

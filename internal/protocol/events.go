@@ -29,6 +29,9 @@ const (
 	EventResolutionDecided          EventType = "resolution.decided"
 	EventEvidenceAttached           EventType = "evidence.attached"
 	EventObjectiveImported          EventType = "objective.imported"
+	EventCombinationChecked         EventType = "combination.checked"
+	EventCICredentialCreated        EventType = "ci_credential.created"
+	EventCICredentialRevoked        EventType = "ci_credential.revoked"
 )
 
 // EntityType names the kind of entity an event's EntityID refers to.
@@ -46,6 +49,8 @@ const (
 	EntityResolutionProposal EntityType = "resolution_proposal"
 	EntityResolutionDecision EntityType = "resolution_decision"
 	EntityEvidenceReference  EntityType = "evidence_reference"
+	EntityCombinationCheck   EntityType = "combination_check"
+	EntityCICredential       EntityType = "ci_credential"
 )
 
 // EventPayload is implemented by exactly one payload type per EventType.
@@ -157,6 +162,9 @@ var payloadDecoders = map[EventType]func([]byte) (EventPayload, error){
 	EventResolutionDecided:          decodePayload[ResolutionDecided],
 	EventEvidenceAttached:           decodePayload[EvidenceAttached],
 	EventObjectiveImported:          decodePayload[ObjectiveImported],
+	EventCombinationChecked:         decodePayload[CombinationChecked],
+	EventCICredentialCreated:        decodePayload[CICredentialCreated],
+	EventCICredentialRevoked:        decodePayload[CICredentialRevoked],
 }
 
 func decodePayload[T EventPayload](data []byte) (EventPayload, error) {
@@ -317,3 +325,31 @@ type ObjectiveImported struct {
 
 func (ObjectiveImported) EventType() EventType   { return EventObjectiveImported }
 func (ObjectiveImported) EntityType() EntityType { return EntityObjective }
+
+// CombinationChecked reports a recorded combination check. EntityID is the
+// combination check.
+type CombinationChecked struct {
+	CollisionID uuid.UUID `json:"collision_id"`
+	Outcome     string    `json:"outcome"`
+}
+
+func (CombinationChecked) EventType() EventType   { return EventCombinationChecked }
+func (CombinationChecked) EntityType() EntityType { return EntityCombinationCheck }
+
+// CICredentialCreated reports a new CI credential. EntityID is the
+// credential; the payload never contains its token.
+type CICredentialCreated struct {
+	RepositoryID uuid.UUID `json:"repository_id"`
+}
+
+func (CICredentialCreated) EventType() EventType   { return EventCICredentialCreated }
+func (CICredentialCreated) EntityType() EntityType { return EntityCICredential }
+
+// CICredentialRevoked reports a revoked CI credential. EntityID is the
+// credential.
+type CICredentialRevoked struct {
+	RepositoryID uuid.UUID `json:"repository_id"`
+}
+
+func (CICredentialRevoked) EventType() EventType   { return EventCICredentialRevoked }
+func (CICredentialRevoked) EntityType() EntityType { return EntityCICredential }

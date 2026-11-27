@@ -9,6 +9,10 @@
   "properties": {
     "intent_revision": { "$ref": "urn:conn:schema:v1:intent-revision" },
     "status": { "enum": ["active", "released", "superseded"] },
+    "owner_human_id": {
+      "description": "The Human behind the Participant that owns the Intent. It attributes work and grants no authority.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+    },
     "advisory_observations": {
       "description": "Advisory context such as optional Charter association and near-match subject advice. Observations never change the Intent, its claims, or any collision.",
       "type": "array",

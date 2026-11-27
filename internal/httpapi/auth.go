@@ -16,6 +16,11 @@ import (
 func authenticated(auth *application.Auth, log *slog.Logger, next func(http.ResponseWriter, *http.Request, application.Session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearer(r)
+		if ok && isCIToken(token) {
+			// CI credentials reach only the routes registered with readable.
+			writeError(w, log, http.StatusForbidden, "forbidden", "A CI credential may read only the Conn check routes of its own Project.")
+			return
+		}
 		if !ok || !credentials.ValidToken(token) {
 			unauthenticated(w, log)
 			return

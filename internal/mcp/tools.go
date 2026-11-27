@@ -194,6 +194,7 @@ func registerTools(server *sdk.Server, cfg Config) *interactionStore {
 	registerProjectTools(server, t)
 	registerPreEditTools(server, t)
 	registerReviewTools(server, t)
+	registerCITools(server, t)
 	return interactions
 }
 

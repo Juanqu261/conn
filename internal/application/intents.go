@@ -118,7 +118,8 @@ func (p *Projects) writeIntent(ctx context.Context, actor, projectID, participan
 		if err != nil {
 			return err
 		}
-		result.Data = protocol.IntentView{IntentRevision: revision, Status: "active", AdvisoryObservations: observations}
+		owner := actor
+		result.Data = protocol.IntentView{IntentRevision: revision, Status: "active", OwnerHumanID: &owner, AdvisoryObservations: observations}
 		payload := protocol.EventPayload(protocol.IntentPublished{Revision: revision.Revision})
 		if !publish {
 			payload = protocol.IntentRevised{Revision: revision.Revision}
@@ -190,11 +191,11 @@ func (p *Projects) ReleaseIntent(ctx context.Context, actor, projectID, particip
 	return result, err
 }
 
-// Intent reads one current snapshot to a project member.
-func (p *Projects) Intent(ctx context.Context, actor, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
+// IntentAs reads one current snapshot to an authorized reader.
+func (p *Projects) IntentAs(ctx context.Context, reader Reader, projectID, intentID uuid.UUID) (Result[protocol.IntentView], error) {
 	var result Result[protocol.IntentView]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		var err error
@@ -210,11 +211,11 @@ func (p *Projects) Intent(ctx context.Context, actor, projectID, intentID uuid.U
 	return result, err
 }
 
-// Intents lists active and released current snapshots to a project member.
-func (p *Projects) Intents(ctx context.Context, actor, projectID uuid.UUID) (Result[protocol.IntentList], error) {
+// IntentsAs lists active and released current snapshots to an authorized reader.
+func (p *Projects) IntentsAs(ctx context.Context, reader Reader, projectID uuid.UUID) (Result[protocol.IntentList], error) {
 	var result Result[protocol.IntentList]
 	err := p.Store.Read(ctx, func(tx Tx) error {
-		if _, err := tx.Role(ctx, projectID, actor); err != nil {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
 			return err
 		}
 		items, err := tx.Intents(ctx, projectID)

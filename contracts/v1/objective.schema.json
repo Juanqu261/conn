@@ -73,12 +73,12 @@
       }
     },
     "importProvenance": {
-      "description": "Immutable captured provenance for a human-authorized local Kiro specification import. The source is never live-synchronized.",
+      "description": "Immutable captured provenance for a human-authorized import of a local Kiro specification or a GitHub issue. The source is never live-synchronized.",
       "type": "object",
       "additionalProperties": false,
       "required": ["source_kind", "source_ref", "content_hash", "imported_at"],
       "properties": {
-        "source_kind": { "const": "kiro_spec" },
+        "source_kind": { "enum": ["kiro_spec", "github_issue"] },
         "source_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
         "source_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
         "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },

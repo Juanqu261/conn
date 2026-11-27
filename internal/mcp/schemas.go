@@ -131,6 +131,18 @@ func suggestClaimsToolSchema() map[string]any {
 			"type": "string", "minLength": 1, "maxLength": 4096,
 			"description": "Optional local directory inside the trusted MCP workspace. Defaults to the trusted workspace root.",
 		},
+		"preview_collisions": map[string]any{"type": "boolean", "description": "Also preview the collisions the candidates would open against active Intents, without publishing anything."},
+		"intent_id":          idSchema("Optional active Intent of yours that these candidates would revise; the preview then excludes its current claims and shows inherited decisions."),
+	})
+}
+
+func ciCheckToolSchema() map[string]any {
+	return objectSchema(nil, map[string]any{
+		"conn_ref": map[string]any{
+			"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._/-]+$",
+			"description": "Conn source revision the workflow builds. Defaults to this conn build's commit.",
+		},
+		"comment": map[string]any{"type": "boolean", "description": "Also create or update one pull-request comment, which adds pull-requests: write."},
 	})
 }
 

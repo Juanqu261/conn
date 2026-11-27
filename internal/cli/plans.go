@@ -83,7 +83,7 @@ func newObjectiveCommand(deps Dependencies, streams Streams) *cobra.Command {
 		Use:   "import-kiro-spec",
 		Short: "Import a local Kiro specification as an immutable Objective revision",
 		Long: "Hash a bounded local Kiro specification and record only its safe relative reference, digest, and your reviewed Objective summary. " +
-			"Conn never uploads or synchronizes the source. Refresh requires this command with --expected-revision. GitHub issue import remains deferred until GitHub App repository authorization exists.",
+			"Conn never uploads or synchronizes the source. Refresh requires this command with --expected-revision. Use import-github-issue for GitHub issues.",
 		Args: cobra.NoArgs,
 	}
 	ri := newRemote(importSpec, deps, streams)
@@ -146,7 +146,7 @@ func newObjectiveCommand(deps Dependencies, streams Streams) *cobra.Command {
 		return printResult(rs, result, renderObjective)
 	}
 
-	objective.AddCommand(create, revise, importSpec, show)
+	objective.AddCommand(create, revise, importSpec, newImportGitHubIssueCommand(deps, streams), show)
 	return objective
 }
 

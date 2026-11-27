@@ -75,8 +75,18 @@ func ParseConfig(data []byte) (Config, error) {
 		Checks map[string]struct {
 			Env map[string]json.RawMessage `json:"env"`
 		} `json:"checks"`
+		PairVerification struct {
+			Setup struct {
+				Env map[string]json.RawMessage `json:"env"`
+			} `json:"setup"`
+		} `json:"pair_verification"`
 	}
 	if json.Unmarshal(data, &loose) == nil {
+		for _, name := range sortedKeys(loose.PairVerification.Setup.Env) {
+			if strings.HasPrefix(strings.ToUpper(name), "CONN_") {
+				return Config{}, &ConfigError{Message: fmt.Sprintf("%s is invalid at /pair_verification/setup/env: the name %s uses the reserved CONN_ prefix", ConfigPath, name)}
+			}
+		}
 		for _, key := range sortedKeys(loose.Checks) {
 			for _, name := range sortedKeys(loose.Checks[key].Env) {
 				if strings.HasPrefix(strings.ToUpper(name), "CONN_") {
@@ -99,6 +109,13 @@ func ParseConfig(data []byte) (Config, error) {
 		return Config{}, &ConfigError{Message: fmt.Sprintf("%s is not valid JSON: %v", ConfigPath, err)}
 	}
 	sum := sha256.Sum256(data)
+	if pair := document.PairVerification; pair != nil {
+		for i, key := range pair.Checks {
+			if _, ok := document.Checks[key]; !ok {
+				return Config{}, &ConfigError{Message: fmt.Sprintf("%s is invalid at /pair_verification/checks/%d: %q names no check defined in this file", ConfigPath, i, key)}
+			}
+		}
+	}
 	return Config{Document: document, SHA256: hex.EncodeToString(sum[:])}, nil
 }
 

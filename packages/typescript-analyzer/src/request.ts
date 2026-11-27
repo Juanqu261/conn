@@ -1,7 +1,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, posix, relative, resolve, sep, win32 } from "node:path";
 
-export type AnalyzeMode = "planned" | "observed";
+export type AnalyzeMode = "planned" | "observed" | "diagnostics";
 
 export interface AnalyzeRequest {
   request_version: 2;
@@ -10,7 +10,7 @@ export interface AnalyzeRequest {
   worktree: string;
   canonical_remote: string;
   tsconfig_path?: string;
-  /** Planned: required, 1 to 50 entries. Observed: optional, replaces the changed set. */
+  /** Planned: required, 1 to 50 entries. Observed: optional, replaces the changed set. Diagnostics: not allowed. */
   paths?: string[];
   /** Planned only: worktree-relative path to the export names to include. */
   symbols?: Record<string, string[]>;
@@ -55,8 +55,8 @@ export function validateRequest(input: unknown): ValidatedRequest {
   if (!isRecord(input)) throw new AnalyzerRequestError("request must be a JSON object");
   if (input.request_version !== 2) throw new AnalyzerRequestError("request_version must be 2");
   const mode = input.mode;
-  if (mode !== "planned" && mode !== "observed")
-    throw new AnalyzerRequestError("mode must be planned or observed");
+  if (mode !== "planned" && mode !== "observed" && mode !== "diagnostics")
+    throw new AnalyzerRequestError("mode must be planned, observed, or diagnostics");
   const worktree = existingWorktree(input.worktree);
   if (typeof input.canonical_remote !== "string" || !CANONICAL_REMOTE.test(input.canonical_remote))
     throw new AnalyzerRequestError(
@@ -147,6 +147,11 @@ function existingWorktree(value: unknown): { path: string; real: string } {
 }
 
 function requestPaths(worktree: string, mode: AnalyzeMode, value: unknown): string[] {
+  if (mode === "diagnostics") {
+    if (value !== undefined)
+      throw new AnalyzerRequestError("paths is not allowed in diagnostics mode");
+    return [];
+  }
   if (value === undefined) {
     if (mode === "planned") throw new AnalyzerRequestError("planned mode requires 1 to 50 paths");
     return [];

@@ -18,6 +18,7 @@ export { type AnalyzeMode, type AnalyzeRequest, AnalyzerRequestError } from "./r
 
 export const MAX_CLAIMS = 500;
 export const MAX_DIAGNOSTICS = 100;
+export const MAX_DIAGNOSTIC_COUNTS = 2000;
 const MAX_PROJECTS = 25;
 const MAX_OBSERVED_FILES = 500;
 // Conn contract bounds: semanticSubject, opaqueReference, relativePath, title.
@@ -81,12 +82,22 @@ export interface AnalyzerRepository {
   head_revision_ref?: string;
 }
 
+export interface DiagnosticCount {
+  code: string;
+  path?: string;
+  count: number;
+}
+
 export interface AnalyzerReport {
   report_version: 2;
   mode: AnalyzeMode;
   repository: AnalyzerRepository;
   claims: Claim[];
   diagnostics: Diagnostic[];
+  /** Diagnostics mode only. */
+  diagnostic_counts?: DiagnosticCount[];
+  /** Diagnostics mode only. */
+  diagnostic_counts_truncated?: boolean;
 }
 
 interface Context {
@@ -116,9 +127,74 @@ export function analyze(request: AnalyzeRequest): AnalyzerReport {
     hashes: new Map(),
   };
   const repository: AnalyzerRepository = { canonical_remote: validated.canonicalRemote };
+  if (validated.mode === "diagnostics") return analyzeDiagnostics(context, repository);
   if (validated.mode === "planned") analyzePlanned(context);
   else analyzeObserved(context, repository);
   return report(context, repository);
+}
+
+/**
+ * Counts compiler diagnostic codes per repository path over every discovered
+ * program, for comparing a merged tree with each branch alone. A diagnostic
+ * reported by several programs counts once. Diagnostics outside the worktree
+ * or in node_modules count without a path. Message text is never included.
+ */
+function analyzeDiagnostics(context: Context, repository: AnalyzerRepository): AnalyzerReport {
+  const { worktree, tsconfigPath } = context.request;
+  const seen = new Set<string>();
+  const counts = new Map<string, DiagnosticCount>();
+  const count = (diagnostic: ts.Diagnostic): void => {
+    const file = diagnostic.file;
+    const key = `${diagnostic.code}|${file?.fileName ?? ""}|${diagnostic.start ?? -1}|${diagnostic.length ?? -1}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    let path: string | undefined;
+    if (file !== undefined && isInside(worktree, file.fileName)) {
+      const relativePath = normalizedRelative(worktree, file.fileName);
+      if (
+        !relativePath.split("/").includes("node_modules") &&
+        relativePath.length <= MAX_PATH_LENGTH
+      )
+        path = relativePath;
+    }
+    const code = `TS${diagnostic.code}`;
+    const entryKey = `${code}|${path ?? ""}`;
+    const entry =
+      counts.get(entryKey) ?? (path === undefined ? { code, count: 0 } : { code, path, count: 0 });
+    entry.count++;
+    counts.set(entryKey, entry);
+  };
+  for (const configPath of projectConfigs(worktree, tsconfigPath)) {
+    const result = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (result.error !== undefined) {
+      count(result.error);
+      continue;
+    }
+    const parsed = ts.parseJsonConfigFileContent(
+      result.config,
+      ts.sys,
+      dirname(configPath),
+      undefined,
+      configPath,
+    );
+    for (const diagnostic of parsed.errors) count(diagnostic);
+    if (parsed.fileNames.length === 0) continue;
+    const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
+    for (const diagnostic of ts.getPreEmitDiagnostics(program)) count(diagnostic);
+  }
+  const sorted = [...counts.values()].sort(
+    (left, right) =>
+      compareText(left.path ?? "", right.path ?? "") || compareText(left.code, right.code),
+  );
+  return {
+    report_version: 2,
+    mode: "diagnostics",
+    repository,
+    claims: [],
+    diagnostics: context.own.slice(0, MAX_DIAGNOSTICS),
+    diagnostic_counts: sorted.slice(0, MAX_DIAGNOSTIC_COUNTS),
+    diagnostic_counts_truncated: sorted.length > MAX_DIAGNOSTIC_COUNTS,
+  };
 }
 
 function analyzePlanned(context: Context): void {
