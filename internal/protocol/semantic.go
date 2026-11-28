@@ -474,6 +474,8 @@ type RadarObjective struct {
 	ObjectiveID uuid.UUID `json:"objective_id"`
 	Revision    int       `json:"revision"`
 	Title       string    `json:"title"`
+	// SourceKind is the method an imported Objective came from.
+	SourceKind string `json:"source_kind,omitempty"`
 }
 
 type RadarBlueprint struct {

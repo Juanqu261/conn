@@ -4502,6 +4502,244 @@
         "advisory_observations": ["No accepted Charter is associated with this Intent."],
         "owner_human_id": "019a8f00-0000-7000-8000-00000000000a"
       }
+    },
+    {
+      "name": "objective import accepts a Spec Kit feature",
+      "schema": "urn:conn:schema:v1:objective-import-input",
+      "valid": true,
+      "document": {
+        "objective_id": "019a8f00-0002-7000-8000-000000000001",
+        "source_kind": "speckit_feature",
+        "source_ref": "specs/001-checkout-retries/spec.md",
+        "content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "title": "Checkout retries",
+        "overview_markdown": "Retries must never charge a customer twice.\n\nConstitution version 2.1.1.",
+        "accountable_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "key_points": [
+          {
+            "key": "fr-001",
+            "kind": "acceptance_criterion",
+            "statement": "System MUST reuse the idempotency key on every retry."
+          },
+          {
+            "key": "sc-001",
+            "kind": "outcome",
+            "statement": "No shopper is charged twice for one checkout attempt."
+          },
+          {
+            "key": "question-1",
+            "kind": "question",
+            "statement": "provider timeout semantics are unknown"
+          },
+          {
+            "key": "constitution-library-first",
+            "kind": "constraint",
+            "statement": "I. Library-First. Every feature starts as a standalone library."
+          }
+        ]
+      }
+    },
+    {
+      "name": "Spec Kit check accepts named collisions, an own Intent, and a claim delta",
+      "schema": "urn:conn:schema:v1:speckit-check",
+      "valid": true,
+      "document": {
+        "feature": {
+          "directory": "specs/002-order-limits",
+          "spec_ref": "specs/002-order-limits/spec.md",
+          "title": "Order limits"
+        },
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "objective": {
+          "objective_id": "019a8f00-0002-7000-8000-000000000002",
+          "revision": 1,
+          "title": "Order limits",
+          "content_changed": false
+        },
+        "extraction": {
+          "source": "tasks",
+          "paths": ["src/payments/retry.ts"],
+          "new_paths": [],
+          "unresolved": ["docs/missing/guide.md"],
+          "tasks_without_path": ["T002"],
+          "truncated": false
+        },
+        "analysis": {
+          "available": true
+        },
+        "candidate_count": 1,
+        "candidates": [
+          {
+            "subject_kind": "contract",
+            "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+            "display_name": "shouldRetryCharge",
+            "relation": "changes",
+            "provenance_kind": "declared"
+          }
+        ],
+        "own_intent": {
+          "intent_id": "019a8f00-0003-7000-8000-000000000003",
+          "revision": 1,
+          "summary": "Work on Order limits"
+        },
+        "delta": {
+          "added": [
+            {
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+              "relation": "changes"
+            }
+          ],
+          "dropped": []
+        },
+        "collisions": [
+          {
+            "rule_id": "shared_exported_symbol",
+            "severity": "amber",
+            "state": "open",
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "counterpart": {
+              "intent_id": "019a8f00-0004-7000-8000-000000000004",
+              "revision": 1,
+              "summary": "Work on Checkout retries",
+              "objective_title": "Checkout retries"
+            }
+          }
+        ],
+        "collisions_truncated": false,
+        "publish_offered": false,
+        "errors": []
+      }
+    },
+    {
+      "name": "Spec Kit check accepts a local extraction with a Conn error",
+      "schema": "urn:conn:schema:v1:speckit-check",
+      "valid": true,
+      "document": {
+        "feature": {
+          "directory": "specs/001-checkout-retries",
+          "spec_ref": "specs/001-checkout-retries/spec.md",
+          "title": "Checkout retries"
+        },
+        "extraction": {
+          "source": "none",
+          "paths": [],
+          "new_paths": [],
+          "unresolved": [],
+          "tasks_without_path": [],
+          "truncated": false
+        },
+        "analysis": {
+          "available": false
+        },
+        "candidate_count": 0,
+        "candidates": [],
+        "collisions": [],
+        "collisions_truncated": false,
+        "publish_offered": false,
+        "errors": ["Conn is not available: not logged in. Run `conn login`"]
+      }
+    },
+    {
+      "name": "Spec Kit check rejects an unknown extraction source",
+      "schema": "urn:conn:schema:v1:speckit-check",
+      "valid": false,
+      "at": "/extraction/source",
+      "document": {
+        "feature": {
+          "directory": "specs/001-checkout-retries",
+          "spec_ref": "specs/001-checkout-retries/spec.md",
+          "title": "Checkout retries"
+        },
+        "extraction": {
+          "source": "research",
+          "paths": [],
+          "new_paths": [],
+          "unresolved": [],
+          "tasks_without_path": [],
+          "truncated": false
+        },
+        "analysis": {
+          "available": false
+        },
+        "candidate_count": 0,
+        "candidates": [],
+        "collisions": [],
+        "collisions_truncated": false,
+        "publish_offered": false,
+        "errors": ["Conn is not available: not logged in. Run `conn login`"]
+      }
+    },
+    {
+      "name": "Spec Kit check rejects a task ID that is task text",
+      "schema": "urn:conn:schema:v1:speckit-check",
+      "valid": false,
+      "at": "/extraction/tasks_without_path/0",
+      "document": {
+        "feature": {
+          "directory": "specs/002-order-limits",
+          "spec_ref": "specs/002-order-limits/spec.md",
+          "title": "Order limits"
+        },
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "objective": {
+          "objective_id": "019a8f00-0002-7000-8000-000000000002",
+          "revision": 1,
+          "title": "Order limits",
+          "content_changed": false
+        },
+        "extraction": {
+          "source": "tasks",
+          "paths": ["src/payments/retry.ts"],
+          "new_paths": [],
+          "unresolved": ["docs/missing/guide.md"],
+          "tasks_without_path": ["T002 Document the retry policy"],
+          "truncated": false
+        },
+        "analysis": {
+          "available": true
+        },
+        "candidate_count": 1,
+        "candidates": [
+          {
+            "subject_kind": "contract",
+            "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+            "display_name": "shouldRetryCharge",
+            "relation": "changes",
+            "provenance_kind": "declared"
+          }
+        ],
+        "own_intent": {
+          "intent_id": "019a8f00-0003-7000-8000-000000000003",
+          "revision": 1,
+          "summary": "Work on Order limits"
+        },
+        "delta": {
+          "added": [
+            {
+              "normalized_subject": "contract:typescript:src/payments/retry.ts/shouldRetryCharge",
+              "relation": "changes"
+            }
+          ],
+          "dropped": []
+        },
+        "collisions": [
+          {
+            "rule_id": "shared_exported_symbol",
+            "severity": "amber",
+            "state": "open",
+            "matched_subjects": ["contract:typescript:src/payments/retry.ts/shouldRetryCharge"],
+            "counterpart": {
+              "intent_id": "019a8f00-0004-7000-8000-000000000004",
+              "revision": 1,
+              "summary": "Work on Checkout retries",
+              "objective_title": "Checkout retries"
+            }
+          }
+        ],
+        "collisions_truncated": false,
+        "publish_offered": false,
+        "errors": []
+      }
     }
   ]
 }

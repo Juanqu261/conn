@@ -10,6 +10,7 @@ Conn warns you before you edit when other in-progress work changes the same beha
 - Call `check_collisions` after publishing. Collisions are advisory warnings, not blocks. Use {{prompt:conn-resolve}} to review one and propose a non-binding resolution.
 - When both branches of a collision exist, suggest that the human run `conn verify-pair <collision-id>` in the shell to test the two changes together. It runs code from both branches on this machine, so run it only with the human's approval.
 - Stop on an ambiguous Project, Objective, or Intent. Blueprints and Charters are optional planning context; their absence is not a blocker.
+  {{generic}}- In a GitHub Spec Kit project, run `conn speckit check <feature-dir> --format json` after the task list is written and before implementing. It previews collisions for the paths the task list names and publishes nothing; use its paths instead of inventing them. The Conn Spec Kit extension runs this step from Spec Kit's hooks.
 
 ## During work
 

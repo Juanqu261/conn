@@ -118,3 +118,22 @@ func TestPowerAudiencesShareTheGuide(t *testing.T) {
 		t.Fatal("an unknown audience rendered")
 	}
 }
+
+// TestEarlierSectionIsReplaced protects upgrades: an unchanged section an
+// earlier release wrote is Conn content, so installation replaces it and
+// removal removes it instead of reporting a conflict.
+func TestEarlierSectionIsReplaced(t *testing.T) {
+	if earlierSection1 == Section() {
+		t.Skip("the current section is the earlier one")
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, DefaultFile)
+	if err := os.WriteFile(path, []byte("# Team\n\n"+earlierSection1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for mode, want := range map[Mode]Action{ModeInstall: ActionReplace, ModeRemove: ActionRemove} {
+		if plan, err := Preview(root, "", mode); err != nil || plan.Action != want {
+			t.Fatalf("%s over the earlier section = %s %s, %v; want %s", mode, plan.Action, plan.Reason, err, want)
+		}
+	}
+}

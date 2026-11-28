@@ -7,7 +7,7 @@ package agentguide
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -27,6 +27,12 @@ var powerSetup string
 
 //go:embed templates/power-review.md
 var powerReview string
+
+//go:embed templates/speckit-check.md templates/speckit-start.md templates/speckit-finish.md templates/speckit-review.md templates/speckit-rules.md
+var specKitTemplates embed.FS
+
+// SpecKitCommands are the commands of the Conn Spec Kit extension, in order.
+var SpecKitCommands = []string{"check", "start", "finish", "review"}
 
 // Audience selects a rendering of the guidance.
 type Audience string
@@ -101,6 +107,22 @@ func Render(audience Audience) (string, error) {
 	return "", fmt.Errorf("unknown guidance audience %q", audience)
 }
 
+// SpecKitCommand returns the body of one Conn Spec Kit extension command:
+// its steps, the rules every Conn step carries, and the shared Authority
+// section, in the generic rendering that names prompts for any MCP client.
+func SpecKitCommand(name string) (string, error) {
+	steps, err := specKitTemplates.ReadFile("templates/speckit-" + name + ".md")
+	if err != nil || name == "rules" {
+		return "", fmt.Errorf("unknown Spec Kit command %q", name)
+	}
+	rules, err := specKitTemplates.ReadFile("templates/speckit-rules.md")
+	if err != nil {
+		return "", err
+	}
+	_, parts := split(render(false))
+	return namePrompts(string(steps), false) + "\n" + string(rules) + "\n" + parts["Authority"], nil
+}
+
 // split separates the title and introduction from the "## " sections, keyed
 // by heading. Each section keeps its heading and ends with one newline.
 func split(text string) (string, map[string]string) {
@@ -132,8 +154,16 @@ func Section() string {
 	return BeginMarker + "\n" + strings.TrimRight(render(false), "\n") + "\n" + EndMarker + "\n"
 }
 
+// earlierSections are the exact sections earlier Conn releases wrote under
+// the same begin marker. Conn replaces or removes them like its own.
+//
+//go:embed templates/agents-section-1.md
+var earlierSection1 string
+
 // knownSections are every Conn section version Conn may replace or remove.
-func knownSections() []string { return []string{Section()} }
+func knownSections() []string {
+	return []string{Section(), string(lineend.Normalize([]byte(earlierSection1)))}
+}
 
 // Mode selects installation or removal.
 type Mode string

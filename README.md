@@ -236,9 +236,26 @@ conn start acme/shop#218 --paths src/payments/retry.ts --publish
 conn objective import-github-issue acme/shop#218
 ```
 
-`conn start` resolves the Project, then reads an Objective by ID or imports a Kiro spec or GitHub issue after showing its content and suggested acceptance criteria. An unchanged earlier import is reused and a changed one becomes a new revision. It then suggests claims for the planned paths, previews their collisions without publishing, and offers to publish a CLI Intent with the local focus, to continue in Kiro with `/conn-start <objective-id>`, or to quit. Non-interactive runs need `--publish` or `--import-only`.
+`conn start` resolves the Project, then reads an Objective by ID or imports a Spec Kit feature (see [Spec Kit](#spec-kit)), a Kiro spec, or a GitHub issue after showing its content and suggested acceptance criteria. An unchanged earlier import is reused and a changed one becomes a new revision. It then suggests claims for the planned paths, previews their collisions without publishing, and offers to publish a CLI Intent with the local focus, to continue in Kiro with `/conn-start <objective-id>`, or to quit. Non-interactive runs need `--publish` or `--import-only`.
 
 Issue import calls the GitHub REST API from your machine, using `GH_TOKEN` or `GITHUB_TOKEN` only when set. The token is never stored or sent to Conn. Pull requests and bodies over 32,768 characters are refused, and an issue from a repository the Project does not connect produces a warning.
+
+## Spec Kit
+
+Teams that plan with [GitHub Spec Kit](https://github.com/github/spec-kit) see Conn collisions when the task list is written, before any code exists, in every agent Spec Kit supports.
+
+```powershell
+conn speckit check specs/001-checkout-retries        # preview collisions for the task list's paths; publishes nothing
+conn start specs/001-checkout-retries                # import the feature as an Objective, then publish or revise its Intent
+conn speckit extension export .conn-speckit          # render the Conn Spec Kit extension into a folder
+specify extension add --dev .conn-speckit            # install it with Spec Kit's own command
+```
+
+`conn start <feature-dir>` imports a feature with source kind `speckit_feature`: the title from `spec.md`, one acceptance criterion per `**FR-NNN**` keyed `fr-nnn`, one outcome per `**SC-NNN**`, one question per `[NEEDS CLARIFICATION: ...]`, and one constraint per constitution principle, at most 50 in that order. Name checks in `.conn/checks.json` with `"acceptance_keys": ["fr-001"]` and the review packet shows FR-001's evidence. Planned paths come from the `tasks.md` task lines, or from the source-structure block of `plan.md`, and you can remove any before claims are suggested. When you already have an Intent for the feature, `conn start` shows the claims the task list adds and drops and revises it.
+
+`conn speckit check` finds the feature from its argument, `SPECIFY_FEATURE_DIRECTORY`, `.specify/feature.json`, or `specs/<branch>/`. It names each collision by the other Intent's summary and Objective, excludes your own Intent and lists its claim delta, and always exits 0; `--format json` follows the `speckit-check` schema.
+
+The extension runs `speckit.conn.check` after `/speckit.tasks` (optional), `speckit.conn.start` before `/speckit.implement`, and `speckit.conn.finish` after it (optional). Each command uses the Conn MCP tools when the agent has them and the `conn` CLI otherwise, and never makes a human decision. With the `kiro-cli` integration the commands appear as `/speckit.conn.*` beside Conn's `/conn-*` prompts. Conn reads Spec Kit files locally, sends only the Objective content you confirm and claims derived from paths, never runs Spec Kit or a command named in its files, and never writes `.specify/`. `conn doctor` reports whether the extension is installed. Warnings at each write remain Kiro-only for now.
 
 ## Insights
 

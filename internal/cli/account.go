@@ -138,7 +138,8 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 		Long: "Check the server, credential store, and session. No credential is printed.\n\n" +
 			"Optional checks report local analysis, hook diagnostics, the conn version against the\n" +
 			"Conn Kiro power's minimum, manual Kiro MCP registrations of conn mcp (read-only), the\n" +
-			"Kiro steering and hook bundle, and the commit-trailer Git hook.",
+			"Kiro steering and hook bundle, the commit-trailer Git hook, and the Conn Spec Kit extension\n" +
+			"in a Spec Kit project.",
 		Args: cobra.NoArgs,
 	}
 	server := serverFlag(cmd, deps)
@@ -155,6 +156,7 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 		checks = append(checks, analyzerChecks(cmd.Context(), deps)...)
 		checks = append(checks, hookDiagnosticsCheck(cmd.Context()))
 		checks = append(checks, kiroChecks(cmd.Context(), deps)...)
+		checks = append(checks, specKitCheck(cmd.Context()))
 		if !renderChecks(streams.Out, checks) {
 			return errReported
 		}

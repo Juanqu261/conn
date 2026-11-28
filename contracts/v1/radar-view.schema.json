@@ -30,7 +30,8 @@
         "properties": {
           "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
           "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
-          "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+          "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+          "source_kind": { "$ref": "urn:conn:schema:v1:objective#/$defs/sourceKind" }
         }
       }
     },

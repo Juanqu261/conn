@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 	"uuid"
 
@@ -590,19 +591,37 @@ func (p *Projects) CreateObjectiveRevision(ctx context.Context, actor, projectID
 }
 
 // ImportKiroSpecObjective records a human-reviewed summary and immutable
-// provenance for a local Kiro specification. The server receives only the
-// supplied safe reference and digest, never the local source itself. Refresh
-// is an explicit optimistic-concurrency revision; no external change can
-// mutate a stored Objective.
+// provenance for a local specification: a Kiro spec, or a Spec Kit feature
+// when the input names source kind speckit_feature. The server receives only
+// the supplied safe reference and digest, never the local source itself.
+// Refresh is an explicit optimistic-concurrency revision; no external change
+// can mutate a stored Objective.
 func (p *Projects) ImportKiroSpecObjective(ctx context.Context, actor, projectID uuid.UUID, input protocol.ObjectiveImportInput, expectedRevision int) (Result[protocol.Objective], error) {
-	return p.ImportObjective(ctx, actor, projectID, SourceKiroSpec, input, expectedRevision)
+	kind := SourceKiroSpec
+	if input.SourceKind == SourceSpecKitFeature {
+		kind = SourceSpecKitFeature
+	}
+	return p.ImportObjective(ctx, actor, projectID, kind, input, expectedRevision)
 }
 
 // Objective import source kinds.
 const (
-	SourceKiroSpec    = "kiro_spec"
-	SourceGitHubIssue = "github_issue"
+	SourceKiroSpec       = protocol.SourceKindKiroSpec
+	SourceSpecKitFeature = protocol.SourceKindSpecKitFeature
+	SourceGitHubIssue    = protocol.SourceKindGitHubIssue
 )
+
+// specKitRef reports whether ref is a clean repository-relative path to a
+// spec.md: forward slashes, no empty, "." or ".." segment.
+func specKitRef(ref string) bool {
+	segments := strings.Split(ref, "/")
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." || strings.Contains(segment, `\`) {
+			return false
+		}
+	}
+	return segments[len(segments)-1] == "spec.md"
+}
 
 // githubIssueRef is the stable source reference of an imported GitHub issue.
 var githubIssueRef = regexp.MustCompile(`^github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/issues/[1-9][0-9]{0,9}$`)
@@ -623,6 +642,9 @@ func (p *Projects) ImportObjective(ctx context.Context, actor, projectID uuid.UU
 	}
 	if sourceKind == SourceGitHubIssue && !githubIssueRef.MatchString(input.SourceRef) {
 		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_ref", Message: "A GitHub issue source_ref must be github.com/<owner>/<name>/issues/<number>."}
+	}
+	if sourceKind == SourceSpecKitFeature && !specKitRef(input.SourceRef) {
+		return Result[protocol.Objective]{}, &InvalidError{Pointer: "/source_ref", Message: "A Spec Kit feature source_ref must be the repository-relative path of its spec.md."}
 	}
 	if err := uniqueKeys(input.KeyPoints, func(k protocol.KeyPoint) string { return k.Key }, "/key_points", "Key-point"); err != nil {
 		return Result[protocol.Objective]{}, err

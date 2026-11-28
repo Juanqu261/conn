@@ -117,6 +117,15 @@ type Objective struct {
 
 func (Objective) SchemaID() string { return ObjectiveSchema }
 
+// SourceKind is the method an imported revision came from, or "" for an
+// Objective written in Conn.
+func (o Objective) SourceKind() string {
+	if o.ImportProvenance == nil {
+		return ""
+	}
+	return o.ImportProvenance.SourceKind
+}
+
 // ObjectiveRevisionInput is the human-authored content of one Objective
 // revision. The server supplies the Project, revision number, and time.
 type ObjectiveRevisionInput struct {

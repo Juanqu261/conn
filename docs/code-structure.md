@@ -16,13 +16,19 @@ Conn is a Go-first monorepo with language-neutral contracts and two small Node.j
 | `internal/pairverify`                                              | `conn verify-pair`: branch resolution, default-branch pair commands, temporary worktrees, merge, diagnostic delta, pair checks, and cleanup. CLI only.  |
 | `internal/cicheck`                                                 | `conn ci check`: event parsing, trailers, observed analysis, collision preview, reader-independent packets, the bounded report, and the marker comment. |
 | `internal/ciaddon`                                                 | The embedded GitHub Actions workflow template and its conflict-safe preview, install, and removal.                                                      |
-| `internal/agentguide`                                              | The single source of the Kiro steering file and the marker-delimited `AGENTS.md` section, with its lifecycle.                                           |
+| `internal/agentguide`                                              | The single source of the Kiro steering file, the marker-delimited `AGENTS.md` section with its lifecycle, and the Kiro power's skill bodies.            |
 | `internal/lineend`                                                 | Line-ending-insensitive comparison for installers, so files Git checks out with CRLF still count as unchanged Conn content.                             |
 | `internal/githubissue`, `internal/workstart`                       | GitHub issue reading and criteria suggestions with a local-only token, and `conn start` Objective resolution.                                           |
+| `internal/speckit`                                                 | Deterministic, bounded reading of Spec Kit features: title, overview, FR/SC/question/constitution key points, planned paths, and the current feature.   |
+| `internal/speckitext`                                              | The Conn Spec Kit extension: `extension.yml` and command files rendered from `internal/agentguide`, and conflict-safe export.                           |
 | `internal/githook`                                                 | Conflict-safe `commit-msg` installation and the `Conn-Intent` trailer writer.                                                                           |
 | `internal/hooks`                                                   | Warn-only Kiro command hooks: session start, prompt submit, pre-write, and post-write. Backend reads only.                                              |
 | `internal/hookstate`                                               | Non-authoritative local hook state under the worktree's Git directory, with atomic writes and a lock file.                                              |
 | `internal/kirointegration`                                         | Optional steering and command-hook templates, legacy migration, and conflict-safe explicit installation.                                                |
+| `internal/kiropower`                                               | The Conn Kiro power: rendering, version and digest, conflict-safe export, and read-only detection of manual Kiro MCP registrations.                     |
+| `internal/envvalue`                                                | Reads Conn environment variables, treating an empty or whitespace-only value as unset.                                                                  |
+| `powers/conn`                                                      | The committed, rendered Kiro power (`plugin.json`, `mcp.json`, `skills/`, `.digest`). Regenerate with `conn kiro power export`.                         |
+| `integrations/speckit/conn`                                        | The committed, rendered Spec Kit extension. Regenerate it by removing the folder and running `conn speckit extension export`.                           |
 | `internal/account`, `internal/auth/github`, `internal/credentials` | Device Flow, session resolution, and OS credential storage.                                                                                             |
 | `internal/httpclient`                                              | Authenticated client shared by CLI, TUI, MCP, and hooks.                                                                                                |
 | `internal/httpapi`                                                 | `/v1` handlers, middleware, validation, health, and readiness.                                                                                          |
@@ -49,6 +55,9 @@ MCP / CLI ──> review ──> HTTP client + read-only git + hookstate (writte
 CLI ──> pairverify ──> git worktrees + analyzer (diagnostics) + checkrun ──> HTTP client (combination check)
 CI ──> cicheck ──> HTTP client (CI credential) + analyzer (observed) + review.LoadIndependent ──> job summary / GitHub comment
 CLI / MCP ──> ciaddon, agentguide ──> one workflow file or one AGENTS.md section (never MCP configuration)
+CLI ──> kiropower ──> agentguide ──> powers/conn or a folder the human names (never MCP configuration)
+CLI ──> speckit (local Spec Kit files) ──> preedit ──> HTTP client (collision preview; never .specify/)
+CLI ──> speckitext ──> agentguide ──> integrations/speckit/conn or a folder the human names
 CLI ──> checkrun ──> check command (argument array, no shell, no CONN_ variables)
 git commit ──> commit-msg ──> conn trailer ──> githook ──> hookstate focus
 MCP / hooks ──> hookstate (worktree Git directory)

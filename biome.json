@@ -27,7 +27,12 @@
   },
   "overrides": [
     {
-      "includes": [".kiro/steering/**", "powers/**"],
+      "includes": [
+        ".kiro/steering/**",
+        "powers/**",
+        "integrations/speckit/**",
+        "internal/agentguide/templates/agents-section-*.md"
+      ],
       "formatter": { "enabled": false }
     }
   ]
