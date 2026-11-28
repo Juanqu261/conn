@@ -16,6 +16,7 @@ import (
 
 	localanalyzer "github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/checkrun"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/githook"
 	"github.com/Juanqu261/conn/internal/hookstate"
 	"github.com/Juanqu261/conn/internal/httpclient"
@@ -76,7 +77,7 @@ func useFocusServer(cmd *cobra.Command, deps Dependencies, r *remote, focus hook
 		if cmd.Flags().Changed("server") {
 			return original()
 		}
-		if value, ok := deps.LookupEnv(ServerURLEnv); ok && value != "" {
+		if value, ok := envvalue.Lookup(deps.LookupEnv, ServerURLEnv); ok {
 			return value
 		}
 		if focus.ServerURL != "" {

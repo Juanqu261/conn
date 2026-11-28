@@ -1,7 +1,8 @@
 // Package agentguide is the single source of Conn's work-loop guidance for
-// coding agents. It renders the optional Kiro steering file and the Conn
-// section of a repository's AGENTS.md, and manages that section between fixed
-// markers without changing content outside them.
+// coding agents. It renders the optional Kiro steering file, the Conn section
+// of a repository's AGENTS.md, and the skill bodies of the Conn Kiro power,
+// and manages the AGENTS.md section between fixed markers without changing
+// content outside them.
 package agentguide
 
 import (
@@ -20,6 +21,28 @@ import (
 
 //go:embed templates/guide.md
 var guide string
+
+//go:embed templates/power-setup.md
+var powerSetup string
+
+//go:embed templates/power-review.md
+var powerReview string
+
+// Audience selects a rendering of the guidance.
+type Audience string
+
+const (
+	// AudienceKiro is the Kiro steering body; prompts are slash commands.
+	AudienceKiro Audience = "kiro"
+	// AudienceGeneric is the AGENTS.md body for other MCP clients.
+	AudienceGeneric Audience = "generic"
+	// AudiencePowerSetup is the Kiro power's onboarding skill body.
+	AudiencePowerSetup Audience = "power-setup"
+	// AudiencePowerReview is the Kiro power's review-proof skill body.
+	AudiencePowerReview Audience = "power-review"
+)
+
+const MinimumVersionPlaceholder = "{{minimum-version}}"
 
 // Section markers. A different version uses a different begin marker, so
 // removal stays exact.
@@ -54,15 +77,51 @@ func render(kiro bool) string {
 			}
 			line = strings.TrimPrefix(trimmed, "{{generic}}")
 		}
-		out.WriteString(promptPattern.ReplaceAllStringFunc(line, func(match string) string {
-			name := promptPattern.FindStringSubmatch(match)[1]
-			if kiro {
-				return "`/" + name + "`"
-			}
-			return "the `" + name + "` prompt"
-		}))
+		out.WriteString(namePrompts(line, kiro))
 	}
 	return out.String()
+}
+
+// Render returns the guidance for audience. The Kiro and power audiences
+// keep Kiro-only lines and name prompts as slash commands.
+func Render(audience Audience) (string, error) {
+	switch audience {
+	case AudienceKiro:
+		return render(true), nil
+	case AudienceGeneric:
+		return render(false), nil
+	case AudiencePowerSetup:
+		_, parts := split(render(true))
+		return namePrompts(powerSetup, true) + "\n" + parts["Authority"], nil
+	case AudiencePowerReview:
+		intro, parts := split(render(true))
+		_, body, _ := strings.Cut(intro, "\n")
+		return "# Conn review proof\n" + body + parts["Finishing"] + "\n" + namePrompts(powerReview, true) + "\n" + parts["Authority"], nil
+	}
+	return "", fmt.Errorf("unknown guidance audience %q", audience)
+}
+
+// split separates the title and introduction from the "## " sections, keyed
+// by heading. Each section keeps its heading and ends with one newline.
+func split(text string) (string, map[string]string) {
+	parts := map[string]string{}
+	chunks := strings.Split(text, "\n## ")
+	for _, chunk := range chunks[1:] {
+		heading, _, _ := strings.Cut(chunk, "\n")
+		parts[heading] = strings.TrimRight("## "+chunk, "\n") + "\n"
+	}
+	return chunks[0] + "\n", parts
+}
+
+// namePrompts names prompts the way the audience sees them.
+func namePrompts(text string, kiro bool) string {
+	return promptPattern.ReplaceAllStringFunc(text, func(match string) string {
+		name := promptPattern.FindStringSubmatch(match)[1]
+		if kiro {
+			return "`/" + name + "`"
+		}
+		return "the `" + name + "` prompt"
+	})
 }
 
 // KiroSteering returns the Kiro steering file.

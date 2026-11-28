@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "author": {
+    "name": "Conn"
+  },
+  "description": "Warns your agent before it edits when a teammate's in-progress work changes the same behavior, contract, or data, and gives reviewers proof of what each change intended, touched, and verified.",
+  "homepage": "https://github.com/Juanqu261/conn#readme",
+  "keywords": [
+    "conn",
+    "collision",
+    "collisions",
+    "parallel work",
+    "concurrent changes",
+    "teammate",
+    "intent",
+    "claims",
+    "coordination",
+    "counterpart",
+    "merge conflict",
+    "review packet",
+    "review proof",
+    "evidence",
+    "pull request description"
+  ],
+  "license": "MIT",
+  "name": "conn",
+  "repository": "https://github.com/Juanqu261/conn",
+  "version": "1.0.0"
+}

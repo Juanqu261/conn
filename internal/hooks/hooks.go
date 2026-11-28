@@ -21,6 +21,7 @@ import (
 	"uuid"
 
 	"github.com/Juanqu261/conn/internal/credentials"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/hookstate"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/protocol"
@@ -210,7 +211,7 @@ func (r *runner) diagnose(ctx context.Context, err error) {
 func (r *runner) client(serverURL string) (*httpclient.Client, error) {
 	if serverURL == "" {
 		serverURL = httpclient.DefaultServerURL
-		if value, ok := r.cfg.LookupEnv(serverURLEnv); ok && value != "" {
+		if value, ok := envvalue.Lookup(r.cfg.LookupEnv, serverURLEnv); ok {
 			serverURL = value
 		}
 	}

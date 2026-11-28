@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Juanqu261/conn/internal/envvalue"
 )
 
 // Environment variables that override analyzer and Node.js resolution.
@@ -46,7 +48,7 @@ func (l Location) Available() bool { return l.AnalyzerAvailable && l.NodeAvailab
 // silently replaced.
 func Locate(lookupEnv func(string) (string, bool), executable, workingDir string) Location {
 	location := Location{Config: Config{Timeout: DefaultTimeout}}
-	if value, ok := lookupEnv(AnalyzerPathEnv); ok && value != "" {
+	if value, ok := envvalue.Lookup(lookupEnv, AnalyzerPathEnv); ok {
 		location.Config.AnalyzerPath, location.AnalyzerSource = absolute(value), SourceAnalyzerEnv
 		location.AnalyzerAvailable = isFile(location.Config.AnalyzerPath)
 	} else {
@@ -71,7 +73,7 @@ func Locate(lookupEnv func(string) (string, bool), executable, workingDir string
 			location.Config.AnalyzerPath = filepath.Join(workingDir, filepath.FromSlash(relativeAnalyzerPath))
 		}
 	}
-	if value, ok := lookupEnv(NodePathEnv); ok && value != "" {
+	if value, ok := envvalue.Lookup(lookupEnv, NodePathEnv); ok {
 		location.Config.NodePath, location.NodeSource = absolute(value), SourceNodeEnv
 		location.NodeAvailable = isFile(location.Config.NodePath)
 	} else if path, err := exec.LookPath("node"); err == nil {

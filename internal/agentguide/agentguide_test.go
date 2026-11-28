@@ -83,3 +83,38 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return content
 }
+
+// TestPowerAudiencesShareTheGuide protects kiro-power requirements 5 and 6:
+// the power's skill bodies reuse the steering text, name prompts as Kiro
+// slash commands, and leave no template tag except the version placeholder.
+func TestPowerAudiencesShareTheGuide(t *testing.T) {
+	kiro, _ := Render(AudienceKiro)
+	if "---\ninclusion: always\n---\n\n"+kiro != string(KiroSteering()) {
+		t.Fatal("the Kiro audience differs from the steering body")
+	}
+	setup, err := Render(AudiencePowerSetup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := Render(AudiencePowerReview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, parts := split(kiro)
+	for name, want := range map[string][]string{
+		setup:  {MinimumVersionPlaceholder, "conn kiro integration preview --scope workspace --root . --command-on-path", "conn git-hook preview", "session_status", "list_projects", "`/conn-start`", parts["Authority"]},
+		review: {parts["Finishing"], "gh pr create --body-file", "labelled reported", "`/conn-review`", parts["Authority"]},
+	} {
+		for _, phrase := range want {
+			if !strings.Contains(name, phrase) {
+				t.Errorf("a power rendering omits %q", phrase)
+			}
+		}
+		if leftover := strings.ReplaceAll(name, MinimumVersionPlaceholder, ""); strings.Contains(leftover, "{{") {
+			t.Errorf("a power rendering keeps a template tag: %q", leftover)
+		}
+	}
+	if _, err := Render("unknown"); err == nil {
+		t.Fatal("an unknown audience rendered")
+	}
+}

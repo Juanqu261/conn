@@ -27,7 +27,7 @@
   },
   "overrides": [
     {
-      "includes": [".kiro/steering/**"],
+      "includes": [".kiro/steering/**", "powers/**"],
       "formatter": { "enabled": false }
     }
   ]
