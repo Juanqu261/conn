@@ -75,6 +75,9 @@ func TestConformance(t *testing.T) {
 		protocol.CICredentialContextSchema:      roundTrip[protocol.CICredentialContext],
 		protocol.ProjectInsightsSchema:          roundTrip[protocol.ProjectInsights],
 		protocol.SpecKitCheckSchema:             roundTrip[protocol.SpecKitCheck],
+		protocol.WebSessionSchema:               roundTrip[protocol.WebSession],
+		protocol.WebLabStatusSchema:             roundTrip[protocol.WebLabStatus],
+		protocol.WebStreamResyncSchema:          roundTrip[protocol.WebStreamResync],
 	}
 
 	for _, tc := range loadFixtures(t) {

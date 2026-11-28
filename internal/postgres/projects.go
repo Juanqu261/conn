@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 	"uuid"
 
@@ -364,6 +365,12 @@ func (t projectTx) AppendEvent(ctx context.Context, event protocol.EventEnvelope
 		event.EntityID, event.ActorHumanID, event.OccurredAt.Time(), payload)
 	if err != nil {
 		return 0, err
+	}
+	// PostgreSQL delivers the notification only when the transaction
+	// commits, so a woken stream always finds the event committed.
+	if _, err := t.tx.Exec(ctx, `SELECT pg_notify($1, $2)`,
+		EventChannel, event.ProjectID.String()+":"+strconv.FormatInt(event.EventSequence, 10)); err != nil {
+		return 0, fmt.Errorf("notify event: %w", err)
 	}
 	return event.EventSequence, nil
 }

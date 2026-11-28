@@ -38,20 +38,20 @@ func (s AuthStore) UpsertHuman(ctx context.Context, candidateID uuid.UUID, githu
 
 func (s AuthStore) CreateSession(ctx context.Context, session application.NewSession) error {
 	_, err := s.Pool.Exec(ctx, `
-		INSERT INTO sessions (session_id, human_id, token_sha256, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5)`,
-		session.SessionID, session.HumanID, session.TokenHash[:], session.CreatedAt, session.ExpiresAt)
+		INSERT INTO sessions (session_id, human_id, token_sha256, created_at, expires_at, kind)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		session.SessionID, session.HumanID, session.TokenHash[:], session.CreatedAt, session.ExpiresAt, string(session.Kind))
 	return err
 }
 
-func (s AuthStore) FindSession(ctx context.Context, tokenHash [sha256.Size]byte, now time.Time) (application.Session, error) {
-	var session application.Session
+func (s AuthStore) FindSession(ctx context.Context, tokenHash [sha256.Size]byte, kind application.SessionKind, now time.Time) (application.Session, error) {
+	session := application.Session{Kind: kind}
 	err := s.Pool.QueryRow(ctx, `
 		SELECT s.session_id, s.expires_at, h.human_id, h.github_user_id, h.github_login
 		FROM sessions s
 		JOIN humans h USING (human_id)
-		WHERE s.token_sha256 = $1 AND s.revoked_at IS NULL AND s.expires_at > $2`,
-		tokenHash[:], now,
+		WHERE s.token_sha256 = $1 AND s.kind = $2 AND s.revoked_at IS NULL AND s.expires_at > $3`,
+		tokenHash[:], string(kind), now,
 	).Scan(&session.SessionID, &session.ExpiresAt,
 		&session.Human.HumanID, &session.Human.GitHubUserID, &session.Human.GitHubLogin)
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -1,6 +1,6 @@
 # Accepted decisions
 
-Conn keeps ten concise architecture records. New implementation-language, framework, persistence, deployment, UI, or authority choices require another accepted record before code depends on them.
+Conn keeps eleven concise architecture records. New implementation-language, framework, persistence, deployment, UI, or authority choices require another accepted record before code depends on them.
 
 | Record                                                   | Scope                                                                                                                                          |
 | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,5 +14,6 @@ Conn keeps ten concise architecture records. New implementation-language, framew
 | [0008](0008-verification-ci-and-adoption.md)             | Conn-installed report-only CI check, owner-created CI credential, build-from-source CI distribution, pair verification, and `mcp` clients.     |
 | [0009](0009-kiro-power.md)                               | The Conn Kiro power in the Agent Plugins format, on-demand power with always-on workspace hooks, and `conn` built from source for power users. |
 | [0010](0010-speckit-coordination.md)                     | Spec Kit features as an Objective source, deterministic path extraction, plan-time collision checks, and an exported Spec Kit extension.       |
+| [0013](0013-web-application.md)                          | Conn Lab: embedded React SPA, the 60/30/10 Lab palette, GitHub web-flow browser sessions with CSRF, same-origin serving, and SSE live updates. |
 
 The accepted technical baseline remains Go 1.27.4, Node.js 26.13.1, pnpm 12.21.0, JSON Schema Draft 2020-12, Go `net/http`, pgx, handwritten SQL, Goose, PostgreSQL 18.7, UUIDv7 identities, integer revisions, Project event cursors, OS credential storage, and opaque 30-day Conn sessions.

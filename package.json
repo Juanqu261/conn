@@ -21,6 +21,7 @@
     "db:start": "docker compose up --detach --wait postgres",
     "db:status": "docker compose ps --all postgres",
     "db:stop": "docker compose stop postgres",
+    "dev": "node ./scripts/dev.mjs",
     "format": "pnpm run format:node && pnpm run format:go",
     "format:go": "go fmt ./...",
     "format:node": "biome check --write .",

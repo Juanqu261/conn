@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -318,7 +319,7 @@ type Check struct {
 func (s *Service) Doctor(ctx context.Context) []Check {
 	checks := []Check{probe(ctx, s.Server, "Server reachable", "/healthz")}
 	if checks[0].OK {
-		checks = append(checks, probe(ctx, s.Server, "Server ready", "/readyz"))
+		checks = append(checks, probe(ctx, s.Server, "Server ready", "/readyz"), labCheck(ctx, s.Server))
 	}
 
 	_, storeErr := s.Store.Get()
@@ -340,6 +341,31 @@ func (s *Service) Doctor(ctx context.Context) []Check {
 		return append(checks, Check{Name: "Session", Detail: err.Error()})
 	}
 	return append(checks, Check{Name: "Session", OK: true, Detail: "@" + human.GitHubLogin + " (" + human.HumanID.String() + ")"})
+}
+
+// labCheck reports where Conn Lab is served. It is optional: a server
+// without the web app or browser sign-in still serves every CLI workflow.
+func labCheck(ctx context.Context, server *httpclient.Client) Check {
+	check := Check{Name: "Conn Lab", Optional: true}
+	status, err := server.LabStatus(ctx)
+	if err != nil {
+		check.Detail = "not offered by this server (" + err.Error() + ")"
+		return check
+	}
+	url := status.LabURL
+	if url == "" {
+		url = server.URL()
+	}
+	switch {
+	case !status.LabBuilt:
+		check.Detail = "this server was built without the web app; run pnpm --filter @conn/web build, then rebuild conn"
+	case !status.SignInAvailable:
+		check.Detail = url + "/ (sign-in needs " + strings.Join(status.MissingSettings, ", ") + " on the server)"
+	default:
+		check.OK = true
+		check.Detail = url + "/ (GitHub OAuth callback URL: " + url + "/v1/auth/github/web/callback)"
+	}
+	return check
 }
 
 func probe(ctx context.Context, server *httpclient.Client, name, path string) Check {

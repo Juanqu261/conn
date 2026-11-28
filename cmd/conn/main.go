@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/Juanqu261/conn/internal/account"
@@ -19,12 +20,14 @@ import (
 	"github.com/Juanqu261/conn/internal/cli"
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/devenv"
+	"github.com/Juanqu261/conn/internal/eventstream"
 	"github.com/Juanqu261/conn/internal/httpapi"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/mcp"
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
 	"github.com/Juanqu261/conn/internal/tui"
+	"github.com/Juanqu261/conn/internal/webui"
 )
 
 var version = "dev"
@@ -140,13 +143,65 @@ func serve(ctx context.Context, cfg cli.ServerConfig, log *slog.Logger) error {
 		log.Info("database schema is compatible")
 	}
 
+	web, err := webConfig(cfg, log)
+	if err != nil {
+		return err
+	}
+	// The listener wakes browser streams on committed events; it stops with
+	// the server.
+	go postgres.ListenEvents(ctx, pool, web.Streams, log)
+
 	githubAPI := &github.API{HTTP: httpclient.NewHTTPClient(), Endpoints: github.Production}
 	handler := httpapi.NewHandler(httpapi.Config{
 		Ready:          ready,
 		Auth:           &application.Auth{Store: postgres.AuthStore{Pool: pool}, VerifyToken: githubAPI.Verify},
 		Projects:       &application.Projects{Store: postgres.ProjectStore{Pool: pool}},
 		GitHubClientID: cfg.GitHubClientID,
+		Web:            web,
 		Log:            log,
 	})
 	return httpapi.Serve(ctx, cfg.ListenAddress, handler, log)
+}
+
+// webConfig builds Conn Lab's configuration (decision 0013). Browser sign-in
+// needs the OAuth client ID, its secret, and the public origin; without
+// them the server still serves the API and the Lab names what is missing.
+func webConfig(cfg cli.ServerConfig, log *slog.Logger) (httpapi.WebConfig, error) {
+	web := httpapi.WebConfig{
+		Assets:  webui.Assets(),
+		Streams: eventstream.New(eventstream.DefaultPerSession, eventstream.DefaultTotal),
+	}
+	if cfg.PublicURL != "" {
+		publicURL, err := httpapi.ParsePublicURL(cfg.PublicURL)
+		if err != nil {
+			return httpapi.WebConfig{}, err
+		}
+		web.PublicURL = publicURL
+	}
+	if cfg.GitHubClientID == "" {
+		web.MissingSettings = append(web.MissingSettings, "CONN_GITHUB_CLIENT_ID")
+	}
+	if cfg.GitHubClientSecret.Reveal() == "" {
+		web.MissingSettings = append(web.MissingSettings, "CONN_GITHUB_CLIENT_SECRET")
+	}
+	if web.PublicURL == nil {
+		web.MissingSettings = append(web.MissingSettings, "CONN_PUBLIC_URL")
+	}
+	if len(web.MissingSettings) == 0 {
+		web.GitHub = &github.WebFlow{
+			Device:       github.DeviceFlow{HTTP: httpclient.NewHTTPClient(), Endpoints: github.Production, ClientID: cfg.GitHubClientID},
+			ClientSecret: cfg.GitHubClientSecret,
+		}
+	}
+
+	switch {
+	case web.Assets == nil:
+		log.Warn("this build has no Conn Lab assets; build them with pnpm --filter @conn/web build, then rebuild conn")
+	case web.GitHub == nil:
+		log.Warn("Conn Lab sign-in is unavailable", "missing", strings.Join(web.MissingSettings, ", "))
+	default:
+		log.Info("Conn Lab is served", "url", web.PublicURL.String(),
+			"github_callback_url", web.PublicURL.String()+"/v1/auth/github/web/callback")
+	}
+	return web, nil
 }

@@ -31,7 +31,9 @@ Conn is a Go-first monorepo with language-neutral contracts and two small Node.j
 | `integrations/speckit/conn`                                        | The committed, rendered Spec Kit extension. Regenerate it by removing the folder and running `conn speckit extension export`.                           |
 | `internal/account`, `internal/auth/github`, `internal/credentials` | Device Flow, session resolution, and OS credential storage.                                                                                             |
 | `internal/httpclient`                                              | Authenticated client shared by CLI, TUI, MCP, and hooks.                                                                                                |
-| `internal/httpapi`                                                 | `/v1` handlers, middleware, validation, health, and readiness.                                                                                          |
+| `internal/httpapi`                                                 | `/v1` handlers, middleware, validation, health, and readiness; Conn Lab browser sign-in, browser sessions, CSRF, and the event stream.                  |
+| `internal/webui`                                                   | Serves the embedded Conn Lab build from `site/` with the SPA fallback, caching, and Content-Security-Policy, or a build placeholder.                    |
+| `internal/eventstream`                                             | In-memory wake-ups and stream limits for Conn Lab's Server-Sent Events; cursors in PostgreSQL stay the source of truth.                                 |
 | `internal/application`                                             | Authorization, lifecycle, revisions, the concept catalog, collisions and their decisions, evidence, and events.                                         |
 | `internal/postgres`                                                | pgx persistence and parameterized SQL.                                                                                                                  |
 | `internal/migrations`                                              | Embedded Goose migrations used by development/deployment automation.                                                                                    |
@@ -41,6 +43,7 @@ Conn is a Go-first monorepo with language-neutral contracts and two small Node.j
 | `contracts/v1`                                                     | Canonical JSON Schema contracts and shared fixtures.                                                                                                    |
 | `packages/contracts`                                               | Ajv contract adapter and fixture tests.                                                                                                                 |
 | `packages/typescript-analyzer`                                     | Compiler-API analyzer with planned and observed modes, and its CLI artifact.                                                                            |
+| `apps/web`                                                         | Conn Lab: the React and TypeScript single-page application built by Vite into `internal/webui/site`.                                                    |
 | `fixtures/semantic-intent-radar-two-intents`                       | Controlled source-free semantic coordination fixture.                                                                                                   |
 | `fixtures/pre-edit-two-sessions`                                   | Producer and consumer files for the two-session pre-edit acceptance scenario.                                                                           |
 | `docs/decisions`                                                   | Accepted architecture records and summary.                                                                                                              |
@@ -88,7 +91,7 @@ Rules:
 - `packages/typescript-analyzer/dist/cli.js` runs only as a bounded child process.
 - PostgreSQL runs in Docker Compose for local development.
 
-No persistent sidecar or browser process exists in the MVP.
+No persistent sidecar exists in the MVP. Conn Lab runs in the browser and holds one event stream per open Project tab.
 
 ## Root commands
 

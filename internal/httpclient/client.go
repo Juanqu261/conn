@@ -165,6 +165,16 @@ func (c *Client) Probe(ctx context.Context, path string) error {
 	return err
 }
 
+// LabStatus reads whether the server serves Conn Lab and can sign browsers
+// in. It sends no credential.
+func (c *Client) LabStatus(ctx context.Context) (protocol.WebLabStatus, error) {
+	body, err := c.do(ctx, http.MethodGet, "/v1/web/lab", secret.String{})
+	if err != nil {
+		return protocol.WebLabStatus{}, err
+	}
+	return decodeData[protocol.WebLabStatus](body)
+}
+
 func get[T protocol.Document](ctx context.Context, c *Client, path string) (T, error) {
 	body, err := c.do(ctx, http.MethodGet, path, c.token)
 	if err != nil {

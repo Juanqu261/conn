@@ -12,10 +12,21 @@ import (
 	"github.com/Juanqu261/conn/internal/secret"
 )
 
-// authenticated runs next only for a valid Conn session.
+// authenticated runs next only for a valid Conn session: a CLI session
+// presented as a bearer credential, or a Conn Lab browser session presented
+// in the session cookie when no bearer credential is sent. Neither kind is
+// accepted in place of the other. Conn Lab is read-only in this version
+// (decision 0013), so a browser session reaches only safe methods here; the
+// sign-out route checks its CSRF token separately.
 func authenticated(auth *application.Auth, log *slog.Logger, next func(http.ResponseWriter, *http.Request, application.Session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearer(r)
+		if !ok {
+			if cookieToken, found := browserSessionCookie(r); found {
+				authenticatedBrowser(w, r, auth, log, cookieToken, next)
+				return
+			}
+		}
 		if ok && isCIToken(token) {
 			// CI credentials reach only the routes registered with readable.
 			writeError(w, log, http.StatusForbidden, "forbidden", "A CI credential may read only the Conn check routes of its own Project.")
@@ -37,6 +48,29 @@ func authenticated(auth *application.Auth, log *slog.Logger, next func(http.Resp
 		setActor(r, session.Human.HumanID)
 		next(w, r, session)
 	}
+}
+
+func authenticatedBrowser(w http.ResponseWriter, r *http.Request, auth *application.Auth, log *slog.Logger, token secret.String, next func(http.ResponseWriter, *http.Request, application.Session)) {
+	if !safeMethod(r.Method) {
+		writeError(w, log, http.StatusForbidden, "browser_read_only",
+			"Conn Lab is read-only in this version. Use conn app or the conn CLI to make changes.")
+		return
+	}
+	session, err := auth.AuthenticateBrowser(r.Context(), token)
+	if errors.Is(err, application.ErrUnauthenticated) {
+		browserUnauthenticated(w, log)
+		return
+	}
+	if err != nil {
+		internalError(w, log, "authenticate", err)
+		return
+	}
+	setActor(r, session.Human.HumanID)
+	next(w, r, session)
+}
+
+func safeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
 }
 
 func unauthenticated(w http.ResponseWriter, log *slog.Logger) {

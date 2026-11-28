@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:web-lab-status",
+  "title": "Conn Lab status",
+  "description": "Public, credential-free facts about whether this server serves Conn Lab and can sign browsers in. It names missing settings, never their values.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lab_built", "sign_in_available", "missing_settings"],
+  "properties": {
+    "lab_built": {
+      "description": "False when conn server was built without the web assets; the API still works.",
+      "type": "boolean"
+    },
+    "sign_in_available": { "type": "boolean" },
+    "missing_settings": {
+      "description": "Server settings that browser sign-in still needs. Empty when sign-in is available.",
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 3,
+      "items": { "enum": ["CONN_GITHUB_CLIENT_ID", "CONN_GITHUB_CLIENT_SECRET", "CONN_PUBLIC_URL"] }
+    },
+    "lab_url": {
+      "description": "The origin users open, from CONN_PUBLIC_URL, when it is configured.",
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^https?://[^/?#]+$"
+    }
+  }
+}

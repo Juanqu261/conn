@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:web-session",
+  "title": "Web session",
+  "description": "The signed-in Human of a Conn Lab browser session and the session's CSRF token (decision 0013). The session token itself never appears in a response body; it lives only in the HttpOnly __Host-conn_web cookie.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["human", "csrf_token", "expires_at"],
+  "properties": {
+    "human": { "$ref": "urn:conn:schema:v1:human" },
+    "csrf_token": {
+      "description": "Sent back as the X-Conn-CSRF header on every unsafe request. Unpadded base64url of 32 bytes derived from the session token.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "expires_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" }
+  }
+}

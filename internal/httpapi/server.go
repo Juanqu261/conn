@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Juanqu261/conn/internal/application"
+	"github.com/Juanqu261/conn/internal/webui"
 )
 
 const (
@@ -30,7 +31,10 @@ type Config struct {
 	// GitHubClientID is the public OAuth client ID served to the CLI. Login
 	// is unavailable while it is empty.
 	GitHubClientID string
-	Log            *slog.Logger
+	// Web configures Conn Lab: browser sign-in, the event stream, and the
+	// embedded assets (decision 0013).
+	Web WebConfig
+	Log *slog.Logger
 }
 
 // NewHandler returns the backend routes.
@@ -56,9 +60,12 @@ func NewHandler(cfg Config) http.Handler {
 	registerAuthRoutes(mux, cfg)
 	registerProjectRoutes(mux, cfg)
 	registerVerificationRoutes(mux, cfg)
+	registerWebRoutes(mux, cfg)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, log, http.StatusNotFound, "not_found", "No such Conn API route.")
 	})
+	// Every other path belongs to Conn Lab's single-page application.
+	mux.Handle("/", webui.Handler(cfg.Web.Assets))
 	return withAccessLog(log, mux)
 }
 func writeStatus(w http.ResponseWriter, code int, status string) {

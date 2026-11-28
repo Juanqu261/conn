@@ -2,9 +2,10 @@
 
 This task list belongs to the future web-application feature. None of these implementation tasks are part of the Kiro-native work-loop specification.
 
-- [ ] 1. Select and record the web application architecture
+- [x] 1. Select and record the web application architecture
   - Compare practical UI system, browser session, deployment, and accessibility options against the accepted Go and TypeScript boundaries.
   - Obtain approval and record the decisions before scaffolding browser code.
+  - Done by [decision 0013](../../../docs/decisions/0013-web-application.md) with `web-lab-foundation`.
 
 - [ ] 2. Approve the first binding action
   - Confirm Charter acceptance or rejection as the first narrow production slice, or select another action with equivalent immutable inputs and consequences.

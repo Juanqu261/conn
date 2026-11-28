@@ -31,6 +31,7 @@ A feature belongs in Conn only if it reduces rework caused by concurrent changes
 
 - Deliver the milestone specifications in order: `pre-edit-collision-warnings`, `review-proof`, then `verification-ci-and-adoption`.
 - Next milestones, each gated by its own decision record: `kiro-power` (0009, accepted) first, then the independent `speckit-coordination` (0010, accepted), `ci-attested-evidence` (0011), and `scip-polyglot-claims` (0012).
+- Conn Lab, the web application, is delivered in order: `web-lab-foundation` (0013, accepted), `web-lab-board`, then `web-lab-seance`, which is gated by decision 0014 because it amends the feature test for discussion attached to a Conn record.
 - Implement and validate the Kiro client integration first. Keep protocol concepts transport-neutral so other coding agents can use the MCP server and CLI.
 - The existing three-session Kiro trial remains the acceptance test for the current MVP.
 - Retain GitHub as the initial repository host unless a later product decision changes it.
