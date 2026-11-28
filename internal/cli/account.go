@@ -13,6 +13,7 @@ import (
 	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/auth/github"
 	"github.com/Juanqu261/conn/internal/credentials"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/hookstate"
 	"github.com/Juanqu261/conn/internal/httpclient"
 )
@@ -32,7 +33,7 @@ func serverFlag(cmd *cobra.Command, deps Dependencies) func() string {
 		if flag != "" {
 			return flag
 		}
-		if value, ok := deps.LookupEnv(ServerURLEnv); ok && value != "" {
+		if value, ok := envvalue.Lookup(deps.LookupEnv, ServerURLEnv); ok {
 			return value
 		}
 		return httpclient.DefaultServerURL
@@ -134,8 +135,11 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Check the server, credential store, and session",
-		Long:  "Check the server, credential store, and session. No credential is printed.",
-		Args:  cobra.NoArgs,
+		Long: "Check the server, credential store, and session. No credential is printed.\n\n" +
+			"Optional checks report local analysis, hook diagnostics, the conn version against the\n" +
+			"Conn Kiro power's minimum, manual Kiro MCP registrations of conn mcp (read-only), the\n" +
+			"Kiro steering and hook bundle, and the commit-trailer Git hook.",
+		Args: cobra.NoArgs,
 	}
 	server := serverFlag(cmd, deps)
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -150,6 +154,7 @@ func newDoctorCommand(deps Dependencies, streams Streams) *cobra.Command {
 		}
 		checks = append(checks, analyzerChecks(cmd.Context(), deps)...)
 		checks = append(checks, hookDiagnosticsCheck(cmd.Context()))
+		checks = append(checks, kiroChecks(cmd.Context(), deps)...)
 		if !renderChecks(streams.Out, checks) {
 			return errReported
 		}

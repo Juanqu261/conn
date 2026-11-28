@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Juanqu261/conn/internal/kirointegration"
+	"github.com/Juanqu261/conn/internal/kiropower"
 )
 
 func newKiroCommand(deps Dependencies, streams Streams) *cobra.Command {
@@ -19,8 +20,9 @@ func newKiroCommand(deps Dependencies, streams Streams) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "kiro",
 		Short: "Manage optional, inspectable Kiro integration guidance",
-		Long: "Preview, install, or remove Conn's optional Kiro steering and warn-only command hooks.\n\n" +
-			"These commands never edit MCP settings, agents, skills, or authoritative Conn state.\n" +
+		Long: "Preview, install, or remove Conn's optional Kiro steering and warn-only command hooks,\n" +
+			"or export the Conn Kiro power into a folder you name.\n\n" +
+			"These commands never edit MCP settings, agents, installed skills, or authoritative Conn state.\n" +
 			"Installation refuses to overwrite an existing target file and preserves every unrelated entry.",
 		Args: cobra.NoArgs,
 	}
@@ -108,8 +110,44 @@ func newKiroCommand(deps Dependencies, streams Streams) *cobra.Command {
 		},
 	}
 	integration.AddCommand(preview, install, remove)
-	cmd.AddCommand(integration)
+	cmd.AddCommand(integration, newKiroPowerCommand(streams))
 	return cmd
+}
+
+func newKiroPowerCommand(streams Streams) *cobra.Command {
+	power := &cobra.Command{
+		Use:   "power",
+		Short: "Render the Conn Kiro power",
+		Long: "Render the Conn Kiro power in the Agent Plugins format: plugin.json, mcp.json, and the\n" +
+			"conn-setup, conn-work-loop, and conn-review-proof skills. Kiro installs the power from a\n" +
+			"repository URL or a local folder and manages its MCP server; Conn never writes MCP\n" +
+			"configuration. The always-on steering and warn-only hooks stay workspace files that\n" +
+			"`conn kiro integration install` writes.",
+		Args: cobra.NoArgs,
+	}
+	var replace bool
+	export := &cobra.Command{
+		Use:   "export <dir>",
+		Short: "Write the rendered power into a folder you name",
+		Long: "Write the rendered power and its .digest into <dir>. Without --replace, a file with\n" +
+			"different content is a conflict and nothing is written. Export never deletes a file.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			changes, err := kiropower.Export(args[0], replace)
+			fmt.Fprintf(streams.Out, "Conn Kiro power %s export to %s:\n", kiropower.Version, filepath.ToSlash(args[0]))
+			for _, change := range changes {
+				fmt.Fprintf(streams.Out, "  %-9s %s\n", change.Action, change.RelativePath)
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(streams.Out, "Install it in Kiro with Add Custom Power, from this folder or its repository URL.")
+			return nil
+		},
+	}
+	export.Flags().BoolVar(&replace, "replace", false, "overwrite Conn's power files that hold different content")
+	power.AddCommand(export)
+	return power
 }
 
 // executableCommand renders the absolute path of the running conn

@@ -83,7 +83,12 @@ func New(serverURL string, httpClient *http.Client) (*Client, error) {
 }
 
 // ParseServerURL accepts https URLs, and http URLs only for loopback hosts.
+// A value that still holds a ${VAR} placeholder means the MCP client did not
+// substitute the variable, so the error names it.
 func ParseServerURL(raw string) (*url.URL, error) {
+	if strings.Contains(raw, "${") {
+		return nil, fmt.Errorf("Conn server URL %q is an unsubstituted placeholder; set CONN_SERVER_URL to your Conn backend, or leave it unset to use %s", raw, DefaultServerURL)
+	}
 	u, err := url.Parse(strings.TrimRight(raw, "/"))
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("invalid Conn server URL %q", raw)

@@ -1,6 +1,6 @@
 ---
-
-## inclusion: always
+inclusion: always
+---
 
 # Architecture decision policy
 

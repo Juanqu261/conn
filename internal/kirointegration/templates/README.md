@@ -10,6 +10,10 @@ The bundle is not required for Conn. MCP tools and prompts remain the complete i
 
 The steering also describes the review-proof loop: `Conn-Intent` commit trailers, `conn evidence run` for checks in `.conn/checks.json`, and `/conn-review`. The commit-trailer Git hook is not part of this bundle; install it separately with `conn git-hook install`.
 
+## With the Conn Kiro power
+
+The Conn power at `powers/conn/` declares the MCP server and the `conn-setup`, `conn-work-loop`, and `conn-review-proof` skills, and Kiro loads it only while a conversation matches its keywords. This bundle is the always-on part: Kiro loads the steering and runs the command hooks in every session, so pre-edit warnings still appear while the power is inactive. The `conn-setup` skill installs the bundle with `--command-on-path` after showing the preview and receiving confirmation. The power and the bundle render from the same `internal/agentguide` source, and the Agent Plugins format has no hooks, so the bundle cannot move into the power.
+
 ## Inspect-first workflow
 
 Preview a workspace installation without writing:

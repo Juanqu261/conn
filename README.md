@@ -40,9 +40,25 @@ go run ./cmd/conn login
 go run ./cmd/conn app
 ```
 
-## One-time Kiro setup
+## Install the Conn power
 
-Build an absolute executable path, then explicitly add the local stdio server from the workspace that should use Conn:
+The Conn Kiro power installs Conn's MCP server and three skills in one step, in Kiro IDE and in Kiro CLI v3. In Kiro, open the powers panel, choose **Add Custom Power**, then **Import power from a repository URL** with `https://github.com/Juanqu261/conn` (or **Import power from a folder** with a local `powers/conn`). Then ask the agent to set up Conn.
+
+The `conn-setup` skill checks, in order, `conn --version`, `conn doctor`, the backend address, your session, and the Project, and reports each result before the next. It shows every installation and file change before making it and runs it only after you confirm:
+
+- When `conn` is missing, it shows the build-from-source steps (Go, Node.js, and pnpm) and runs them only on confirmation.
+- Sign-in uses GitHub device authorization; you approve the code yourself.
+- It installs the workspace steering and warn-only hooks with `conn kiro integration install --scope workspace --root . --command-on-path`. Kiro loads the power only while a conversation is about Conn, so these always-on files are what warn you before an edit while the power is inactive.
+- It offers the `Conn-Intent` commit-trailer hook with `conn git-hook preview`, then `install`.
+- It finishes with `conn doctor` and suggests `/conn-start`.
+
+The power runs `conn mcp` from `PATH` and passes only `CONN_SERVER_URL`. Unset or empty, it means a local `conn server` on `http://127.0.0.1:8080`; set it in the environment Kiro starts from for a team backend. Kiro manages the power's server; Conn never edits MCP configuration. `conn-work-loop` and `conn-review-proof` carry the same guidance as the Kiro steering, rendered from one source.
+
+If the workspace also registers Conn through `kiro-cli mcp add`, both start the same server; `conn doctor` lists manual registrations so you can keep one. Maintainers regenerate the committed power with `go run ./cmd/conn kiro power export powers/conn --replace` after raising `kiropower.Version`.
+
+## Manual Kiro setup
+
+Without the power, build an absolute executable path, then explicitly add the local stdio server from the workspace that should use Conn:
 
 ```powershell
 go build -o conn.exe ./cmd/conn

@@ -23,6 +23,7 @@ import (
 	"uuid"
 
 	"github.com/Juanqu261/conn/internal/analyzer"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/protocol"
 	"github.com/Juanqu261/conn/internal/repositorygit"
@@ -122,9 +123,7 @@ func lookup(cfg Config, name string) (string, bool) {
 	if get == nil {
 		get = os.LookupEnv
 	}
-	value, ok := get(name)
-	value = strings.TrimSpace(value)
-	return value, ok && value != ""
+	return envvalue.Lookup(get, name)
 }
 
 func writeSummary(cfg Config, markdown string, log io.Writer) {

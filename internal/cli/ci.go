@@ -17,6 +17,7 @@ import (
 
 	"github.com/Juanqu261/conn/internal/ciaddon"
 	"github.com/Juanqu261/conn/internal/cicheck"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/protocol"
 	"github.com/Juanqu261/conn/internal/repositorygit"
@@ -352,7 +353,7 @@ func renderCIPlan(out io.Writer, plan ciaddon.Plan) {
 // when the session can read it, the matching RepositoryConnection.
 func ciPrerequisiteInfo(ctx context.Context, deps Dependencies, root string) ciaddon.PrerequisiteInfo {
 	info := ciaddon.PrerequisiteInfo{}
-	if value, ok := deps.LookupEnv(ServerURLEnv); ok {
+	if value, ok := envvalue.Lookup(deps.LookupEnv, ServerURLEnv); ok {
 		info.ServerURL = value
 	}
 	metadata, err := repositorygit.Discover(ctx, root)

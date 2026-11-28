@@ -3,11 +3,14 @@ package kirointegration
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Juanqu261/conn/internal/agentguide"
 )
 
 // The hook command contains a space and a backslash so rendering must quote
@@ -27,7 +30,10 @@ func TestBundleTemplatesAreWarnOnlyCommandHooks(t *testing.T) {
 		contents[filepath.ToSlash(artifact.RelativePath)] = string(artifact.Content)
 	}
 	steering := contents[".kiro/steering/conn-work-loop.md"]
-	for _, phrase := range []string{"inclusion: always", "/conn-start", "list_concepts", "suggest_claims", "/conn-sync", "/conn-finish", "/conn-review", "conn evidence run", "Conn-Intent: <intent-id>@<revision>", "commit_trailer", "not independent CI proof", "Do not start background polling", "only warn", "optional planning context", "not Charter acceptance"} {
+	if !strings.HasPrefix(steering, "---\ninclusion: always\n---\n") {
+		t.Errorf("steering front matter = %q", steering[:min(len(steering), 40)])
+	}
+	for _, phrase := range []string{"/conn-start", "list_concepts", "suggest_claims", "/conn-sync", "/conn-finish", "/conn-review", "conn evidence run", "Conn-Intent: <intent-id>@<revision>", "commit_trailer", "not independent CI proof", "Do not start background polling", "only warn", "optional planning context", "not Charter acceptance"} {
 		if !strings.Contains(steering, phrase) {
 			t.Errorf("steering omitted %q", phrase)
 		}
@@ -212,4 +218,19 @@ func mustPreview(t *testing.T, root string, mode Mode, command string) Plan {
 		t.Fatal(err)
 	}
 	return plan
+}
+
+func TestPreviousSteeringVersionsAreReplaceable(t *testing.T) {
+	for _, name := range legacySteeringTemplates {
+		content, err := fs.ReadFile(templateFiles, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !isPreviousSteering(content) {
+			t.Errorf("%s is not recognized as a previous steering file", name)
+		}
+	}
+	if isPreviousSteering(agentguide.KiroSteering()) {
+		t.Error("the current steering file is recognized as a previous version")
+	}
 }
