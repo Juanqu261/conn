@@ -11,6 +11,7 @@ import (
 
 	"uuid"
 
+	"github.com/Juanqu261/conn/internal/board"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
@@ -197,6 +198,23 @@ func (p *Projects) ResolutionProposals(ctx context.Context, actor, projectID, co
 			return err
 		}
 		result.Data = protocol.ResolutionProposalList{ProjectID: projectID, CollisionID: collisionID, Proposals: proposals}
+		seen := map[uuid.UUID]bool{}
+		for _, proposal := range proposals {
+			if proposal.ProposedByParticipantID == nil || seen[*proposal.ProposedByParticipantID] {
+				continue
+			}
+			seen[*proposal.ProposedByParticipantID] = true
+			participant, err := tx.ParticipantByID(ctx, projectID, *proposal.ProposedByParticipantID)
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			result.Data.Authors = append(result.Data.Authors, protocol.ProposalAuthor{
+				ParticipantID: participant.ParticipantID, HumanID: participant.HumanID, AdapterKind: participant.AdapterKind,
+			})
+		}
 		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
 		return err
 	})
@@ -240,8 +258,26 @@ func (p *Projects) ProposeResolution(ctx context.Context, actor, projectID, part
 // high-risk outcomes remain owner-authorized. A member who is not an owner may
 // dismiss a collision as a false positive only when they are the Human behind
 // one of its two Intents. No decision mutates the source proposal or an
-// Objective/Blueprint itself.
+// Objective/Blueprint itself. The decision is recorded as made from the CLI
+// surface, which includes conn app.
 func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, collisionID uuid.UUID, input protocol.ResolutionDecisionInput) (Result[protocol.ResolutionDecision], error) {
+	return p.DecideResolutionFrom(ctx, actor, projectID, collisionID, input, protocol.DecisionSurfaceCLI)
+}
+
+// StaleDecisionError means a decision named Intent revisions or a collision
+// state that are no longer current. Nothing was written.
+type StaleDecisionError struct {
+	// Message says what changed and is safe to show the deciding human.
+	Message string
+}
+
+func (e *StaleDecisionError) Error() string { return e.Message }
+
+// DecideResolutionFrom is DecideResolution recorded from one decision
+// surface, the authenticated session kind. When the input carries the
+// expected Intent revisions and state, they are compared inside the decision
+// transaction, and any difference returns *StaleDecisionError without effect.
+func (p *Projects) DecideResolutionFrom(ctx context.Context, actor, projectID, collisionID uuid.UUID, input protocol.ResolutionDecisionInput, surface string) (Result[protocol.ResolutionDecision], error) {
 	decision := protocol.ResolutionDecision{DecisionID: uuid.NewV7(), ProjectID: projectID, CollisionID: collisionID, SelectedProposalID: input.SelectedProposalID, DecidedByHumanID: actor, Kind: input.Kind, Binding: input.Binding, RationaleMarkdown: input.RationaleMarkdown, References: input.References, CreatedAt: protocol.NewTimestamp(p.now())}
 	if err := validateRecord(decision); err != nil {
 		return Result[protocol.ResolutionDecision]{}, err
@@ -254,6 +290,9 @@ func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, colli
 		}
 		collision, err := tx.CollisionAssessment(ctx, projectID, collisionID)
 		if err != nil {
+			return err
+		}
+		if err := checkDecisionPrecondition(ctx, tx, projectID, collision, input); err != nil {
 			return err
 		}
 		if decision.SelectedProposalID != nil {
@@ -287,13 +326,61 @@ func (p *Projects) DecideResolution(ctx context.Context, actor, projectID, colli
 			return err
 		}
 		result.Data = decision
-		if _, err := tx.AppendEvent(ctx, newEvent(projectID, decision.DecisionID, actor, decision.CreatedAt.Time(), protocol.ResolutionDecided{})); err != nil {
+		if _, err := tx.AppendEvent(ctx, newEvent(projectID, decision.DecisionID, actor, decision.CreatedAt.Time(), protocol.ResolutionDecided{DecisionSurface: surface})); err != nil {
 			return err
 		}
 		result.AsOfEvent, err = tx.AppendEvent(ctx, newEvent(projectID, collisionID, actor, decision.CreatedAt.Time(), protocol.CollisionUpdated{}))
 		return err
 	})
 	return result, err
+}
+
+// checkDecisionPrecondition compares the revisions and state the deciding
+// human reviewed with the collision and its Intents as they are now. A
+// collision record always names its own Intent revisions, so a newer current
+// revision of either Intent also makes the decision stale.
+func checkDecisionPrecondition(ctx context.Context, tx Tx, projectID uuid.UUID, collision protocol.CollisionAssessment, input protocol.ResolutionDecisionInput) error {
+	if input.ExpectedLeftIntentRevision == nil && input.ExpectedRightIntentRevision == nil && input.ExpectedState == "" {
+		return nil
+	}
+	var changes []string
+	if input.ExpectedState != "" && input.ExpectedState != collision.State {
+		changes = append(changes, fmt.Sprintf("the collision is now %s, not %s", strings.ReplaceAll(collision.State, "_", " "), strings.ReplaceAll(input.ExpectedState, "_", " ")))
+	}
+	for _, side := range []struct {
+		name     string
+		intentID uuid.UUID
+		recorded int
+		expected *int
+	}{
+		{"left", collision.LeftIntentID, collision.LeftIntentRevision, input.ExpectedLeftIntentRevision},
+		{"right", collision.RightIntentID, collision.RightIntentRevision, input.ExpectedRightIntentRevision},
+	} {
+		if side.expected == nil {
+			continue
+		}
+		current, err := tx.Intent(ctx, projectID, side.intentID)
+		if err != nil {
+			return err
+		}
+		name := board.SummaryLine(current.IntentRevision.SummaryMarkdown)
+		switch {
+		case side.recorded != *side.expected:
+			changes = append(changes, fmt.Sprintf("the collision names revision %d of the %s Intent “%s”, not revision %d", side.recorded, side.name, name, *side.expected))
+		case current.IntentRevision.Revision != *side.expected:
+			changes = append(changes, fmt.Sprintf("the %s Intent “%s” is now at revision %d, not revision %d", side.name, name, current.IntentRevision.Revision, *side.expected))
+		case current.Status != "active":
+			changes = append(changes, fmt.Sprintf("the %s Intent “%s” is now %s", side.name, name, current.Status))
+		}
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	message := "Nothing was recorded because this stitch changed after you reviewed it: " + strings.Join(changes, "; ") + ". Review the current state and decide again."
+	if runes := []rune(message); len(runes) > 1000 {
+		message = string(runes[:999]) + "…"
+	}
+	return &StaleDecisionError{Message: message}
 }
 
 // decisionState maps a human decision kind to the collision state it sets.

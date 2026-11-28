@@ -264,6 +264,12 @@ type ResolutionDecisionInput struct {
 	Binding            bool       `json:"binding"`
 	RationaleMarkdown  string     `json:"rationale_markdown"`
 	References         []string   `json:"references,omitempty"`
+	// The expected Intent revisions and state form one optional
+	// precondition: when present, the decision applies only if the
+	// collision still matches them.
+	ExpectedLeftIntentRevision  *int   `json:"expected_left_intent_revision,omitempty"`
+	ExpectedRightIntentRevision *int   `json:"expected_right_intent_revision,omitempty"`
+	ExpectedState               string `json:"expected_state,omitempty"`
 }
 
 func (ResolutionDecisionInput) SchemaID() string { return ResolutionDecisionInputSchema }
@@ -289,6 +295,17 @@ type ResolutionProposalList struct {
 	ProjectID   uuid.UUID            `json:"project_id"`
 	CollisionID uuid.UUID            `json:"collision_id"`
 	Proposals   []ResolutionProposal `json:"proposals"`
+	// Authors are the Participants behind the listed proposals.
+	Authors []ProposalAuthor `json:"authors,omitempty"`
+}
+
+// ProposalAuthor attributes proposals to a Participant, its Human, and its
+// adapter, so a reader can tell agent-authored proposals apart. It grants
+// no authority.
+type ProposalAuthor struct {
+	ParticipantID uuid.UUID `json:"participant_id"`
+	HumanID       uuid.UUID `json:"human_id"`
+	AdapterKind   string    `json:"adapter_kind"`
 }
 
 func (ResolutionProposalList) SchemaID() string { return ResolutionProposalListSchema }
@@ -338,6 +355,7 @@ const (
 	EvidencePassing         = "passing"
 	EvidenceFailing         = "failing"
 	EvidenceMissing         = "missing"
+	EvidenceStale           = "stale"
 	MaxIntentEvidenceListed = 200
 )
 

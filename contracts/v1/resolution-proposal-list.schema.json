@@ -13,6 +13,23 @@
       "type": "array",
       "maxItems": 200,
       "items": { "$ref": "urn:conn:schema:v1:resolution-proposal" }
+    },
+    "authors": {
+      "description": "The Participants that authored the listed proposals, so a reader can tell which proposals an agent wrote. Attribution only; it grants no authority.",
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["participant_id", "human_id", "adapter_kind"],
+        "properties": {
+          "participant_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "human_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+          "adapter_kind": {
+            "enum": ["kiro", "mcp", "cli", "ci", "github", "other_registered_adapter"]
+          }
+        }
+      }
     }
   }
 }

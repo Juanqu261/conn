@@ -265,9 +265,17 @@ func reviewEvidence(evidence protocol.EvidenceReference, head string) protocol.R
 	if observation := evidence.Observation; observation != nil {
 		exitCode, duration := observation.ExitCode, observation.DurationMS
 		item.Commit, item.Dirty, item.ExitCode, item.DurationMS = observation.Commit, observation.WorktreeDirty, &exitCode, &duration
-		item.Stale = head != "" && !protocol.SameCommit(head, observation.Commit)
+		item.Stale = EvidenceStale(evidence, head)
 	}
 	return item
+}
+
+// EvidenceStale reports observed evidence that ran at a commit other than
+// the reviewed head. Reported evidence and an unknown head are never stale.
+// The Intent board uses this definition too, so the board and the review
+// packet cannot disagree.
+func EvidenceStale(evidence protocol.EvidenceReference, head string) bool {
+	return evidence.Observation != nil && head != "" && !protocol.SameCommit(head, evidence.Observation.Commit)
 }
 
 func reviewCollision(collision protocol.CollisionAssessment, intentID uuid.UUID, records Records) protocol.ReviewCollision {

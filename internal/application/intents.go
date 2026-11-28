@@ -211,6 +211,33 @@ func (p *Projects) IntentAs(ctx context.Context, reader Reader, projectID, inten
 	return result, err
 }
 
+// IntentRevisionAs returns one exact immutable revision of an Intent with the
+// Intent's current lifecycle state, so a reader can review earlier revisions.
+func (p *Projects) IntentRevisionAs(ctx context.Context, reader Reader, projectID, intentID uuid.UUID, revision int) (Result[protocol.IntentView], error) {
+	var result Result[protocol.IntentView]
+	err := p.Store.Read(ctx, func(tx Tx) error {
+		if err := reader.authorize(ctx, tx, projectID); err != nil {
+			return err
+		}
+		current, err := tx.Intent(ctx, projectID, intentID)
+		if err != nil {
+			return err
+		}
+		if current.IntentRevision.Revision != revision {
+			if current.IntentRevision, err = tx.IntentRevision(ctx, projectID, intentID, revision); err != nil {
+				return err
+			}
+		}
+		result.Data = current
+		if result.Data.AdvisoryObservations, err = intentObservationsWithAdvice(ctx, tx, result.Data.IntentRevision); err != nil {
+			return err
+		}
+		result.AsOfEvent, err = tx.LastEvent(ctx, projectID)
+		return err
+	})
+	return result, err
+}
+
 // IntentsAs lists active and released current snapshots to an authorized reader.
 func (p *Projects) IntentsAs(ctx context.Context, reader Reader, projectID uuid.UUID) (Result[protocol.IntentList], error) {
 	var result Result[protocol.IntentList]

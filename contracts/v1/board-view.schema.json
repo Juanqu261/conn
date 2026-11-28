@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:board-view",
+  "title": "BoardView",
+  "description": "The derived Intent board of one Project. The backend places every current Intent in exactly one lane by one deterministic rule set and states the rule and facts behind it. Nobody sets a lane. Lane totals are Project-level only; the view contains no per-person totals.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["board_version", "project_id", "as_of_event", "window_days", "lanes", "omitted"],
+  "properties": {
+    "board_version": { "const": 1 },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "as_of_event": { "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence" },
+    "window_days": {
+      "description": "Released Intents stay on the board for this many days.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 90
+    },
+    "lanes": {
+      "description": "Every lane, always in this display order: in progress, needs a decision, gathering proof, ready for review, released.",
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/lane",
+          "type": "object",
+          "properties": { "lane": { "const": "assembling" } }
+        },
+        {
+          "$ref": "#/$defs/lane",
+          "type": "object",
+          "properties": { "lane": { "const": "stitching" } }
+        },
+        {
+          "$ref": "#/$defs/lane",
+          "type": "object",
+          "properties": { "lane": { "const": "charging" } }
+        },
+        {
+          "$ref": "#/$defs/lane",
+          "type": "object",
+          "properties": { "lane": { "const": "alive" } }
+        },
+        {
+          "$ref": "#/$defs/lane",
+          "type": "object",
+          "properties": { "lane": { "const": "buried" } }
+        }
+      ],
+      "items": false,
+      "minItems": 5
+    },
+    "omitted": {
+      "description": "Intents left off the board because it reached its card bound. They still count in their lane totals.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "$defs": {
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lane", "count", "cards"],
+      "properties": {
+        "lane": { "enum": ["assembling", "stitching", "charging", "alive", "buried"] },
+        "count": {
+          "description": "Every Intent in this lane, including any omitted card.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "cards": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/card" } }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intent_id",
+        "intent_revision",
+        "status",
+        "summary_line",
+        "objective_id",
+        "objective_revision",
+        "open_collision_ids",
+        "acceptance",
+        "evidence_stale",
+        "reason"
+      ],
+      "properties": {
+        "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "intent_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "status": { "enum": ["active", "released"] },
+        "summary_line": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "owner_human_id": {
+          "description": "The Human behind the owning Participant. It attributes work and grants no authority.",
+          "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7"
+        },
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "objective_revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "repository_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "branch_ref": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "base_revision_ref": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "head_revision_ref": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "open_collision_ids": {
+          "description": "Collisions in state open or under_review on the current revision.",
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+        },
+        "acceptance": { "$ref": "#/$defs/acceptance" },
+        "latest_evidence_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+        "evidence_stale": {
+          "description": "The latest observed evidence ran at a commit other than the recorded head revision, by the review packet's definition.",
+          "type": "boolean"
+        },
+        "released_at": { "$ref": "urn:conn:schema:v1:common#/$defs/timestamp" },
+        "reason": { "$ref": "#/$defs/reason" }
+      }
+    },
+    "acceptance": {
+      "description": "Acceptance criteria of the Intent's Objective revision. A criterion passes when its latest evidence for this Intent passes and is not stale.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "passing", "missing_keys"],
+      "properties": {
+        "required": { "type": "integer", "minimum": 0 },
+        "passing": { "type": "integer", "minimum": 0 },
+        "missing_keys": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/key" }
+        }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "facts_markdown"],
+      "properties": {
+        "rule": {
+          "enum": [
+            "released_recently",
+            "open_collision",
+            "no_head_revision",
+            "no_observed_analysis",
+            "acceptance_incomplete",
+            "no_acceptance_criteria",
+            "ready"
+          ]
+        },
+        "facts_markdown": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" },
+        "next_step": {
+          "description": "What would move the card to the next lane. Lanes move only when Conn records change.",
+          "$ref": "urn:conn:schema:v1:common#/$defs/statement"
+        }
+      }
+    }
+  }
+}

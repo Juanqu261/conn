@@ -6,7 +6,7 @@ This milestone turns the Lab from a window into a workbench for the two human-au
 
 Relationship to `authenticated-browser-binding-review`: that spec covers a binding review **initiated by an agent** (URL elicitation from Kiro), with a challenge record. This milestone builds the page that spec needs, with the human navigating to it themselves. The direct path has the same authority as `conn app`, which decision 0001 already accepts as the human-authoritative fallback. The challenge flow then becomes a thin addition: a challenge URL that opens this same dialog, plus status polling from the adapter. It stays a separate spec. The Charter dialog is the first slice that spec recommends. This milestone also delivers collision decisions, because they are the core of the board, and records that choice in the decision amendment (task 2).
 
-## Decision 0013 amendment (proposed)
+## Decision 0013 amendment
 
 | Need                                                  | Recommended                                        | Alternatives considered                                                                                                                  |
 | ----------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |

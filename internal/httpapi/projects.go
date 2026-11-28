@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/Juanqu261/conn/internal/application"
+	"github.com/Juanqu261/conn/internal/board"
 	"github.com/Juanqu261/conn/internal/protocol"
 )
 
@@ -23,6 +24,11 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 	// Project only. Every other route rejects CI credentials.
 	read := func(pattern string, h func(http.ResponseWriter, *http.Request, application.Reader)) {
 		mux.HandleFunc(pattern, readable(cfg, h))
+	}
+	// decide serves the human-authoritative decisions a browser session may
+	// also record.
+	decide := func(pattern string, h func(http.ResponseWriter, *http.Request, application.Session)) {
+		mux.HandleFunc(pattern, authenticatedDecision(cfg, h))
 	}
 
 	handle("GET /v1/projects", func(w http.ResponseWriter, r *http.Request, s application.Session) {
@@ -72,6 +78,41 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		}
 		result, err := projects.AddMember(r.Context(), s.Human.HumanID, projectID, input.HumanID)
 		respond(w, log, http.StatusCreated, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/board", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok || !allowQueryParameters(w, r, log, "window_days") {
+			return
+		}
+		window := int64(board.DefaultWindowDays)
+		days, ok := queryInt(w, r, log, "window_days", 1, board.MaxWindowDays, &window)
+		if !ok {
+			return
+		}
+		result, err := projects.BoardAs(r.Context(), application.HumanReader(s.Human.HumanID), projectID, int(days))
+		respond(w, log, http.StatusOK, result, err)
+	})
+
+	handle("GET /v1/projects/{project_id}/collisions", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+		projectID, ok := pathID(w, r, log, "project_id")
+		if !ok || !allowQueryParameters(w, r, log, "state", "limit") {
+			return
+		}
+		state := r.URL.Query().Get("state")
+		switch state {
+		case protocol.CollisionOpen, protocol.CollisionUnderReview, protocol.CollisionResolved, protocol.CollisionDismissed, protocol.CollisionStale:
+		default:
+			writeInvalid(w, log, "The state query parameter must be a collision state.", "")
+			return
+		}
+		page := int64(50)
+		limit, ok := queryInt(w, r, log, "limit", 1, protocol.MaxCollisionList, &page)
+		if !ok {
+			return
+		}
+		result, err := projects.CollisionsInStateAs(r.Context(), application.HumanReader(s.Human.HumanID), projectID, state, int(limit))
+		respond(w, log, http.StatusOK, result, err)
 	})
 
 	read("GET /v1/projects/{project_id}/radar", func(w http.ResponseWriter, r *http.Request, reader application.Reader) {
@@ -192,7 +233,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
-	handle("POST /v1/projects/{project_id}/collisions/{collision_id}/decisions", func(w http.ResponseWriter, r *http.Request, s application.Session) {
+	decide("POST /v1/projects/{project_id}/collisions/{collision_id}/decisions", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")
 		if !ok {
 			return
@@ -205,7 +246,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		if !ok {
 			return
 		}
-		result, err := projects.DecideResolution(r.Context(), s.Human.HumanID, projectID, collisionID, input)
+		result, err := projects.DecideResolutionFrom(r.Context(), s.Human.HumanID, projectID, collisionID, input, decisionSurface(s))
 		respond(w, log, http.StatusCreated, result, err)
 	})
 
@@ -312,7 +353,16 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 			return
 		}
 		intentID, ok := pathID(w, r, log, "intent_id")
-		if !ok {
+		if !ok || !allowQueryParameters(w, r, log, "revision") {
+			return
+		}
+		if _, present := r.URL.Query()["revision"]; present {
+			revision, ok := queryInt(w, r, log, "revision", 1, math.MaxInt32, nil)
+			if !ok {
+				return
+			}
+			result, err := projects.IntentRevisionAs(r.Context(), reader, projectID, intentID, int(revision))
+			respond(w, log, http.StatusOK, result, err)
 			return
 		}
 		result, err := projects.IntentAs(r.Context(), reader, projectID, intentID)
@@ -528,7 +578,7 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 		respond(w, log, http.StatusOK, result, err)
 	})
 
-	decide := func(reject bool) func(http.ResponseWriter, *http.Request, application.Session) {
+	charterDecision := func(reject bool) func(http.ResponseWriter, *http.Request, application.Session) {
 		return func(w http.ResponseWriter, r *http.Request, s application.Session) {
 			projectID, ok := pathID(w, r, log, "project_id")
 			if !ok {
@@ -559,8 +609,8 @@ func registerProjectRoutes(mux *http.ServeMux, cfg Config) {
 			respond(w, log, http.StatusCreated, result, err)
 		}
 	}
-	handle("POST /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/accept", decide(false))
-	handle("POST /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/reject", decide(true))
+	decide("POST /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/accept", charterDecision(false))
+	decide("POST /v1/projects/{project_id}/blueprints/{blueprint_id}/revisions/{revision}/cells/{cell_id}/reject", charterDecision(true))
 
 	handle("GET /v1/projects/{project_id}/status", func(w http.ResponseWriter, r *http.Request, s application.Session) {
 		projectID, ok := pathID(w, r, log, "project_id")

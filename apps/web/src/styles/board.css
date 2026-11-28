@@ -1,0 +1,946 @@
+/*
+ * Conn Lab board views (web-lab-board): the Slab, Stitches, Specimen and
+ * Stitch pages, the Stitch Map, Blueprints, and Pulse. Colours come only
+ * from tokens.css and use the pairs test/contrast.test.ts checks. State
+ * colours always sit beside an icon and a label.
+ */
+
+.page-wide {
+  max-width: 1440px;
+}
+
+.page-lede {
+  max-width: 72ch;
+  margin-bottom: 16px;
+  color: var(--ink-muted);
+}
+
+.eyebrow {
+  margin-bottom: 4px;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.prose-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subsection-title {
+  margin: 16px 0 8px;
+  font-size: 1rem;
+}
+
+/* ---------- Toolbars and fields ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0 0 16px;
+}
+
+.field {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.field select,
+.field textarea {
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-s);
+  background: var(--crypt-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.field-block {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.field-block textarea {
+  width: 100%;
+  resize: vertical;
+  font-weight: 400;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--voltage-ink);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.notice-alive {
+  color: var(--alive);
+}
+
+.board-refusal {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* ---------- The Slab and Stitches ---------- */
+
+.swimlane {
+  margin-bottom: 24px;
+}
+
+.swimlane-title {
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-s);
+  background: var(--formal-700);
+  color: var(--on-formal);
+  font-size: 0.95rem;
+}
+
+.slab,
+.stitch-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.lane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px dashed var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-surface);
+}
+
+.lane-over {
+  border-style: solid;
+  border-color: var(--voltage);
+}
+
+.lane-header {
+  display: grid;
+  gap: 2px;
+}
+
+.lane-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+.lane-count {
+  min-width: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--formal-700);
+  color: var(--on-formal);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.lane-hint,
+.lane-empty {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+.lane-cards {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slab-card {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-raised);
+  touch-action: manipulation;
+}
+
+.slab-card-alive {
+  border-left: 4px solid var(--alive);
+}
+
+.slab-card-stitching {
+  border-left: 4px solid var(--pumpkin);
+}
+
+.slab-card-charging {
+  border-left: 4px solid var(--bruise);
+}
+
+.slab-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.slab-card-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.grip {
+  flex: none;
+  cursor: grab;
+}
+
+.card-dragging {
+  z-index: 10;
+  cursor: grabbing;
+  box-shadow: var(--shadow);
+}
+
+.slab-card-owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+
+.slab-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.slab-card-reason {
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.evidence-age.stale {
+  color: var(--pumpkin);
+}
+
+.jars {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jar-row {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.jar {
+  width: 8px;
+  height: 12px;
+  border: 1px solid var(--stitch);
+  border-radius: 2px 2px 3px 3px;
+}
+
+.jar-full {
+  border-color: var(--alive);
+  background: var(--alive);
+}
+
+/* A card that a live event moved arrives with a short transition. */
+.card-moved {
+  animation: card-arrive 300ms ease-out 1;
+}
+
+@keyframes card-arrive {
+  from {
+    opacity: 0.2;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* "It's alive!": one lightning flash of 400 ms, then a voltage outline. */
+.its-alive {
+  outline: 2px solid var(--voltage);
+  outline-offset: 2px;
+  animation: lightning 400ms ease-out 1;
+}
+
+@keyframes lightning {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  15% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--voltage) 70%, transparent);
+    background: color-mix(in srgb, var(--voltage) 30%, var(--crypt-raised));
+  }
+  30% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+  45% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--voltage) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    background: var(--crypt-raised);
+  }
+}
+
+.alive-tag {
+  justify-self: start;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--voltage);
+  color: var(--on-voltage);
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+}
+
+.stitch-card-sides {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.stitch-card-sides li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.stitch-open {
+  border-style: dashed;
+  border-color: var(--pumpkin);
+}
+
+.stitch-under_review {
+  border-style: dotted;
+  border-color: var(--bruise);
+}
+
+.stitch-dismissed,
+.stitch-stale {
+  opacity: 0.85;
+}
+
+@media (max-width: 767px) {
+  .slab,
+  .stitch-board {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: visible;
+  }
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog-wide {
+  top: 5vh;
+  width: min(880px, calc(100vw - 32px));
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.decision-form {
+  display: grid;
+  gap: 12px;
+}
+
+.decision-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.decision-explanation {
+  padding: 8px 12px;
+  border-left: 3px solid var(--stitch);
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.choice-described {
+  align-items: flex-start;
+}
+
+.choice-described input {
+  margin-top: 2px;
+}
+
+.choice-described > span {
+  display: grid;
+  gap: 2px;
+}
+
+.choice-description {
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+}
+
+.proposal-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px dashed var(--stitch);
+  border-radius: var(--radius-s);
+}
+
+.proposal-based {
+  border-style: solid;
+  border-color: var(--voltage);
+}
+
+.proposal .button {
+  justify-self: start;
+}
+
+.dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialog-problem {
+  flex: 1 1 240px;
+  font-size: 0.85rem;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ---------- Both sides of a stitch ---------- */
+
+.stitch-sides,
+.stitch-page-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.stitch-page-sides {
+  align-items: start;
+}
+
+.stitch-side {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-surface);
+  min-width: 0;
+}
+
+.stitch-side-owner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+
+.stitch-side-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.stitch-subjects {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stitch-subject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stitch-subject code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .stitch-sides,
+  .stitch-page-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- Specimen page ---------- */
+
+.specimen-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.specimen-title {
+  overflow-wrap: anywhere;
+}
+
+.specimen-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.specimen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.lane-badge {
+  padding: 6px 10px;
+  border-left: 4px solid var(--stitch);
+  border-radius: var(--radius-s);
+  background: var(--crypt-surface);
+  font-size: 0.9rem;
+}
+
+.lane-badge.lane-alive {
+  border-left-color: var(--alive);
+}
+
+.lane-badge.lane-stitching {
+  border-left-color: var(--pumpkin);
+}
+
+.lane-badge.lane-charging {
+  border-left-color: var(--bruise);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--stitch);
+}
+
+.tab {
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--ink-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[data-state="active"] {
+  border-bottom-color: var(--voltage);
+  color: var(--ink);
+}
+
+.revision-label {
+  margin-bottom: 10px;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+.specimen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.checklist,
+.claim-list,
+.timeline {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist-item,
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.checklist-item .row-meta {
+  display: block;
+}
+
+.claim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  overflow-wrap: anywhere;
+}
+
+.claim-relation {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.claim-matched {
+  border: 1px dashed var(--pumpkin);
+}
+
+.drift-flag {
+  border-left: 3px solid var(--pumpkin);
+  padding-left: 8px;
+}
+
+.drift-group {
+  margin-bottom: 8px;
+}
+
+.timeline-item {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--stitch);
+}
+
+.packet-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.packet {
+  max-height: 70vh;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-surface);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.command-box {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed var(--stitch);
+  border-radius: var(--radius-m);
+}
+
+.command {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Stitch Map ---------- */
+
+.map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 12px;
+}
+
+.map-canvas {
+  position: relative;
+  min-height: 560px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-surface);
+  overflow: hidden;
+}
+
+.map-side {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.map-list {
+  display: grid;
+  gap: 2px;
+  max-height: 460px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.map-item {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.map-item.active {
+  border-color: var(--voltage);
+  background: var(--crypt-raised);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 32px;
+  border-top: 3px solid var(--stitch);
+}
+
+.legend-open {
+  border-top-style: dashed;
+  border-top-color: var(--pumpkin);
+}
+
+.legend-under_review {
+  border-top-style: dotted;
+  border-top-color: var(--bruise);
+}
+
+.legend-dismissed {
+  opacity: 0.3;
+  border-top-color: var(--ink-muted);
+}
+
+.legend-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--blood);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px dashed var(--stitch);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 899px) {
+  .map {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-canvas {
+    min-height: 380px;
+  }
+}
+
+/* ---------- Blueprints ---------- */
+
+.blueprint {
+  margin-top: 16px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.list .row {
+  flex-wrap: wrap;
+}
+
+.charter {
+  display: grid;
+  gap: 6px;
+}
+
+.charter-heading {
+  margin: 8px 0 4px;
+  font-size: 0.9rem;
+}
+
+/* ---------- Pulse ---------- */
+
+.pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.chart {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--stitch);
+  border-radius: var(--radius-m);
+  background: var(--crypt-raised);
+}
+
+.chart-title {
+  font-size: 0.95rem;
+}
+
+.chart-empty {
+  color: var(--ink-muted);
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+}
+
+.chart-label,
+.chart-value {
+  fill: var(--ink);
+  font-size: 11px;
+}
+
+.chart-bar {
+  fill: var(--stitch);
+}
+
+.chart-track {
+  fill: var(--crypt-bg);
+  stroke: var(--stitch);
+}
+
+.chart-figure {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.chart-segment-0 {
+  fill: var(--alive);
+  background: var(--alive);
+}
+
+.chart-segment-1 {
+  fill: var(--bruise);
+  background: var(--bruise);
+}
+
+.chart-segment-2 {
+  fill: var(--ink-muted);
+  background: var(--ink-muted);
+}
+
+.chart-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.chart-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.chart-table summary {
+  color: var(--voltage-ink);
+  font-size: 0.85rem;
+  cursor: pointer;
+}

@@ -40,6 +40,12 @@ export function HelpSheet({
             ))}
             <div>
               <dt>
+                <kbd className="kbd">d</kbd>
+              </dt>
+              <dd>Decide… the focused stitch on the collision board</dd>
+            </div>
+            <div>
+              <dt>
                 <kbd className="kbd">?</kbd>
               </dt>
               <dd>This sheet</dd>

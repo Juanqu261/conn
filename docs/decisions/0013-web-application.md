@@ -1,6 +1,6 @@
 # 0013: Web application (Conn Lab)
 
-- Status: accepted on 2026-11-28 by the project owner, with the `web-lab-foundation` specification.
+- Status: accepted on 2026-11-28 by the project owner, with the `web-lab-foundation` specification. Amended on 2026-11-28 by the project owner with the `web-lab-board` specification (see Amendment 1).
 - Owner: project owner
 - Amends: [0001](0001-product-model-and-human-authority.md) (records the web architecture that browser review requires), [0002](0002-runtime-and-interaction-surfaces.md) (the deferred web application)
 - Satisfies: task 1 of `.kiro/specs/authenticated-browser-binding-review`
@@ -39,7 +39,7 @@ The constraints are the accepted ones: a Go `net/http` backend, Node.js with Typ
    | `@fontsource-variable/jetbrains-mono` | 5.3.0    |
    | `@fontsource/creepster`               | 5.3.0    |
 
-   Routes are defined in code, so the router's build plugin is not used. Vite never inlines assets (`assetsInlineLimit: 0`), so fonts and images stay same-origin files the Content-Security-Policy allows. Workspace tooling stays as accepted: TypeScript 7.0.2, Biome, and Vitest. Drag and drop, graph, and Markdown libraries are not selected here; `web-lab-board` amends this record when it introduces them.
+   Routes are defined in code, so the router's build plugin is not used. Vite never inlines assets (`assetsInlineLimit: 0`), so fonts and images stay same-origin files the Content-Security-Policy allows. Workspace tooling stays as accepted: TypeScript 7.0.2, Biome, and Vitest. Drag and drop, graph, and Markdown libraries are not selected here; `web-lab-board` amends this record when it introduces them (Amendment 1).
 
 2. **Styling: plain CSS with custom-property tokens and CSS modules, no utility framework.** The Lab palette follows the 60/30/10 rule: Crypt neutrals (`#0F1214`, `#161B1E`, `#1E2529`; light `#F5F2E9`) about 60%, Formaldehyde green (`#2E4D43`, stitch `#5E8C7A`) about 30%, Voltage lime (`#C8FF3D`) 10% or less. State colours (Pumpkin, Bruise, Blood, Voltage) convey state only and always come with an icon and a label. A Vitest check keeps every pair in the design's contrast table at WCAG 2.2 AA. Fonts and icons are bundled; the Lab loads no third-party script, stylesheet, or font.
 
@@ -55,7 +55,7 @@ The constraints are the accepted ones: a Go `net/http` backend, Node.js with Typ
    - `sessions` gains a `kind` column (`cli` for existing and CLI sessions, `browser`) with a check that browser sessions expire within 7 days. Browser session tokens carry the `conn_web_` prefix, so the bearer path refuses them before any lookup. Browser sessions expire after at most 7 days and keep the existing hashing and immediate revocation. The cookie is `__Host-conn_web; HttpOnly; Secure; SameSite=Lax; Path=/`.
    - Cookie authentication accepts only `browser` sessions, and bearer authentication refuses them. CI and MCP routes never accept a cookie.
    - Unsafe methods on cookie-authenticated requests require an exact `Origin` match with `CONN_PUBLIC_URL` and an `X-Conn-CSRF` header equal to the session's CSRF token, which `GET /v1/web/session` returns. The CSRF token is an HMAC-SHA-256 of a fixed label keyed by the session token: only a holder of the HttpOnly cookie can compute it, it changes with every session, and nothing extra is stored.
-   - In this version a browser session reaches only `GET` and `HEAD` on `/v1` routes; every other method returns `browser_read_only`, except sign-out (`DELETE /v1/web/session`), which passes the `Origin` and CSRF checks first. `web-lab-board` lifts this for its reviewed decisions.
+   - In this version a browser session reaches only `GET` and `HEAD` on `/v1` routes; every other method returns `browser_read_only`, except sign-out (`DELETE /v1/web/session`), which passes the `Origin` and CSRF checks first. `web-lab-board` lifts this for its reviewed decisions (Amendment 1).
 
 4. **Deployment: same origin as `/v1`, served by `conn server`.** Non-`/v1` paths fall back to the embedded `index.html`; hashed assets under `/assets/` are immutable. The Content-Security-Policy is `default-src 'self'; img-src 'self' https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://github.com`. GitHub avatars load directly: every member already signs in with GitHub, and proxying adds a cache for no authority benefit. Local development runs the Vite dev server with a proxy to a native `conn server`.
 
@@ -79,6 +79,25 @@ The constraints are the accepted ones: a Go `net/http` backend, Node.js with Typ
 - `conn server` gains a build-time dependency on the web build for a full release, but `go build` alone still produces a working API server.
 - Operators of a team backend configure a GitHub client secret, a callback URL, and the public origin.
 - The first Lab milestone writes nothing but sessions. Binding actions arrive with `web-lab-board` and go to existing endpoints with expected-revision preconditions. Agent-initiated browser review stays in `authenticated-browser-binding-review`, which now has its page architecture.
+
+## Amendment 1: the board's writes and libraries (`web-lab-board`)
+
+Accepted on 2026-11-28 by the project owner with the `web-lab-board` specification.
+
+| Need                                                  | Selected                                                                                | Alternatives considered                                                                                         |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Drag and drop with keyboard and screen-reader support | `@dnd-kit/core` 6.3.1                                                                   | `react-dnd` (weaker keyboard story); native HTML drag (no keyboard, poor touch)                                 |
+| Graph rendering for the Stitch Map                    | `cytoscape` 3.35.0 with `cytoscape-fcose` 2.2.0 (types: `@types/cytoscape-fcose` 2.2.5) | `d3-force` (more custom code for selection, zoom, and clustering); React Flow (oriented to editable flowcharts) |
+| Charts for Pulse                                      | Plain SVG components on the Lab tokens, no library                                      | A charting library would add weight for eight small charts                                                      |
+
+Each version is the newest release at least two weeks old on the amendment date. Only `@dnd-kit/core` is needed: no board reorders cards, so `@dnd-kit/sortable` is not added. The Stitch Map loads Cytoscape on demand, so other views do not carry it. No Markdown library is added; the Lab renders Markdown as plain preformatted text, so no generated HTML ever reaches the page.
+
+1. **The browser's first writes.** A browser session may now reach exactly three unsafe `/v1` routes: a collision decision (`POST …/collisions/{collision_id}/decisions`) and the acceptance or rejection of a Charter (`POST …/cells/{cell_id}/accept` and `…/reject`). Each passes the exact `Origin` and `X-Conn-CSRF` checks before any lookup or write. Every other unsafe method still returns `browser_read_only`. The Charter slice that `authenticated-browser-binding-review` recommends ships with collision decisions, because deciding stitches is the core of the board; agent-initiated browser review stays in that specification.
+2. **Expected-revision preconditions.** `resolution-decision-input` gains optional `expected_left_intent_revision`, `expected_right_intent_revision`, and `expected_state`. When present, the backend compares them inside the decision transaction and returns `409 stale_decision`, writing nothing, if any differs. The Lab always sends all three. Existing CLI and `conn app` callers are unaffected.
+3. **Decision surface.** The `resolution.decided` event payload records `decision_surface`, `cli` or `browser`, from the authenticated session kind. It is audit data and grants no authority.
+4. **Binding.** The Lab sets `binding` exactly as `conn app` does: kinds the `resolution-decision-input` schema marks as always binding are binding; for the other kinds an owner chooses between a non-binding record and a binding decision. The Lab reads the always-binding kinds from that schema instead of redefining them.
+5. **Board read model.** `GET /v1/projects/{project_id}/board` serves the versioned `board-view` contract: lanes derived on the backend by one rule set, with the rule and facts behind every card. Nobody sets a lane.
+6. **Review packet over HTTP.** `GET /v1/projects/{project_id}/intents/{intent_id}/review-packet` serves the generated review packet, built by the shared `internal/review` packet builder without local Git facts. It is generated on demand and never stored.
 
 ## Validation
 

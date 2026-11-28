@@ -78,6 +78,8 @@ func TestConformance(t *testing.T) {
 		protocol.WebSessionSchema:               roundTrip[protocol.WebSession],
 		protocol.WebLabStatusSchema:             roundTrip[protocol.WebLabStatus],
 		protocol.WebStreamResyncSchema:          roundTrip[protocol.WebStreamResync],
+		protocol.BoardViewSchema:                roundTrip[protocol.BoardView],
+		protocol.CollisionListSchema:            roundTrip[protocol.CollisionList],
 	}
 
 	for _, tc := range loadFixtures(t) {

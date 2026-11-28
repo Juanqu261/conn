@@ -17,4 +17,11 @@ export const LABELS = {
   questions: { themed: "Unanswered riddles", plain: "Open questions" },
   unknowns: { themed: "In the fog", plain: "Known unknowns" },
   account: { themed: "Account", plain: "Account" },
+  board: { themed: "The Slab", plain: "Intent board" },
+  stitchBoard: { themed: "Stitches", plain: "Collision board" },
+  stitchMap: { themed: "Stitch Map", plain: "Collision map" },
+  blueprints: { themed: "Blueprints", plain: "Objectives and Blueprints" },
+  pulse: { themed: "Pulse", plain: "Project insights" },
+  specimen: { themed: "Specimen", plain: "Intent" },
+  stitch: { themed: "Stitch", plain: "Collision" },
 } satisfies Record<string, Label>;

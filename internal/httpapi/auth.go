@@ -15,9 +15,9 @@ import (
 // authenticated runs next only for a valid Conn session: a CLI session
 // presented as a bearer credential, or a Conn Lab browser session presented
 // in the session cookie when no bearer credential is sent. Neither kind is
-// accepted in place of the other. Conn Lab is read-only in this version
-// (decision 0013), so a browser session reaches only safe methods here; the
-// sign-out route checks its CSRF token separately.
+// accepted in place of the other. A browser session reaches only safe
+// methods here; the reviewed decisions use authenticatedDecision, and the
+// sign-out route checks its CSRF token separately (decision 0013).
 func authenticated(auth *application.Auth, log *slog.Logger, next func(http.ResponseWriter, *http.Request, application.Session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := bearer(r)
@@ -53,7 +53,7 @@ func authenticated(auth *application.Auth, log *slog.Logger, next func(http.Resp
 func authenticatedBrowser(w http.ResponseWriter, r *http.Request, auth *application.Auth, log *slog.Logger, token secret.String, next func(http.ResponseWriter, *http.Request, application.Session)) {
 	if !safeMethod(r.Method) {
 		writeError(w, log, http.StatusForbidden, "browser_read_only",
-			"Conn Lab is read-only in this version. Use conn app or the conn CLI to make changes.")
+			"Conn Lab records only collision and Charter decisions. Use conn app or the conn CLI to make other changes.")
 		return
 	}
 	session, err := auth.AuthenticateBrowser(r.Context(), token)
@@ -67,6 +67,47 @@ func authenticatedBrowser(w http.ResponseWriter, r *http.Request, auth *applicat
 	}
 	setActor(r, session.Human.HumanID)
 	next(w, r, session)
+}
+
+// authenticatedDecision serves the human-authoritative decisions Conn Lab
+// may record (decision 0013, amendment 1): a collision decision and the
+// acceptance or rejection of the Human's own Charter. A bearer session is
+// handled exactly as by authenticated. A browser session must first pass the
+// exact Origin and CSRF checks, before any lookup or write, so a cross-site
+// request has no effect at all.
+func authenticatedDecision(cfg Config, next func(http.ResponseWriter, *http.Request, application.Session)) http.HandlerFunc {
+	bearerPath := authenticated(cfg.Auth, cfg.Log, next)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, hasBearer := bearer(r); !hasBearer {
+			if token, found := browserSessionCookie(r); found {
+				if !sameOrigin(r, cfg.Web) || !application.ValidCSRF(token, r.Header.Get(csrfHeader)) {
+					csrfRefused(w, cfg.Log)
+					return
+				}
+				session, err := cfg.Auth.AuthenticateBrowser(r.Context(), token)
+				if errors.Is(err, application.ErrUnauthenticated) {
+					browserUnauthenticated(w, cfg.Log)
+					return
+				}
+				if err != nil {
+					internalError(w, cfg.Log, "authenticate", err)
+					return
+				}
+				setActor(r, session.Human.HumanID)
+				next(w, r, session)
+				return
+			}
+		}
+		bearerPath(w, r)
+	}
+}
+
+// decisionSurface is the audit label of the session a decision came from.
+func decisionSurface(session application.Session) string {
+	if session.Kind == application.SessionBrowser {
+		return protocol.DecisionSurfaceBrowser
+	}
+	return protocol.DecisionSurfaceCLI
 }
 
 func safeMethod(method string) bool {

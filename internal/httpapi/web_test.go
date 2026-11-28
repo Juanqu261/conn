@@ -27,6 +27,7 @@ import (
 	"github.com/Juanqu261/conn/internal/migrations"
 	"github.com/Juanqu261/conn/internal/postgres"
 	"github.com/Juanqu261/conn/internal/postgres/postgrestest"
+	"github.com/Juanqu261/conn/internal/protocol"
 	"github.com/Juanqu261/conn/internal/secret"
 )
 
@@ -427,6 +428,123 @@ func TestWebLab(t *testing.T) {
 		msg := next(t, messages)
 		if msg.event != "resync" || msg.data != `{"as_of_event":2}` {
 			t.Fatalf("got %+v", msg)
+		}
+	})
+
+	// Decisions from the browser (decision 0013, amendment 1): the Origin
+	// and CSRF checks come first, a stale precondition returns 409 and
+	// writes nothing, a current one records the browser surface, and nobody
+	// decides another Human's Charter from the browser.
+	t.Run("browser decisions are checked, current, and attributed", func(t *testing.T) {
+		projects := &application.Projects{Store: postgres.ProjectStore{Pool: pool}}
+		_, aliceRaw := cliLogin(t, "gh-alice")
+		alice, bob := uuid.MustParse(aliceRaw), uuid.MustParse(bobID)
+		decided, objectiveID, blueprintID := uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+		leftID, rightID, aliceCell, bobCell := uuid.NewV7(), uuid.NewV7(), uuid.NewV7(), uuid.NewV7()
+		setup := func(err error) {
+			t.Helper()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, err := projects.CreateProject(ctx, alice, protocol.ProjectCreate{ProjectID: decided, Name: "Browser decisions"})
+		setup(err)
+		_, err = projects.AddMember(ctx, alice, decided, bob)
+		setup(err)
+		_, err = projects.CreateObjectiveRevision(ctx, alice, decided, protocol.ObjectiveRevisionInput{
+			ObjectiveID: objectiveID, Title: "Coordinate payments", OverviewMarkdown: "Keep payment behavior coordinated.", AccountableHumanID: alice,
+		}, 0)
+		setup(err)
+		shared := protocol.SemanticClaimCandidate{SubjectKind: "invariant", NormalizedSubject: "invariant:checkout:one-charge",
+			DisplayName: "One charge per order", Relation: "changes", ProvenanceKind: "declared"}
+		for _, side := range []struct{ human, intent uuid.UUID }{{alice, leftID}, {bob, rightID}} {
+			participant, err := projects.ResolveParticipant(ctx, side.human, decided, "kiro", "")
+			setup(err)
+			_, err = projects.PublishIntent(ctx, side.human, decided, participant.Data.ParticipantID, protocol.IntentInput{
+				IntentID: side.intent, ObjectiveID: objectiveID, ObjectiveRevision: 1, SummaryMarkdown: "Change payment invariants.",
+				DeclaredClaims: []protocol.SemanticClaimCandidate{shared},
+			})
+			setup(err)
+		}
+		radar, err := projects.RadarAs(ctx, application.HumanReader(alice), decided)
+		setup(err)
+		if len(radar.Data.OpenCollisions) != 1 {
+			t.Fatalf("open collisions = %+v, want one", radar.Data.OpenCollisions)
+		}
+		collision := radar.Data.OpenCollisions[0]
+		decisionPath := fmt.Sprintf("/v1/projects/%s/collisions/%s/decisions", decided, collision.CollisionID)
+		decision := func(left, right int, state string) string {
+			return fmt.Sprintf(`{"kind": "sequencing", "binding": false, "rationale_markdown": "Payments land first.",
+				"expected_left_intent_revision": %d, "expected_right_intent_revision": %d, "expected_state": %q}`, left, right, state)
+		}
+		current := decision(collision.LeftIntentRevision, collision.RightIntentRevision, collision.State)
+		lastEvent := func() int64 {
+			t.Helper()
+			events, err := projects.Events(ctx, alice, decided, 0, 1)
+			setup(err)
+			return events.AsOfEvent
+		}
+		before := lastEvent()
+
+		refused := []struct {
+			name             string
+			req              request
+			wantStatus       int
+			wantCode         string
+			wantMessagePart  string
+			skipMessageCheck bool
+		}{
+			{name: "without Origin", req: request{method: "POST", path: decisionPath, cookie: aliceWeb, csrf: aliceCSRF, body: current}, wantStatus: 403, wantCode: "csrf_refused", skipMessageCheck: true},
+			{name: "without the CSRF token", req: request{method: "POST", path: decisionPath, cookie: aliceWeb, origin: labOrigin, body: current}, wantStatus: 403, wantCode: "csrf_refused", skipMessageCheck: true},
+			{name: "at a revision the Intent no longer has", req: request{method: "POST", path: decisionPath, cookie: aliceWeb, origin: labOrigin, csrf: aliceCSRF,
+				body: decision(collision.LeftIntentRevision+1, collision.RightIntentRevision, collision.State)}, wantStatus: 409, wantCode: "stale_decision", wantMessagePart: "not revision 2"},
+			{name: "in a state the collision has left", req: request{method: "POST", path: decisionPath, cookie: aliceWeb, origin: labOrigin, csrf: aliceCSRF,
+				body: decision(collision.LeftIntentRevision, collision.RightIntentRevision, "under_review")}, wantStatus: 409, wantCode: "stale_decision", wantMessagePart: "now open, not under review"},
+		}
+		for _, tc := range refused {
+			resp := do(t, server, tc.req)
+			var envelope struct {
+				Error struct{ Code, Message string } `json:"error"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&envelope)
+			resp.Body.Close()
+			if resp.StatusCode != tc.wantStatus || envelope.Error.Code != tc.wantCode ||
+				(!tc.skipMessageCheck && !strings.Contains(envelope.Error.Message, tc.wantMessagePart)) {
+				t.Fatalf("%s: got %d %q %q", tc.name, resp.StatusCode, envelope.Error.Code, envelope.Error.Message)
+			}
+		}
+		if after := lastEvent(); after != before {
+			t.Fatalf("refused decisions appended events %d..%d", before, after)
+		}
+
+		if gotStatus, gotCode := status(t, request{method: "POST", path: decisionPath, cookie: aliceWeb, origin: labOrigin, csrf: aliceCSRF, body: current}); gotStatus != 201 {
+			t.Fatalf("current decision: %d %q", gotStatus, gotCode)
+		}
+		events, err := projects.Events(ctx, alice, decided, before, 10)
+		setup(err)
+		if len(events.Data) != 2 || events.Data[0].EventType() != protocol.EventResolutionDecided {
+			t.Fatalf("decision events = %+v", events.Data)
+		}
+		if payload, ok := events.Data[0].Payload.(protocol.ResolutionDecided); !ok || payload.DecisionSurface != protocol.DecisionSurfaceBrowser {
+			t.Fatalf("decision payload = %+v, want the browser surface", events.Data[0].Payload)
+		}
+
+		_, err = projects.ProposeBlueprintRevision(ctx, alice, decided, protocol.BlueprintProposal{
+			BlueprintID: blueprintID, ObjectiveID: objectiveID, ObjectiveRevision: 1,
+			CellCharters: []protocol.CellCharter{
+				{CellID: aliceCell, AccountableHumanID: alice, Title: "Payments", OverviewMarkdown: "Own payment retries."},
+				{CellID: bobCell, AccountableHumanID: bob, Title: "Refunds", OverviewMarkdown: "Own refund flow."},
+			},
+		}, 0)
+		setup(err)
+		cellPath := func(cell uuid.UUID) string {
+			return fmt.Sprintf("/v1/projects/%s/blueprints/%s/revisions/1/cells/%s/accept", decided, blueprintID, cell)
+		}
+		if gotStatus, gotCode := status(t, request{method: "POST", path: cellPath(bobCell), cookie: aliceWeb, origin: labOrigin, csrf: aliceCSRF}); gotStatus != 403 || gotCode != "forbidden" {
+			t.Fatalf("accepting another Human's Charter: %d %q", gotStatus, gotCode)
+		}
+		if gotStatus, gotCode := status(t, request{method: "POST", path: cellPath(aliceCell), cookie: aliceWeb, origin: labOrigin, csrf: aliceCSRF}); gotStatus != 201 {
+			t.Fatalf("accepting her own Charter: %d %q", gotStatus, gotCode)
 		}
 	})
 

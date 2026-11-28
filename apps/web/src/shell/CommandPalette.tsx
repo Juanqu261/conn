@@ -3,16 +3,16 @@ import { useNavigate } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { projectsQuery } from "../api/queries";
 import type { UUID } from "../api/types";
-import { LABELS } from "../labels";
 import { projectSlug } from "../names/directory";
 import { useProjectData } from "../project";
 import { useSession } from "../session";
 import { effectiveTheme, setPlainLabels, setTheme, usePlainLabels } from "../theme/preferences";
+import { PROJECT_VIEWS } from "./views";
 
 /**
  * Jump to any view, Project, Objective, Intent, or collision by name
- * (requirement 3.3). Records open on the overview, focused; their own pages
- * arrive with web-lab-board.
+ * (requirement 3.3). Objectives open on the overview, focused; Intents open
+ * their Specimen page and collisions their Stitch page.
  */
 export function CommandPalette({
   open,
@@ -66,26 +66,22 @@ export function CommandPalette({
         <Command.Empty className="palette-empty">Nothing by that name in the Lab.</Command.Empty>
 
         <Command.Group heading="Views" className="palette-group">
-          {slug && (
-            <>
+          {slug &&
+            PROJECT_VIEWS.map((view) => (
               <Command.Item
+                key={view.to}
+                value={`view ${view.label.themed} ${view.label.plain}`}
                 className="palette-item"
                 onSelect={() =>
-                  run(() => void navigate({ to: "/p/$project", params: { project: slug } }))
+                  run(() => void navigate({ to: view.to, params: { project: slug } }))
                 }
               >
-                {LABELS.lab.themed} <span className="palette-hint">{LABELS.lab.plain} · g o</span>
+                {plain ? view.label.plain : view.label.themed}{" "}
+                <span className="palette-hint">
+                  {plain ? "" : `${view.label.plain} · `}g {view.key}
+                </span>
               </Command.Item>
-              <Command.Item
-                className="palette-item"
-                onSelect={() =>
-                  run(() => void navigate({ to: "/p/$project/feed", params: { project: slug } }))
-                }
-              >
-                {LABELS.feed.themed} <span className="palette-hint">{LABELS.feed.plain} · g f</span>
-              </Command.Item>
-            </>
-          )}
+            ))}
           <Command.Item
             className="palette-item"
             onSelect={() => run(() => void navigate({ to: "/account" }))}
@@ -145,7 +141,16 @@ export function CommandPalette({
                 key={intent.intent_id}
                 value={`intent ${names.intent(intent.intent_id)} ${names.human(names.intentOwner(intent.intent_id))} ${intent.intent_id}`}
                 className="palette-item"
-                onSelect={() => run(() => focus("intent", intent.intent_id))}
+                onSelect={() =>
+                  run(() => {
+                    if (slug) {
+                      void navigate({
+                        to: "/p/$project/intents/$intent",
+                        params: { project: slug, intent: intent.intent_id },
+                      });
+                    }
+                  })
+                }
               >
                 {names.intent(intent.intent_id)}
                 <span className="palette-hint">
@@ -163,7 +168,16 @@ export function CommandPalette({
                 key={collision.collision_id}
                 value={`stitch collision ${names.collisionName(collision)} ${collision.collision_id}`}
                 className="palette-item"
-                onSelect={() => run(() => focus("collision", collision.collision_id))}
+                onSelect={() =>
+                  run(() => {
+                    if (slug) {
+                      void navigate({
+                        to: "/p/$project/stitches/$collision",
+                        params: { project: slug, collision: collision.collision_id },
+                      });
+                    }
+                  })
+                }
               >
                 {names.collisionName(collision)}
               </Command.Item>

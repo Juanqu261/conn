@@ -7,14 +7,22 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { ApiError } from "./api/client";
+import { parseBoardSearch } from "./board/filters";
 import { BoltIcon } from "./components/icons";
 import { Account } from "./routes/Account";
+import { Blueprints } from "./routes/Blueprints";
+import { CollisionBoard } from "./routes/CollisionBoard";
 import { FeedPage } from "./routes/FeedPage";
 import { Home } from "./routes/Home";
+import { IntentBoard } from "./routes/IntentBoard";
 import { NotFound } from "./routes/NotFound";
 import { Overview } from "./routes/Overview";
 import { ProjectLayout } from "./routes/ProjectLayout";
+import { Pulse, type PulseWindow, WINDOWS } from "./routes/Pulse";
 import { SignIn } from "./routes/SignIn";
+import { Specimen, type SpecimenTab } from "./routes/Specimen";
+import { type MapSearch, StitchMap } from "./routes/StitchMap";
+import { StitchPage } from "./routes/StitchPage";
 import { useSession } from "./session";
 import { AppShell } from "./shell/AppShell";
 
@@ -103,11 +111,88 @@ const feedRoute = createRoute({
   component: FeedPage,
 });
 
+const boardRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "board",
+  validateSearch: parseBoardSearch,
+  component: IntentBoard,
+});
+
+const stitchesRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "stitches",
+  component: CollisionBoard,
+});
+
+const stitchRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "stitches/$collision",
+  component: StitchPage,
+});
+
+const SPECIMEN_TABS: SpecimenTab[] = ["overview", "claims", "stitches", "evidence", "review"];
+
+const specimenRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "intents/$intent",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: SpecimenTab | undefined; revision?: number | undefined } => {
+    const revision = Number(search.revision);
+    return {
+      tab: SPECIMEN_TABS.includes(search.tab as SpecimenTab)
+        ? (search.tab as SpecimenTab)
+        : undefined,
+      revision: Number.isInteger(revision) && revision > 0 ? revision : undefined,
+    };
+  },
+  component: Specimen,
+});
+
+const mapRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "map",
+  validateSearch: (search: Record<string, unknown>): MapSearch => ({
+    view: search.view === "table" ? "table" : undefined,
+    subjects: search.subjects === true || search.subjects === "true" ? true : undefined,
+    focus: typeof search.focus === "string" && search.focus ? search.focus : undefined,
+  }),
+  component: StitchMap,
+});
+
+const blueprintsRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "blueprints",
+  component: Blueprints,
+});
+
+const pulseRoute = createRoute({
+  getParentRoute: () => projectRoute,
+  path: "pulse",
+  validateSearch: (search: Record<string, unknown>): { window?: PulseWindow | undefined } => {
+    const value = Number(search.window);
+    return {
+      window: (WINDOWS as readonly number[]).includes(value) ? (value as PulseWindow) : undefined,
+    };
+  },
+  component: Pulse,
+});
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   signInRoute,
   accountRoute,
-  projectRoute.addChildren([overviewRoute, feedRoute]),
+  projectRoute.addChildren([
+    overviewRoute,
+    feedRoute,
+    boardRoute,
+    stitchesRoute,
+    stitchRoute,
+    specimenRoute,
+    mapRoute,
+    blueprintsRoute,
+    pulseRoute,
+  ]),
 ]);
 
 export const router = createRouter({

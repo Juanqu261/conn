@@ -89,7 +89,10 @@ func writeProblem(w http.ResponseWriter, log *slog.Logger, err error) {
 	var invalid *application.InvalidError
 	var schemaErr *contracts.ValidationError
 	var objectiveBlueprint *application.ObjectiveBlueprintError
+	var staleDecision *application.StaleDecisionError
 	switch {
+	case errors.As(err, &staleDecision):
+		writeError(w, log, http.StatusConflict, "stale_decision", truncate(staleDecision.Message, maxMessageRunes))
 	case errors.As(err, &objectiveBlueprint):
 		writeError(w, log, http.StatusConflict, "objective_has_blueprint", fmt.Sprintf(
 			"Objective %s already has blueprint %s at revision %d. Propose the new plan as revision %d of that blueprint.",

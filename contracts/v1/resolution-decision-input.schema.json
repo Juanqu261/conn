@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:resolution-decision-input",
   "title": "ResolutionDecisionInput",
-  "description": "Human-authored content for an immutable resolution decision. Conn derives the deciding human from the authenticated session.",
+  "description": "Human-authored content for an immutable resolution decision. Conn derives the deciding human from the authenticated session. The optional expected revisions and state are one precondition: when present, the backend decides only if the collision still names exactly those Intent revisions and is still in that state, and otherwise changes nothing.",
   "type": "object",
   "additionalProperties": false,
   "required": ["kind", "binding", "rationale_markdown"],
@@ -15,7 +15,24 @@
       "type": "array",
       "maxItems": 20,
       "items": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" }
+    },
+    "expected_left_intent_revision": {
+      "description": "The left Intent revision the deciding human reviewed.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/revision"
+    },
+    "expected_right_intent_revision": {
+      "description": "The right Intent revision the deciding human reviewed.",
+      "$ref": "urn:conn:schema:v1:common#/$defs/revision"
+    },
+    "expected_state": {
+      "description": "The collision state the deciding human reviewed.",
+      "enum": ["open", "under_review", "resolved", "dismissed", "stale"]
     }
+  },
+  "dependentRequired": {
+    "expected_left_intent_revision": ["expected_right_intent_revision", "expected_state"],
+    "expected_right_intent_revision": ["expected_left_intent_revision", "expected_state"],
+    "expected_state": ["expected_left_intent_revision", "expected_right_intent_revision"]
   },
   "allOf": [
     {

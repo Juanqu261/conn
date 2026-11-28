@@ -117,3 +117,45 @@ func nullIfEmpty(value string) any {
 	}
 	return value
 }
+
+func (t projectTx) AnalyzedRevisions(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]int, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT intent_id, max(intent_revision) FROM intent_analysis_reports
+		WHERE project_id = $1
+		GROUP BY intent_id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	analyzed := map[uuid.UUID]int{}
+	for rows.Next() {
+		var intentID uuid.UUID
+		var revision int
+		if err := rows.Scan(&intentID, &revision); err != nil {
+			return nil, err
+		}
+		analyzed[intentID] = revision
+	}
+	return analyzed, rows.Err()
+}
+
+func (t projectTx) IntentReleases(ctx context.Context, projectID uuid.UUID, since time.Time) (map[uuid.UUID]time.Time, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT entity_id, max(occurred_at) FROM events
+		WHERE project_id = $1 AND event_type = 'intent.released' AND occurred_at >= $2
+		GROUP BY entity_id`, projectID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	released := map[uuid.UUID]time.Time{}
+	for rows.Next() {
+		var intentID uuid.UUID
+		var at time.Time
+		if err := rows.Scan(&intentID, &at); err != nil {
+			return nil, err
+		}
+		released[intentID] = at.UTC()
+	}
+	return released, rows.Err()
+}
