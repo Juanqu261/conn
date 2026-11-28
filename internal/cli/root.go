@@ -192,6 +192,7 @@ func newRoot(streams Streams, deps Dependencies) *cobra.Command {
 		newCICommand(deps, streams),
 		newAgentsCommand(deps, streams),
 		newStartCommand(deps, streams),
+		newSpecKitCommand(deps, streams),
 		newInsightsCommand(deps, streams),
 		newAppCommand(deps, streams),
 		newServerCommand(deps, logger),

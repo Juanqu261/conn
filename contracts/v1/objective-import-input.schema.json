@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:conn:schema:v1:objective-import-input",
   "title": "Objective import input",
-  "description": "Human-authored Conn Objective content and captured metadata for a local Kiro specification or a GitHub issue. Conn records the safe source reference, revision, and digest, never synchronizes the source automatically, and never receives a GitHub token.",
+  "description": "Human-authored Conn Objective content and captured metadata for a local Kiro specification, a local Spec Kit feature, or a GitHub issue. Conn records the safe source reference, revision, and digest, never synchronizes the source automatically, and never receives a GitHub token.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   "properties": {
     "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
     "key": { "$ref": "urn:conn:schema:v1:common#/$defs/key" },
-    "source_kind": { "enum": ["kiro_spec", "github_issue"] },
+    "source_kind": { "$ref": "urn:conn:schema:v1:objective#/$defs/sourceKind" },
     "source_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
     "source_revision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/opaqueReference" },
     "content_hash": { "$ref": "urn:conn:schema:v1:common#/$defs/sha256" },

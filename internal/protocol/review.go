@@ -79,6 +79,8 @@ type ReviewObjective struct {
 	ID       uuid.UUID `json:"id"`
 	Revision int       `json:"revision"`
 	Title    string    `json:"title"`
+	// SourceKind is the method an imported Objective came from.
+	SourceKind string `json:"source_kind,omitempty"`
 }
 
 type ReviewRevisionRef struct {

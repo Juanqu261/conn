@@ -1,0 +1,54 @@
+# Conn extension for GitHub Spec Kit. Rendered by conn speckit extension export.
+schema_version: "1.0"
+
+extension:
+  id: conn
+  name: "Conn"
+  version: "1.0.0"
+  description: "Warns when another in-progress feature changes what this plan changes, and attaches review proof."
+  author: "Conn"
+  repository: "https://github.com/Juanqu261/conn"
+  license: "MIT"
+  homepage: "https://github.com/Juanqu261/conn#readme"
+
+requires:
+  speckit_version: ">=1.4.0,<2.0.0"
+  tools:
+    - name: "conn"
+      required: true
+
+provides:
+  commands:
+    - name: "speckit.conn.check"
+      file: "commands/check.md"
+      description: "Check this feature's plan against teammates' in-progress work with Conn, publishing nothing."
+    - name: "speckit.conn.start"
+      file: "commands/start.md"
+      description: "Publish or revise this feature's Conn Intent and check collisions before implementing."
+    - name: "speckit.conn.finish"
+      file: "commands/finish.md"
+      description: "Record the head revision, analyze it, offer evidence runs, and produce Conn review proof."
+    - name: "speckit.conn.review"
+      file: "commands/review.md"
+      description: "Produce the Conn review packet for this feature as a pull-request description."
+
+hooks:
+  after_tasks:
+    command: "speckit.conn.check"
+    optional: true
+    prompt: "Check this plan against teammates' in-progress work with Conn?"
+    description: "Previews collisions for the planned paths. Publishes nothing."
+  before_implement:
+    command: "speckit.conn.start"
+    optional: false
+    description: "Conn publishes or revises this feature's Intent after confirmation and warns about collisions. It never blocks."
+  after_implement:
+    command: "speckit.conn.finish"
+    optional: true
+    prompt: "Record review proof for this feature with Conn?"
+    description: "Records the head revision, analyzes it, offers approved check runs, and produces the review packet."
+
+tags:
+  - "coordination"
+  - "collisions"
+  - "review"

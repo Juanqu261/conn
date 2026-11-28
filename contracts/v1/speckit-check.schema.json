@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:speckit-check",
+  "title": "Spec Kit plan check",
+  "description": "The output of `conn speckit check`: the planned paths Conn extracted from a local Spec Kit feature, the claims suggested for them, and the collisions those claims would open against active Intents. Nothing was published. It carries paths and claim subjects only, never task, plan, research, contract, or data-model text. errors lists Conn, network, and configuration problems; the command still exits 0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "feature",
+    "extraction",
+    "analysis",
+    "candidate_count",
+    "candidates",
+    "collisions",
+    "collisions_truncated",
+    "publish_offered",
+    "errors"
+  ],
+  "properties": {
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory", "spec_ref", "title"],
+      "properties": {
+        "directory": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+        "spec_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+      }
+    },
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "objective": {
+      "description": "The Objective imported from this feature, when one exists. The check never imports.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective_id", "revision", "title", "content_changed"],
+      "properties": {
+        "objective_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+        "content_changed": {
+          "description": "spec.md changed since the import; conn start offers a new Objective revision.",
+          "type": "boolean"
+        }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "paths", "new_paths", "unresolved", "tasks_without_path", "truncated"],
+      "properties": {
+        "source": { "enum": ["tasks", "plan", "paths_flag", "none"] },
+        "paths": { "$ref": "#/$defs/paths" },
+        "new_paths": { "$ref": "#/$defs/paths" },
+        "unresolved": { "$ref": "#/$defs/paths" },
+        "tasks_without_path": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "type": "string", "pattern": "^T[0-9]{1,9}$" }
+        },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "reason": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+      }
+    },
+    "candidate_count": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "candidates": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "urn:conn:schema:v1:semantic-claim-candidate" }
+    },
+    "own_intent": {
+      "description": "The caller's active Intent for this feature's Objective. It is excluded from the preview, and delta compares the task list with its current revision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent_id", "revision", "summary"],
+      "properties": {
+        "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+        "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+        "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added", "dropped"],
+      "properties": {
+        "added": { "$ref": "#/$defs/claimRefs" },
+        "dropped": { "$ref": "#/$defs/claimRefs" }
+      }
+    },
+    "collisions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/collision" }
+    },
+    "collisions_truncated": { "type": "boolean" },
+    "publish_offered": {
+      "description": "No collision was previewed and the feature has no active Intent of the caller's, so publishing now lets later plans collide with this one.",
+      "type": "boolean"
+    },
+    "errors": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/statement" }
+    }
+  },
+  "$defs": {
+    "paths": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": { "$ref": "urn:conn:schema:v1:common#/$defs/relativePath" }
+    },
+    "claimRefs": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["normalized_subject", "relation"],
+        "properties": {
+          "normalized_subject": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" },
+          "relation": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticRelation" }
+        }
+      }
+    },
+    "collision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "severity", "state", "matched_subjects", "counterpart"],
+      "properties": {
+        "rule_id": {
+          "$ref": "urn:conn:schema:v1:collision-preview#/$defs/previewedCollision/properties/rule_id"
+        },
+        "severity": { "$ref": "urn:conn:schema:v1:common#/$defs/collisionSeverity" },
+        "state": { "enum": ["open", "resolved", "dismissed"] },
+        "matched_subjects": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": { "$ref": "urn:conn:schema:v1:common#/$defs/semanticSubject" }
+        },
+        "counterpart": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intent_id", "revision"],
+          "properties": {
+            "intent_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+            "revision": { "$ref": "urn:conn:schema:v1:common#/$defs/revision" },
+            "summary": { "$ref": "urn:conn:schema:v1:common#/$defs/title" },
+            "objective_title": { "$ref": "urn:conn:schema:v1:common#/$defs/title" }
+          }
+        },
+        "decision_ref": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" }
+      }
+    }
+  }
+}

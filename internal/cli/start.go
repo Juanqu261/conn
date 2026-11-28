@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -13,11 +14,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/githubissue"
 	"github.com/Juanqu261/conn/internal/hookstate"
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/preedit"
 	"github.com/Juanqu261/conn/internal/protocol"
+	"github.com/Juanqu261/conn/internal/speckit"
 	"github.com/Juanqu261/conn/internal/workstart"
 )
 
@@ -185,15 +188,19 @@ func newImportGitHubIssueCommand(deps Dependencies, streams Streams) *cobra.Comm
 
 func newStartCommand(deps Dependencies, streams Streams) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "start <kiro-spec-path | owner/name#number | issue-url | objective-id>",
+		Use:   "start <speckit-feature-dir | kiro-spec-path | owner/name#number | issue-url | objective-id>",
 		Short: "Bring an Objective into Conn and preview what your planned change collides with",
 		Long: "Resolve the Project, then resolve or import the Objective: an Objective ID is read directly; a\n" +
-			"Kiro spec or GitHub issue imported before with the same content is reused, a changed one gets a\n" +
-			"new revision after confirmation, and a new one is imported after confirmation. Then suggest\n" +
-			"claims for the planned paths, preview their collisions without publishing, and choose:\n\n" +
+			"Spec Kit feature, Kiro spec, or GitHub issue imported before with the same content is reused, a\n" +
+			"changed one gets a new revision after confirmation, and a new one is imported after\n" +
+			"confirmation. Then suggest claims for the planned paths, preview their collisions without\n" +
+			"publishing, and choose:\n\n" +
 			"  P  publish a CLI Intent with the suggested claims and Git context, and record the local focus\n" +
 			"  K  print the /conn-start invocation to continue in Kiro, publishing nothing\n" +
 			"  Q  quit\n\n" +
+			"A Spec Kit feature is a directory with spec.md, or that spec.md. Its FR, SC, clarification, and\n" +
+			"constitution lines become key points, and its planned paths come from tasks.md or plan.md for\n" +
+			"you to confirm. When you already have an active Intent for the feature, P revises it.\n\n" +
 			"Non-interactive runs require --publish or --import-only.",
 		Args: cobra.ExactArgs(1),
 	}
@@ -230,7 +237,7 @@ func newStartCommand(deps Dependencies, streams Streams) *cobra.Command {
 			return err
 		}
 		info, ask := streams.Err, newPrompter(streams)
-		resolution, reference, err := startResolution(ctx, deps, client, projectID, root, args[0], key, accountable)
+		resolution, reference, feature, err := startResolution(ctx, deps, client, projectID, root, args[0], key, accountable)
 		if err != nil {
 			return err
 		}
@@ -262,6 +269,17 @@ func newStartCommand(deps Dependencies, streams Streams) *cobra.Command {
 			printContinue(streams.Out, objective)
 			return nil
 		}
+		var own *protocol.IntentView
+		if feature != nil {
+			if len(paths) == 0 {
+				if paths, err = confirmFeaturePaths(*feature, info, ask, prompts && !publish); err != nil {
+					return err
+				}
+			}
+			if own, err = ownFeatureIntent(ctx, client, projectID, objective.ObjectiveID, root); err != nil {
+				return err
+			}
+		}
 		if len(paths) == 0 && prompts {
 			answer, err := ask.ask("Planned repository-relative paths (comma-separated, empty to skip): ")
 			if err != nil {
@@ -273,20 +291,32 @@ func newStartCommand(deps Dependencies, streams Streams) *cobra.Command {
 				}
 			}
 		}
-		claims, candidates, preview, err := startClaims(ctx, deps, client, projectID, objective, root, paths, info)
+		var asIntent *uuid.UUID
+		if own != nil {
+			asIntent = &own.IntentRevision.IntentID
+		}
+		claims, candidates, preview, err := startClaims(ctx, deps, client, projectID, objective, root, paths, asIntent, info)
 		if err != nil {
 			return err
 		}
 		renderStart(streams.Out, objective, label, candidates, preview)
+		action := "Publish Intent from this terminal"
+		if own != nil {
+			renderOwnDelta(streams.Out, *own, claims)
+			action = "Revise your Intent from this terminal"
+		}
 		choice := "p"
 		if !publish {
-			if choice, err = ask.ask("[P] Publish Intent from this terminal   [K] Continue in Kiro   [Q] Quit: "); err != nil {
+			if choice, err = ask.ask("[P] " + action + "   [K] Continue in Kiro   [Q] Quit: "); err != nil {
 				return err
 			}
 			choice = strings.ToLower(choice)
 		}
 		switch choice {
 		case "p":
+			if own != nil {
+				return reviseStart(ctx, client, projectID, objective, root, *own, claims, streams.Out)
+			}
 			return publishStart(ctx, client, projectID, objective, root, claims, streams.Out)
 		case "k":
 			printContinue(streams.Out, objective)
@@ -300,52 +330,108 @@ func newStartCommand(deps Dependencies, streams Streams) *cobra.Command {
 }
 
 // startResolution resolves the source argument into an Objective proposal.
-func startResolution(ctx context.Context, deps Dependencies, client *httpclient.Client, projectID uuid.UUID, root, source, key string, accountable uuid.UUID) (workstart.Resolution, *githubissue.Reference, error) {
+// The detection order is an Objective ID, a GitHub issue reference, a Spec
+// Kit feature, then a Kiro spec. feature is set for a Spec Kit source.
+func startResolution(ctx context.Context, deps Dependencies, client *httpclient.Client, projectID uuid.UUID, root, source, key string, accountable uuid.UUID) (resolution workstart.Resolution, reference *githubissue.Reference, feature *speckit.Feature, err error) {
 	if id, err := uuid.Parse(source); err == nil {
 		objective, err := workstart.ReadObjective(ctx, client, projectID, id)
 		if err != nil {
-			return workstart.Resolution{}, nil, err
+			return workstart.Resolution{}, nil, nil, err
 		}
-		return workstart.Resolution{Decision: workstart.DecisionExisting, Objective: &objective}, nil, nil
+		return workstart.Resolution{Decision: workstart.DecisionExisting, Objective: &objective}, nil, nil, nil
 	}
 	var input protocol.ObjectiveImportInput
 	var label string
 	var notes []string
-	var reference *githubissue.Reference
 	if parsed, err := githubissue.ParseReference(source); err == nil {
 		prepared, err := githubIssueSource(ctx, deps, parsed, true)
 		if err != nil {
 			if errors.Is(err, githubissue.ErrPullRequest) || errors.Is(err, githubissue.ErrTooLong) {
-				return workstart.Resolution{}, nil, usageError{err}
+				return workstart.Resolution{}, nil, nil, usageError{err}
 			}
-			return workstart.Resolution{}, nil, err
+			return workstart.Resolution{}, nil, nil, err
 		}
 		input, label, notes, reference = prepared.Input, parsed.SourceRef(), prepared.Notes, &parsed
+	} else if speckit.IsFeaturePath(source) {
+		var resolved speckit.Feature
+		if input, resolved, notes, err = workstart.SpecKitInput(root, source); err != nil {
+			return workstart.Resolution{}, nil, nil, usageError{err}
+		}
+		label, feature = "Spec Kit feature "+resolved.DirRef, &resolved
 	} else if _, statErr := os.Stat(source); statErr == nil {
 		if input, err = workstart.KiroSpecInput(root, source); err != nil {
-			return workstart.Resolution{}, nil, usageError{err}
+			return workstart.Resolution{}, nil, nil, usageError{err}
 		}
 		label = "Kiro spec " + input.SourceRef
 	} else {
-		return workstart.Resolution{}, nil, usageError{fmt.Errorf("%q is not an Objective ID, a GitHub issue reference, or an existing Kiro spec path", source)}
+		return workstart.Resolution{}, nil, nil, usageError{fmt.Errorf("%q is not an Objective ID, a GitHub issue reference, a Spec Kit feature directory, or an existing Kiro spec path", source)}
 	}
 	input.Key = key
 	input.AccountableHumanID = accountable
 	if accountable == (uuid.UUID{}) {
 		me, err := client.Me(ctx)
 		if err != nil {
-			return workstart.Resolution{}, nil, err
+			return workstart.Resolution{}, nil, nil, err
 		}
 		input.AccountableHumanID = me.HumanID
 	}
-	resolution, err := workstart.Resolve(ctx, client, projectID, input, label)
+	resolution, err = workstart.Resolve(ctx, client, projectID, input, label)
 	resolution.Notes = notes
-	return resolution, reference, err
+	return resolution, reference, feature, err
+}
+
+// confirmFeaturePaths extracts a Spec Kit feature's planned paths, shows
+// them, and lets the human remove some before claims are suggested.
+func confirmFeaturePaths(feature speckit.Feature, info io.Writer, ask *prompter, prompts bool) ([]string, error) {
+	extraction, err := specKitExtraction(feature, nil)
+	if err != nil {
+		return nil, usageError{fmt.Errorf("extract the planned paths: %w", err)}
+	}
+	renderExtraction(info, extraction)
+	paths := extraction.Paths
+	if prompts && len(paths) > 0 {
+		answer, err := ask.ask("Paths to remove before claims are suggested (comma-separated, empty keeps all): ")
+		if err != nil {
+			return nil, err
+		}
+		remove := map[string]bool{}
+		for _, path := range strings.Split(answer, ",") {
+			if path = filepath.ToSlash(strings.TrimSpace(path)); path != "" {
+				remove[path] = true
+			}
+		}
+		kept := make([]string, 0, len(paths))
+		for _, path := range paths {
+			if !remove[path] {
+				kept = append(kept, path)
+			}
+		}
+		paths = kept
+	}
+	if len(paths) > analyzer.MaxPlannedPaths {
+		fmt.Fprintf(info, "Claims are suggested for the first %d of %d planned paths; pass --paths to choose others.\n", analyzer.MaxPlannedPaths, len(paths))
+		paths = paths[:analyzer.MaxPlannedPaths]
+	}
+	return paths, nil
+}
+
+// renderOwnDelta shows the claims a revision adds and drops before the
+// human chooses to revise.
+func renderOwnDelta(out io.Writer, own protocol.IntentView, claims []protocol.SemanticClaimCandidate) {
+	intent := own.IntentRevision
+	added, dropped := claimDelta(intent.DeclaredClaims, claims)
+	fmt.Fprintf(out, "You already have the Intent %q, revision %d, for this feature. Revising it adds %d claim(s) and drops %d:\n", clean(summaryTitle(intent.SummaryMarkdown)), intent.Revision, len(added), len(dropped))
+	for _, claim := range added {
+		fmt.Fprintf(out, "  + %s  %s\n", clean(claim.NormalizedSubject), claim.Relation)
+	}
+	for _, claim := range dropped {
+		fmt.Fprintf(out, "  - %s  %s\n", clean(claim.NormalizedSubject), claim.Relation)
+	}
 }
 
 // startClaims suggests declared claims for the planned paths and previews
 // their collisions. Catalog matches are shown but not declared.
-func startClaims(ctx context.Context, deps Dependencies, client *httpclient.Client, projectID uuid.UUID, objective protocol.Objective, root string, paths []string, info io.Writer) ([]protocol.SemanticClaimCandidate, []preedit.Candidate, *protocol.CollisionPreview, error) {
+func startClaims(ctx context.Context, deps Dependencies, client *httpclient.Client, projectID uuid.UUID, objective protocol.Objective, root string, paths []string, asIntent *uuid.UUID, info io.Writer) ([]protocol.SemanticClaimCandidate, []preedit.Candidate, *protocol.CollisionPreview, error) {
 	claims := []protocol.SemanticClaimCandidate{}
 	var candidates []preedit.Candidate
 	if len(paths) > 0 {
@@ -366,7 +452,7 @@ func startClaims(ctx context.Context, deps Dependencies, client *httpclient.Clie
 			claims = append(claims, candidate.Claim)
 		}
 	}
-	preview, err := client.PreviewCollisions(ctx, projectID, protocol.CollisionPreviewInput{Claims: claims})
+	preview, err := client.PreviewCollisions(ctx, projectID, protocol.CollisionPreviewInput{Claims: claims, AsIntentID: asIntent})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -434,16 +520,49 @@ func publishStart(ctx context.Context, client *httpclient.Client, projectID uuid
 	for _, note := range git.Notes {
 		fmt.Fprintln(out, note)
 	}
-	if intent.RepositoryID != nil {
-		if store, err := hookstate.Open(ctx, root); err == nil {
-			project, repository, intentID, participant := projectID, *intent.RepositoryID, intent.IntentID, intent.ParticipantID
-			_ = store.UpdateFocus(func(focus *hookstate.Focus) {
-				focus.ServerURL, focus.ProjectID, focus.RepositoryID = client.URL(), &project, &repository
-				focus.IntentID, focus.IntentRevision, focus.ParticipantID = &intentID, intent.Revision, &participant
-				focus.KnownCollisions, focus.KnownPairs, focus.LastEvent = map[string]string{}, map[string]string{}, result.AsOfEvent
-			})
-		}
-	}
+	recordStartFocus(ctx, client, projectID, root, intent, result.AsOfEvent)
 	fmt.Fprintf(out, "Commit with the trailer %q.\n", protocol.CommitTrailer(intent.IntentID, intent.Revision))
 	return nil
+}
+
+// reviseStart appends a revision with the new claims to the caller's own
+// Intent for the feature, keeping the rest of its content.
+func reviseStart(ctx context.Context, client *httpclient.Client, projectID uuid.UUID, objective protocol.Objective, root string, own protocol.IntentView, claims []protocol.SemanticClaimCandidate, out io.Writer) error {
+	current := own.IntentRevision
+	input := protocol.IntentInput{
+		IntentID: current.IntentID, ObjectiveID: objective.ObjectiveID, ObjectiveRevision: objective.Revision,
+		BlueprintID: current.BlueprintID, BlueprintRevision: current.BlueprintRevision, CharterID: current.CharterID,
+		RepositoryID: current.RepositoryID, BaseRevisionRef: current.BaseRevisionRef, HeadRevisionRef: current.HeadRevisionRef,
+		BranchRef: current.BranchRef, SummaryMarkdown: current.SummaryMarkdown, Assumptions: current.Assumptions, DeclaredClaims: claims,
+	}
+	if input.RepositoryID == nil {
+		preedit.FillGitContext(ctx, client, projectID, root, nil, &input)
+	}
+	result, err := client.ReviseIntent(ctx, projectID, current.IntentID, current.Revision, input)
+	if httpclient.IsCode(err, "forbidden") {
+		return hint(err, "this Intent belongs to another of your participants, such as your coding agent; revise it there with revise_intent")
+	}
+	if err != nil {
+		return err
+	}
+	intent := result.Data.IntentRevision
+	fmt.Fprintf(out, "Revised Intent %q to revision %d with %d declared claim(s) as your CLI participant.\n", clean(summaryTitle(intent.SummaryMarkdown)), intent.Revision, len(intent.DeclaredClaims))
+	recordStartFocus(ctx, client, projectID, root, intent, result.AsOfEvent)
+	fmt.Fprintf(out, "Commit with the trailer %q.\n", protocol.CommitTrailer(intent.IntentID, intent.Revision))
+	return nil
+}
+
+// recordStartFocus records the local focus for hooks and commit trailers.
+func recordStartFocus(ctx context.Context, client *httpclient.Client, projectID uuid.UUID, root string, intent protocol.IntentRevision, asOfEvent int64) {
+	if intent.RepositoryID == nil {
+		return
+	}
+	if store, err := hookstate.Open(ctx, root); err == nil {
+		project, repository, intentID, participant := projectID, *intent.RepositoryID, intent.IntentID, intent.ParticipantID
+		_ = store.UpdateFocus(func(focus *hookstate.Focus) {
+			focus.ServerURL, focus.ProjectID, focus.RepositoryID = client.URL(), &project, &repository
+			focus.IntentID, focus.IntentRevision, focus.ParticipantID = &intentID, intent.Revision, &participant
+			focus.KnownCollisions, focus.KnownPairs, focus.LastEvent = map[string]string{}, map[string]string{}, asOfEvent
+		})
+	}
 }

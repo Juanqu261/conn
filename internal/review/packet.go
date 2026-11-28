@@ -50,7 +50,7 @@ func BuildPacket(in PacketInput) (protocol.ReviewPacket, error) {
 			OwnerLogin: ownerLogin(in, work), Active: intentActive(records.Radar, intent),
 			Summary: SanitizeProse(intent.SummaryMarkdown, maxSummaryRunes),
 		},
-		Objective:      protocol.ReviewObjective{ID: objective.ObjectiveID, Revision: objective.Revision, Title: SanitizeTitle(objective.Title)},
+		Objective:      protocol.ReviewObjective{ID: objective.ObjectiveID, Revision: objective.Revision, Title: SanitizeTitle(objective.Title), SourceKind: objective.SourceKind()},
 		Acceptance:     []protocol.ReviewAcceptance{},
 		Collisions:     []protocol.ReviewCollision{},
 		IntegrityNotes: []string{},

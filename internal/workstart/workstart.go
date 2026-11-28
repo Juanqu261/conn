@@ -1,5 +1,5 @@
-// Package workstart brings an Objective into Conn from a Kiro spec, a GitHub
-// issue, or an Objective ID, and finds earlier imports of the same source so
+// Package workstart brings an Objective into Conn from a Kiro spec, a Spec
+// Kit feature, a GitHub issue, or an Objective ID, and finds earlier imports of the same source so
 // `conn start` reuses an unchanged Objective and offers a revision for a
 // changed one. It reads local files only to propose content a human
 // confirms, and it never persists anything itself.
@@ -22,6 +22,7 @@ import (
 	"github.com/Juanqu261/conn/internal/httpclient"
 	"github.com/Juanqu261/conn/internal/kirospec"
 	"github.com/Juanqu261/conn/internal/protocol"
+	"github.com/Juanqu261/conn/internal/speckit"
 )
 
 // maxScannedObjectives bounds the search for an earlier import.
@@ -178,6 +179,48 @@ func KiroSpecInput(root, path string) (protocol.ObjectiveImportInput, error) {
 		SourceKind: "kiro_spec", SourceRef: ref, ContentHash: hash, Title: title, OverviewMarkdown: overview,
 		KeyPoints: githubissue.SuggestCriteria(string(content)),
 	}, nil
+}
+
+// SpecKitInput proposes import content for a Spec Kit feature directory, or
+// its spec.md, inside root. The source reference is the repository-relative
+// spec.md and the content hash its SHA-256 digest. Key points come from the
+// FR and SC lines, clarification markers, and constitution principles; notes
+// report the constitution version and any key point the 50-point limit
+// omitted.
+func SpecKitInput(root, path string) (protocol.ObjectiveImportInput, speckit.Feature, []string, error) {
+	feature, err := speckit.Resolve(root, path)
+	if err != nil {
+		return protocol.ObjectiveImportInput{}, speckit.Feature{}, nil, err
+	}
+	spec, err := speckit.ReadFile(feature.SpecPath())
+	if err != nil {
+		return protocol.ObjectiveImportInput{}, feature, nil, fmt.Errorf("read the Spec Kit feature: %w", err)
+	}
+	constitution, err := speckit.FindConstitution(feature.Root)
+	if err != nil {
+		return protocol.ObjectiveImportInput{}, feature, nil, fmt.Errorf("read the Spec Kit constitution: %w", err)
+	}
+	overview := speckit.Overview(spec, feature.SpecRef)
+	var notes []string
+	var principles []byte
+	if constitution != nil {
+		principles = constitution.Content
+		if version := speckit.ConstitutionVersion(constitution.Content); version != "" {
+			overview = bound(overview + "\n\nConstitution version " + version + ".")
+		}
+	}
+	points, omitted := speckit.KeyPoints(spec, principles)
+	if len(omitted) > 0 {
+		keys := make([]string, 0, len(omitted))
+		for _, point := range omitted {
+			keys = append(keys, point.Key)
+		}
+		notes = append(notes, fmt.Sprintf("The Objective holds at most %d key points; %d were omitted: %s.", speckit.MaxKeyPoints, len(omitted), strings.Join(keys, ", ")))
+	}
+	return protocol.ObjectiveImportInput{
+		SourceKind: speckit.SourceKind, SourceRef: feature.SpecRef, ContentHash: speckit.Digest(spec),
+		Title: speckit.Title(spec, feature.Name()), OverviewMarkdown: overview, KeyPoints: points,
+	}, feature, notes, nil
 }
 
 func fileExists(path string) bool {

@@ -101,7 +101,7 @@ func buildRadar(project protocol.Project, objectives []protocol.Objective, activ
 	truncatedEvidence := false
 	heads := intentHeads(intents)
 	for _, objective := range objectives {
-		view.Objectives = append(view.Objectives, protocol.RadarObjective{ObjectiveID: objective.ObjectiveID, Revision: objective.Revision, Title: objective.Title})
+		view.Objectives = append(view.Objectives, protocol.RadarObjective{ObjectiveID: objective.ObjectiveID, Revision: objective.Revision, Title: objective.Title, SourceKind: objective.SourceKind()})
 		for _, point := range objective.KeyPoints {
 			switch point.Kind {
 			case protocol.KeyPointQuestion:

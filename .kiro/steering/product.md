@@ -30,6 +30,7 @@ A feature belongs in Conn only if it reduces rework caused by concurrent changes
 ## Delivery boundary
 
 - Deliver the milestone specifications in order: `pre-edit-collision-warnings`, `review-proof`, then `verification-ci-and-adoption`.
+- Next milestones, each gated by its own decision record: `kiro-power` (0009, accepted) first, then the independent `speckit-coordination` (0010, accepted), `ci-attested-evidence` (0011), and `scip-polyglot-claims` (0012).
 - Implement and validate the Kiro client integration first. Keep protocol concepts transport-neutral so other coding agents can use the MCP server and CLI.
 - The existing three-session Kiro trial remains the acceptance test for the current MVP.
 - Retain GitHub as the initial repository host unless a later product decision changes it.

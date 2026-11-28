@@ -113,7 +113,7 @@ func renderMarkdown(packet protocol.ReviewPacket, renderNotes []string) string {
 		status = "not active"
 	}
 	line("- Intent: `%s` revision %d by @%s (participant `%s`), %s", intent.ID, intent.Revision, intent.OwnerLogin, intent.ParticipantID, status)
-	line("- Objective: `%s` revision %d, %s", packet.Objective.ID, packet.Objective.Revision, markdownText(packet.Objective.Title))
+	line("- Objective: `%s` revision %d, %s%s", packet.Objective.ID, packet.Objective.Revision, markdownText(packet.Objective.Title), sourceLabel(packet.Objective.SourceKind))
 	line("- Project: %s (`%s`)", markdownText(packet.Project.Name), packet.Project.ID)
 	if packet.Blueprint != nil {
 		line("- Blueprint: `%s` revision %d", packet.Blueprint.ID, packet.Blueprint.Revision)
@@ -357,4 +357,17 @@ func clonePacket(packet protocol.ReviewPacket) protocol.ReviewPacket {
 	clone.Drift.ChangedFilesWithoutClaim = append([]protocol.DriftFile(nil), packet.Drift.ChangedFilesWithoutClaim...)
 	clone.Drift.NotObservable = append([]protocol.DriftNotObservable(nil), packet.Drift.NotObservable...)
 	return clone
+}
+
+// sourceLabel names the method an imported Objective came from.
+func sourceLabel(kind string) string {
+	switch kind {
+	case protocol.SourceKindKiroSpec:
+		return " (from a Kiro spec)"
+	case protocol.SourceKindSpecKitFeature:
+		return " (from a Spec Kit feature)"
+	case protocol.SourceKindGitHubIssue:
+		return " (from a GitHub issue)"
+	}
+	return ""
 }
