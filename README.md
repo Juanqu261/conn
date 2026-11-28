@@ -16,28 +16,46 @@ Conn coordinates work. It does not launch agents, supervise people, score produc
 - Review proof: repository-defined checks in `.conn/checks.json` that `conn evidence run` executes and attaches as observed evidence, evidence provenance and staleness, `Conn-Intent` commit trailers with an optional Git hook, scope drift, and a bounded review packet for pull-request descriptions.
 - Verification and CI: `conn verify-pair` tests the two branches of a collision together and records an advisory combination check; a report-only GitHub Actions check that Conn installs shows Intents, previewed collisions, and review packets on every pull request through a narrow CI credential.
 - Adoption: an `AGENTS.md` section and printed MCP configuration for other coding agents, `conn start` from a Kiro spec, GitHub issue, or Objective, GitHub issue import, and Project-level insights.
+- Conn Lab, a read-only web application served by `conn server`: GitHub sign-in in the browser, a Project overview, and a live feed of Project events ([Conn Lab](#conn-lab)).
 
-The MVP requires the authoritative backend. It has no offline outbox, background polling, idle MCP push, or production web application.
+The MVP requires the authoritative backend. It has no offline outbox, background polling, or idle MCP push.
 
 ## Local development
 
-Requirements: Go 1.27.4, Node.js 26.13.1, pnpm 12.21.0, Docker, and PostgreSQL 18.7 through the supplied Compose file.
+Requirements: Go 1.27.4, Node.js 26.13.1, pnpm 12.21.0, and Docker (PostgreSQL 18.7 runs through the supplied Compose file).
+
+1. Copy `.env.example` to `.env` and fill in `CONN_GITHUB_CLIENT_ID` and `CONN_GITHUB_CLIENT_SECRET` from your GitHub OAuth app. In that app, enable Device Flow and set the **Authorization callback URL** to `http://127.0.0.1:5173/v1/auth/github/web/callback`. The comments in `.env.example` walk through it.
+2. Run:
+
+   ```powershell
+   pnpm install --frozen-lockfile
+   pnpm dev
+   ```
+
+   `pnpm dev` starts PostgreSQL, applies migrations, and runs `conn server` together with Conn Lab. Open **http://127.0.0.1:5173** for the Lab; Ctrl+C stops both servers. Database commands never delete the named volume, and `pnpm db:stop` stops PostgreSQL.
+
+3. In another terminal, use the CLI and terminal application against the same server:
+
+   ```powershell
+   go run ./cmd/conn login
+   go run ./cmd/conn app
+   ```
+
+## Conn Lab
+
+Conn Lab is the web application: one page per Project showing its Objectives and their proven acceptance criteria, the Intents in progress, the collisions that need a decision, failing pair checks, open questions, and a live feed of everything that happens. Themed names ("Stitches", "Specimens on the slab") always carry a plain caption, and the **Plain labels** preference shows only the plain wording. Records appear by name; identifiers appear only on the Account page.
+
+This version is read-only: decisions, Charter acceptance, and every other write stay in `conn app` and the CLI. Sign-in uses GitHub with the same OAuth app as `conn login`, requests no GitHub scope, and keeps the browser session in an `HttpOnly` cookie for at most 7 days, separate from your `conn login` session. The feed is live; the CLI, `conn mcp`, and hooks still pull by cursor.
+
+Keyboard: `Ctrl K` or `⌘ K` searches the Lab, `g` then `o`, `f`, or `a` opens the overview, feed, or Account, and `?` lists shortcuts.
+
+If GitHub says *"The redirect_uri is not associated with this application"*, the OAuth app's callback URL does not match the Lab's address. The sign-in page, the `conn server` log, and `conn doctor` each show the exact URL to register.
+
+To serve the Lab from a built `conn` instead of `pnpm dev`, build the web app first so `conn` embeds it, then set `CONN_PUBLIC_URL` to the address people open (plain `http` only on a loopback address) and register `<CONN_PUBLIC_URL>/v1/auth/github/web/callback` as the callback URL:
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm db:start
-pnpm db:migrate
 pnpm build
-go run ./cmd/conn server
-```
-
-Set `CONN_GITHUB_CLIENT_ID` to a GitHub OAuth application with Device Flow enabled. Normal database commands stop the container without deleting its named volume.
-
-Human-authoritative work is available through the CLI and terminal application:
-
-```powershell
-go run ./cmd/conn login
-go run ./cmd/conn app
+go build -o conn.exe ./cmd/conn
 ```
 
 ## Install the Conn power

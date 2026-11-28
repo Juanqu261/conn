@@ -182,6 +182,10 @@ func TestSchemaIntegrity(t *testing.T) {
 			`INSERT INTO humans VALUES ('019a8f00-0000-4000-8000-00000000000d', 4, 'dave', now(), now())`},
 		{"sessions expire within 30 days", "sessions_check",
 			`INSERT INTO sessions VALUES ('019a8f00-0007-7000-8000-000000000001', '{humanA}', decode(repeat('ab', 32), 'hex'), now(), now() + interval '31 days', NULL)`},
+		{"browser sessions expire within 7 days", "sessions_browser_lifetime_check",
+			`INSERT INTO sessions VALUES ('019a8f00-0007-7000-8000-000000000002', '{humanA}', decode(repeat('cd', 32), 'hex'), now(), now() + interval '8 days', NULL, 'browser')`},
+		{"sessions have a known kind", "sessions_kind_check",
+			`INSERT INTO sessions VALUES ('019a8f00-0007-7000-8000-000000000003', '{humanA}', decode(repeat('ef', 32), 'hex'), now(), now() + interval '1 day', NULL, 'ci')`},
 	}
 
 	for _, tc := range cases {

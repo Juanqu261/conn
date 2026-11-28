@@ -21,3 +21,7 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# Conn Lab build output embedded by internal/webui (pnpm --filter @conn/web build)
+/internal/webui/site/*
+!/internal/webui/site/.gitkeep

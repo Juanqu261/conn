@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:web-stream-resync",
+  "title": "Event stream resync",
+  "description": "Data of the resync control message on the Conn Lab event stream. The stream sends it instead of a backlog larger than its bound, then closes; the browser reloads its read models at or after as_of_event and reconnects from there.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["as_of_event"],
+  "properties": {
+    "as_of_event": { "$ref": "urn:conn:schema:v1:common#/$defs/eventSequence" }
+  }
+}

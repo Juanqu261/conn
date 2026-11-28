@@ -16,6 +16,7 @@ import (
 	"github.com/Juanqu261/conn/internal/analyzer"
 	"github.com/Juanqu261/conn/internal/credentials"
 	"github.com/Juanqu261/conn/internal/devenv"
+	"github.com/Juanqu261/conn/internal/envvalue"
 	"github.com/Juanqu261/conn/internal/secret"
 )
 
@@ -32,6 +33,12 @@ type ServerConfig struct {
 	ListenAddress  string
 	DatabaseURL    string
 	GitHubClientID string
+	// GitHubClientSecret enables Conn Lab browser sign-in with the same
+	// OAuth client. It stays on the server (decision 0013).
+	GitHubClientSecret secret.String
+	// PublicURL is the origin users open for Conn Lab, such as
+	// http://127.0.0.1:8080. Empty when unset.
+	PublicURL string
 }
 
 // ProjectEnv selects the default project for `conn mcp`.
@@ -228,13 +235,21 @@ func newServerCommand(deps Dependencies, logger *slog.Logger) *cobra.Command {
 		Long: "Run the Conn backend HTTP service.\n\n" +
 			"Environment:\n" +
 			"  CONN_DATABASE_URL      PostgreSQL connection URL (required)\n" +
-			"  CONN_GITHUB_CLIENT_ID  public GitHub OAuth client ID that enables conn login\n\n" +
+			"  CONN_GITHUB_CLIENT_ID      public GitHub OAuth client ID that enables conn login\n" +
+			"  CONN_GITHUB_CLIENT_SECRET  secret of the same OAuth client; enables Conn Lab sign-in\n" +
+			"  CONN_PUBLIC_URL            origin users open for Conn Lab, for example\n" +
+			"                             http://127.0.0.1:8080 (plain http only on loopback)\n\n" +
+			"Conn Lab, the web application, is served on the same origin as the API.\n\n" +
 			"The server never changes the database schema. GET /readyz reports\n" +
 			"not ready until the schema matches this build.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg.DatabaseURL, _ = deps.LookupEnv("CONN_DATABASE_URL")
 			cfg.GitHubClientID, _ = deps.LookupEnv("CONN_GITHUB_CLIENT_ID")
+			if value, ok := envvalue.Lookup(deps.LookupEnv, "CONN_GITHUB_CLIENT_SECRET"); ok {
+				cfg.GitHubClientSecret = secret.New(value)
+			}
+			cfg.PublicURL, _ = envvalue.Lookup(deps.LookupEnv, "CONN_PUBLIC_URL")
 			return deps.Serve(cmd.Context(), cfg, logger)
 		},
 	}

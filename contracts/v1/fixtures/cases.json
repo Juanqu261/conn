@@ -4740,6 +4740,108 @@
         "publish_offered": false,
         "errors": []
       }
+    },
+    {
+      "name": "web session carries the human and a CSRF token",
+      "schema": "urn:conn:schema:v1:web-session",
+      "valid": true,
+      "document": {
+        "human": {
+          "human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "github_user_id": 583231,
+          "github_login": "octo-cat"
+        },
+        "csrf_token": "Zm9yLWZpeHR1cmVzLW9ubHktbm90LWEtcmVhbC10b2s",
+        "expires_at": "2026-12-05T09:00:00Z"
+      }
+    },
+    {
+      "name": "web session never carries a session token",
+      "schema": "urn:conn:schema:v1:web-session",
+      "valid": false,
+      "at": "",
+      "document": {
+        "human": {
+          "human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "github_user_id": 583231,
+          "github_login": "octo-cat"
+        },
+        "csrf_token": "Zm9yLWZpeHR1cmVzLW9ubHktbm90LWEtcmVhbC10b2s",
+        "expires_at": "2026-12-05T09:00:00Z",
+        "token": "conn_web_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "name": "web session rejects a malformed CSRF token",
+      "schema": "urn:conn:schema:v1:web-session",
+      "valid": false,
+      "at": "/csrf_token",
+      "document": {
+        "human": {
+          "human_id": "019a8f00-0000-7000-8000-00000000000a",
+          "github_user_id": 583231,
+          "github_login": "octo-cat"
+        },
+        "csrf_token": "short",
+        "expires_at": "2026-12-05T09:00:00Z"
+      }
+    },
+    {
+      "name": "web lab status reports a ready Lab",
+      "schema": "urn:conn:schema:v1:web-lab-status",
+      "valid": true,
+      "document": {
+        "lab_built": true,
+        "sign_in_available": true,
+        "missing_settings": [],
+        "lab_url": "http://127.0.0.1:8080"
+      }
+    },
+    {
+      "name": "web lab status names missing settings",
+      "schema": "urn:conn:schema:v1:web-lab-status",
+      "valid": true,
+      "document": {
+        "lab_built": false,
+        "sign_in_available": false,
+        "missing_settings": ["CONN_GITHUB_CLIENT_SECRET", "CONN_PUBLIC_URL"]
+      }
+    },
+    {
+      "name": "web lab status rejects unknown settings",
+      "schema": "urn:conn:schema:v1:web-lab-status",
+      "valid": false,
+      "at": "/missing_settings/0",
+      "document": {
+        "lab_built": true,
+        "sign_in_available": false,
+        "missing_settings": ["CONN_DATABASE_URL"]
+      }
+    },
+    {
+      "name": "web lab status rejects a Lab URL with a path",
+      "schema": "urn:conn:schema:v1:web-lab-status",
+      "valid": false,
+      "at": "/lab_url",
+      "document": {
+        "lab_built": true,
+        "sign_in_available": true,
+        "missing_settings": [],
+        "lab_url": "https://conn.example.com/lab"
+      }
+    },
+    {
+      "name": "web stream resync names the cursor",
+      "schema": "urn:conn:schema:v1:web-stream-resync",
+      "valid": true,
+      "document": { "as_of_event": 1284 }
+    },
+    {
+      "name": "web stream resync rejects a zero cursor",
+      "schema": "urn:conn:schema:v1:web-stream-resync",
+      "valid": false,
+      "at": "/as_of_event",
+      "document": { "as_of_event": 0 }
     }
   ]
 }

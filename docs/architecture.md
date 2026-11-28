@@ -8,7 +8,8 @@ Conn tells a coding agent, before it edits, when other in-progress work changes 
 Kiro ── stdio ── conn mcp ── HTTPS ──┐
 Kiro hooks ── conn hook ─── HTTPS ───┼── Go /v1 API ── application rules ── PostgreSQL
 conn CLI / conn app ──────── HTTPS ──┤
-GitHub Device Flow ──────────────────┘
+GitHub Device Flow ──────────────────┤
+Browser (Conn Lab) ─ cookie, same origin ─┘   (static Lab served by conn server; GitHub web flow)
 
 conn mcp ── bounded JSON ── local Node.js TypeScript analyzer ── read-only git
 conn mcp, conn hook ── focus and index files under <git dir>/conn
@@ -16,7 +17,10 @@ conn evidence run ── argument array, no shell, no CONN_ variables ── rev
 git commit ── commit-msg ── conn trailer ── focus record (no network)
 conn verify-pair ── temporary worktrees ── merge, diagnostics, default-branch pair checks ── combination check
 GitHub Actions ── conn ci check ── CI credential (read allowlist + collision preview) ── HTTPS
+event append ── NOTIFY conn_events ── LISTEN (one per conn server) ── Server-Sent Events ── Conn Lab tabs
 ```
+
+Conn Lab ([decision 0013](decisions/0013-web-application.md)) is a React single-page application embedded in `conn server` and served on the API's origin. Browsers sign in with GitHub's web flow on the same OAuth client as `conn login` and hold a `browser` session only in an `HttpOnly` cookie; bearer and browser sessions are never interchangeable. In this version a browser session reads only, and sign-out requires a matching `Origin` and CSRF token. Committed events wake browser streams through PostgreSQL notifications; the stream rereads by cursor, so a missed notification delays and never loses an event. Local clients keep pull-by-cursor.
 
 One Go executable provides `conn`, `conn app`, `conn mcp`, `conn hook`, and `conn server`. CLI, TUI, MCP, and hook adapters use the authenticated HTTP client and never access PostgreSQL directly. The analyzer and check commands receive no Conn token or database access.
 

@@ -1,0 +1,112 @@
+/*
+ * Conn Lab design tokens (decision 0013): the 60/30/10 rule.
+ *
+ *   60%  Crypt         dominant neutrals: page, panels, cards, text
+ *   30%  Formaldehyde  secondary: navigation, headers, borders, stitches
+ *   10%  Voltage       accent: one primary action per view, focus, live
+ *
+ * State colours (pumpkin, bruise, blood, alive) convey state only, always
+ * beside an icon and a label. test/contrast.test.ts checks every pair the
+ * Lab uses against WCAG 2.2 AA; change a value here and run it.
+ *
+ * Dark ("Lights out") is the default. The OS scheme applies until the
+ * viewer picks a theme, which sets data-theme on <html>.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* 60% Crypt */
+  --crypt-bg: #0f1214;
+  --crypt-surface: #161b1e;
+  --crypt-raised: #1e2529;
+  --ink: #e9e6dc;
+  --ink-muted: #a3a69c;
+
+  /* 30% Formaldehyde */
+  --formal-700: #2e4d43;
+  --formal-ink: #b9c7be;
+  --on-formal: #e9e6dc;
+  --stitch: #5e8c7a;
+
+  /* 10% Voltage */
+  --voltage: #c8ff3d;
+  --voltage-ink: #c8ff3d;
+  --on-voltage: #0f1214;
+
+  /* State colours */
+  --pumpkin: #ff8a3d;
+  --bruise: #b49cff;
+  --blood: #ff6b6e;
+  --alive: #c8ff3d;
+
+  --shadow: 0 1px 0 rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.35);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --crypt-bg: #f5f2e9;
+    --crypt-surface: #fffdf8;
+    --crypt-raised: #ffffff;
+    --ink: #1a1f1c;
+    --ink-muted: #55605a;
+
+    --formal-700: #2e4d43;
+    --formal-ink: #f5f2e9;
+    --on-formal: #f5f2e9;
+    --stitch: #4f7a6a;
+
+    --voltage: #c8ff3d;
+    --voltage-ink: #3f6b00;
+    --on-voltage: #0f1214;
+
+    --pumpkin: #b34a00;
+    --bruise: #6a4bd1;
+    --blood: #c0262d;
+    --alive: #3f6b00;
+
+    --shadow: 0 1px 0 rgb(26 31 28 / 0.06), 0 8px 24px rgb(26 31 28 / 0.08);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --crypt-bg: #f5f2e9;
+  --crypt-surface: #fffdf8;
+  --crypt-raised: #ffffff;
+  --ink: #1a1f1c;
+  --ink-muted: #55605a;
+
+  --formal-700: #2e4d43;
+  --formal-ink: #f5f2e9;
+  --on-formal: #f5f2e9;
+  --stitch: #4f7a6a;
+
+  --voltage: #c8ff3d;
+  --voltage-ink: #3f6b00;
+  --on-voltage: #0f1214;
+
+  --pumpkin: #b34a00;
+  --bruise: #6a4bd1;
+  --blood: #c0262d;
+  --alive: #3f6b00;
+
+  --shadow: 0 1px 0 rgb(26 31 28 / 0.06), 0 8px 24px rgb(26 31 28 / 0.08);
+}
+
+:root {
+  --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", monospace;
+  --font-display: "Creepster", var(--font-ui);
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --gutter: 16px;
+  --rail-width: 76px;
+  --feed-width: 340px;
+  --topbar-height: 56px;
+}
