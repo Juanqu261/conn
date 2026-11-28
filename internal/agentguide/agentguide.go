@@ -30,7 +30,9 @@ const (
 	DefaultFile = "AGENTS.md"
 )
 
-const kiroFrontMatter = "---\n\n## inclusion: always\n\n"
+// kiroFrontMatter is Kiro's YAML front matter. A Markdown formatter that does
+// not know front matter rewrites it as a rule and a heading, which Kiro ignores.
+const kiroFrontMatter = "---\ninclusion: always\n---\n\n"
 
 var promptPattern = regexp.MustCompile(`\{\{prompt:([a-z-]+)\}\}`)
 

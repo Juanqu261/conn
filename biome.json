@@ -24,5 +24,11 @@
       "quoteStyle": "double",
       "semicolons": "always"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [".kiro/steering/**"],
+      "formatter": { "enabled": false }
+    }
+  ]
 }

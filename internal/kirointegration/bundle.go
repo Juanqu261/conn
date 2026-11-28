@@ -63,10 +63,16 @@ const CommandPlaceholder = "{{CONN_COMMAND}}"
 const PathCommand = "conn"
 
 const (
-	hooksTemplate          = "templates/hooks/conn-hooks.json"
-	legacyTemplate         = "templates/legacy/conn-lifecycle.v1.json"
-	legacySteeringTemplate = "templates/legacy/conn-work-loop.v2.md"
+	hooksTemplate  = "templates/hooks/conn-hooks.json"
+	legacyTemplate = "templates/legacy/conn-lifecycle.v1.json"
 )
+
+// legacySteeringTemplates are earlier Conn steering files. Version 3 carried
+// front matter that a Markdown formatter had rewritten as a heading.
+var legacySteeringTemplates = []string{
+	"templates/legacy/conn-work-loop.v2.md",
+	"templates/legacy/conn-work-loop.v3.md",
+}
 
 var (
 	steeringTarget = filepath.Join(".kiro", "steering", "conn-work-loop.md")
@@ -75,7 +81,7 @@ var (
 	LegacyHooksTarget = filepath.Join(".kiro", "hooks", "conn-lifecycle.json")
 )
 
-//go:embed templates/hooks/conn-hooks.json templates/legacy/conn-lifecycle.v1.json templates/legacy/conn-work-loop.v2.md
+//go:embed templates/hooks/conn-hooks.json templates/legacy/conn-lifecycle.v1.json templates/legacy/conn-work-loop.v2.md templates/legacy/conn-work-loop.v3.md
 var templateFiles embed.FS
 
 type Artifact struct {
@@ -572,6 +578,10 @@ func withinRoot(root, candidate string) bool {
 // isPreviousSteering reports whether content is an unchanged earlier Conn
 // steering file.
 func isPreviousSteering(content []byte) bool {
-	previous, err := fs.ReadFile(templateFiles, legacySteeringTemplate)
-	return err == nil && lineend.Equal(content, previous)
+	for _, name := range legacySteeringTemplates {
+		if previous, err := fs.ReadFile(templateFiles, name); err == nil && lineend.Equal(content, previous) {
+			return true
+		}
+	}
+	return false
 }
