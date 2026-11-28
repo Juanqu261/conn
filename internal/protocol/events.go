@@ -306,8 +306,18 @@ type ResolutionProposed struct{}
 func (ResolutionProposed) EventType() EventType   { return EventResolutionProposed }
 func (ResolutionProposed) EntityType() EntityType { return EntityResolutionProposal }
 
-// ResolutionDecided reports a human-authorized collision decision.
-type ResolutionDecided struct{}
+// ResolutionDecided reports a human-authorized collision decision and the
+// surface it was recorded from. The surface is audit data and grants no
+// authority; events recorded before Conn Lab decisions omit it.
+type ResolutionDecided struct {
+	DecisionSurface string `json:"decision_surface,omitempty"`
+}
+
+// Decision surfaces: the session kind a human decided from.
+const (
+	DecisionSurfaceCLI     = "cli"
+	DecisionSurfaceBrowser = "browser"
+)
 
 func (ResolutionDecided) EventType() EventType   { return EventResolutionDecided }
 func (ResolutionDecided) EntityType() EntityType { return EntityResolutionDecision }

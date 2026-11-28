@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:conn:schema:v1:collision-list",
+  "title": "Collision list",
+  "description": "The most recent collision assessments of a Project in one state, newest first. Conn Lab's collision board reads stale collisions here; Radar keeps open and current decided collisions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project_id", "state", "collisions", "truncated"],
+  "properties": {
+    "project_id": { "$ref": "urn:conn:schema:v1:common#/$defs/uuidv7" },
+    "state": { "enum": ["open", "under_review", "resolved", "dismissed", "stale"] },
+    "collisions": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "urn:conn:schema:v1:collision-assessment" }
+    },
+    "truncated": {
+      "description": "More collisions in this state exist than are listed.",
+      "type": "boolean"
+    }
+  }
+}

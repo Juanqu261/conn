@@ -60,6 +60,7 @@ func NewHandler(cfg Config) http.Handler {
 	registerAuthRoutes(mux, cfg)
 	registerProjectRoutes(mux, cfg)
 	registerVerificationRoutes(mux, cfg)
+	registerReviewRoutes(mux, cfg)
 	registerWebRoutes(mux, cfg)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, log, http.StatusNotFound, "not_found", "No such Conn API route.")

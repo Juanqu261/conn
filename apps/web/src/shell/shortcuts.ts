@@ -6,6 +6,11 @@ import { useEffect, useRef } from "react";
 
 export const GO_KEYS = {
   o: "The Lab (overview)",
+  b: "The Slab (Intent board)",
+  s: "Stitches (collision board)",
+  m: "Stitch Map (collision map)",
+  w: "Blueprints (Objectives and Blueprints)",
+  p: "Pulse (Project insights)",
   f: "Lightning feed (activity)",
   a: "Account",
 } as const;

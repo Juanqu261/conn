@@ -201,7 +201,14 @@ export function describeEvent(event: EventEnvelope, names: Names): FeedLine {
     case "resolution.proposed":
       return line([actor, " proposed a resolution for a stitch (non-binding)"]);
     case "resolution.decided":
-      return line([actor, " decided a stitch"], "alive");
+      return line(
+        [
+          actor,
+          " decided a stitch",
+          str(payload.decision_surface) === "browser" ? " in the Lab" : "",
+        ],
+        "alive",
+      );
     case "evidence.attached":
       return line([actor, " attached evidence"]);
     case "combination.checked": {

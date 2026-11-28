@@ -49,10 +49,22 @@ type Records struct {
 // Intent returns the exact focused Intent revision.
 func (r Records) Intent() protocol.IntentRevision { return *r.Work.Focus.SelectedIntent }
 
+// Source is the authoritative reads Load needs. The CLI and MCP adapter use
+// *httpclient.Client; conn server reads the same use cases in process.
+type Source interface {
+	WorkContext(ctx context.Context, projectID, objectiveID, intentID uuid.UUID, after *int64, limit int) (httpclient.Result[protocol.WorkContext], error)
+	Radar(ctx context.Context, projectID uuid.UUID) (httpclient.Result[protocol.RadarView], error)
+	ConflictContext(ctx context.Context, projectID, collisionID uuid.UUID) (httpclient.Result[protocol.ConflictContextPack], error)
+	IntentEvidence(ctx context.Context, projectID, intentID uuid.UUID) (httpclient.Result[protocol.EvidenceReferenceList], error)
+	ProjectMembers(ctx context.Context, projectID uuid.UUID) (httpclient.Result[protocol.ProjectMemberList], error)
+	ResolutionProposals(ctx context.Context, projectID, collisionID uuid.UUID) (httpclient.Result[protocol.ResolutionProposalList], error)
+	ResolutionDecision(ctx context.Context, projectID, decisionID uuid.UUID) (httpclient.Result[protocol.ResolutionDecision], error)
+}
+
 // Load reads the records for one Intent and confirms that every response
 // reflects the same Project event cursor. When the Project changes between
 // reads it retries once, then returns ErrStaleContext.
-func Load(ctx context.Context, client *httpclient.Client, projectID, intentID uuid.UUID, options LoadOptions) (Records, error) {
+func Load(ctx context.Context, client Source, projectID, intentID uuid.UUID, options LoadOptions) (Records, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		records, err := loadOnce(ctx, client, projectID, intentID, options)
 		if errors.Is(err, errCursorMismatch) {
@@ -63,7 +75,7 @@ func Load(ctx context.Context, client *httpclient.Client, projectID, intentID uu
 	return Records{}, ErrStaleContext
 }
 
-func loadOnce(ctx context.Context, client *httpclient.Client, projectID, intentID uuid.UUID, options LoadOptions) (Records, error) {
+func loadOnce(ctx context.Context, client Source, projectID, intentID uuid.UUID, options LoadOptions) (Records, error) {
 	limit := options.UpdateLimit
 	if options.After == nil {
 		limit = 1

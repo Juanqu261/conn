@@ -29,6 +29,7 @@ import { CommandPalette } from "./CommandPalette";
 import { FeedPanel } from "./FeedPanel";
 import { HelpSheet } from "./HelpSheet";
 import { useShortcuts } from "./shortcuts";
+import { PROJECT_VIEWS, type ProjectPath } from "./views";
 
 /**
  * The Lab's frame: top bar, navigation rail (a bottom bar on narrow
@@ -58,13 +59,11 @@ export function AppShell({ human, children }: { human: Human; children: ReactNod
     palette: () => setPaletteOpen(true),
     help: () => setHelpOpen(true),
     go: (key) => {
+      const view = PROJECT_VIEWS.find((item) => item.key === key);
       if (key === "a") {
         void navigate({ to: "/account" });
-      } else if (slug) {
-        void navigate({
-          to: key === "o" ? "/p/$project" : "/p/$project/feed",
-          params: { project: slug },
-        });
+      } else if (slug && view) {
+        void navigate({ to: view.to, params: { project: slug } });
       } else {
         void navigate({ to: "/" });
       }
@@ -95,22 +94,20 @@ export function AppShell({ human, children }: { human: Human; children: ReactNod
       </header>
 
       <nav className="rail" aria-label="Lab views">
-        <RailLink
-          to={slug ? "/p/$project" : "/"}
-          slug={slug}
-          icon={<FlaskIcon />}
-          text="Lab"
-          title={LABELS.lab.plain}
-          exact
-        />
-        {slug && (
-          <RailLink
-            to="/p/$project/feed"
-            slug={slug}
-            icon={<BoltIcon />}
-            text="Feed"
-            title={LABELS.feed.plain}
-          />
+        {slug ? (
+          PROJECT_VIEWS.map((view) => (
+            <RailLink
+              key={view.to}
+              to={view.to}
+              slug={slug}
+              icon={view.icon}
+              text={view.text}
+              title={view.label.plain}
+              exact={Boolean(view.exact)}
+            />
+          ))
+        ) : (
+          <RailLink to="/" icon={<FlaskIcon />} text="Lab" title={LABELS.lab.plain} exact />
         )}
         <RailLink to="/account" icon={<PersonIcon />} text="Account" title="Account" />
       </nav>
@@ -152,7 +149,7 @@ function RailLink({
   title,
   exact,
 }: {
-  to: "/" | "/p/$project" | "/p/$project/feed" | "/account";
+  to: "/" | ProjectPath | "/account";
   slug?: string | undefined;
   icon: ReactNode;
   text: string;
@@ -160,7 +157,7 @@ function RailLink({
   exact?: boolean;
 }) {
   const link =
-    to === "/p/$project" || to === "/p/$project/feed" ? (
+    to !== "/" && to !== "/account" ? (
       <Link
         to={to}
         params={{ project: slug ?? "" }}

@@ -220,6 +220,15 @@ type Tx interface {
 	// LatestAnalysis summarizes the latest analyzer report attached to the
 	// Intent at or before maxRevision, or returns ErrNotFound.
 	LatestAnalysis(ctx context.Context, projectID, intentID uuid.UUID, maxRevision int) (protocol.WorkContextAnalysis, error)
+	// CollisionsInState returns at most limit of the most recent collisions in
+	// one state, newest first.
+	CollisionsInState(ctx context.Context, projectID uuid.UUID, state string, limit int) ([]protocol.CollisionAssessment, error)
+	// AnalyzedRevisions maps each Intent with an observed analysis report to
+	// the latest revision such a report covers.
+	AnalyzedRevisions(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]int, error)
+	// IntentReleases maps each Intent released at or after since to the time
+	// of its release event.
+	IntentReleases(ctx context.Context, projectID uuid.UUID, since time.Time) (map[uuid.UUID]time.Time, error)
 
 	// InsertCombinationCheck appends one immutable combination check.
 	InsertCombinationCheck(ctx context.Context, check protocol.CombinationCheck) error

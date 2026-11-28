@@ -230,3 +230,15 @@ func decodeCollision(document []byte) (protocol.CollisionAssessment, error) {
 	}
 	return collision, nil
 }
+
+func (t projectTx) CollisionsInState(ctx context.Context, projectID uuid.UUID, state string, limit int) ([]protocol.CollisionAssessment, error) {
+	rows, err := t.tx.Query(ctx, `
+		SELECT document FROM collision_assessments
+		WHERE project_id = $1 AND state = $2
+		ORDER BY COALESCE(superseded_at, created_at) DESC, collision_id DESC
+		LIMIT $3`, projectID, state, limit)
+	if err != nil {
+		return nil, err
+	}
+	return collectCollisions(rows)
+}

@@ -16,7 +16,7 @@ Conn coordinates work. It does not launch agents, supervise people, score produc
 - Review proof: repository-defined checks in `.conn/checks.json` that `conn evidence run` executes and attaches as observed evidence, evidence provenance and staleness, `Conn-Intent` commit trailers with an optional Git hook, scope drift, and a bounded review packet for pull-request descriptions.
 - Verification and CI: `conn verify-pair` tests the two branches of a collision together and records an advisory combination check; a report-only GitHub Actions check that Conn installs shows Intents, previewed collisions, and review packets on every pull request through a narrow CI credential.
 - Adoption: an `AGENTS.md` section and printed MCP configuration for other coding agents, `conn start` from a Kiro spec, GitHub issue, or Objective, GitHub issue import, and Project-level insights.
-- Conn Lab, a read-only web application served by `conn server`: GitHub sign-in in the browser, a Project overview, and a live feed of Project events ([Conn Lab](#conn-lab)).
+- Conn Lab, the web application served by `conn server`: GitHub sign-in in the browser, a Project overview, a live feed, the derived Intent board, the collision board with reviewed decisions, Specimen and Stitch pages, the Stitch Map, Blueprints with own-Charter decisions, and Pulse ([Conn Lab](#conn-lab)).
 
 The MVP requires the authoritative backend. It has no offline outbox, background polling, or idle MCP push.
 
@@ -45,9 +45,28 @@ Requirements: Go 1.27.4, Node.js 26.13.1, pnpm 12.21.0, and Docker (PostgreSQL 1
 
 Conn Lab is the web application: one page per Project showing its Objectives and their proven acceptance criteria, the Intents in progress, the collisions that need a decision, failing pair checks, open questions, and a live feed of everything that happens. Themed names ("Stitches", "Specimens on the slab") always carry a plain caption, and the **Plain labels** preference shows only the plain wording. Records appear by name; identifiers appear only on the Account page.
 
-This version is read-only: decisions, Charter acceptance, and every other write stay in `conn app` and the CLI. Sign-in uses GitHub with the same OAuth app as `conn login`, requests no GitHub scope, and keeps the browser session in an `HttpOnly` cookie for at most 7 days, separate from your `conn login` session. The feed is live; the CLI, `conn mcp`, and hooks still pull by cursor.
+Sign-in uses GitHub with the same OAuth app as `conn login`, requests no GitHub scope, and keeps the browser session in an `HttpOnly` cookie for at most 7 days, separate from your `conn login` session. The feed is live; the CLI, `conn mcp`, and hooks still pull by cursor.
 
-Keyboard: `Ctrl K` or `⌘ K` searches the Lab, `g` then `o`, `f`, or `a` opens the overview, feed, or Account, and `?` lists shortcuts.
+### The board
+
+**The Slab** (`g b`) places every current Intent in one lane that Conn derives on the backend, in this order of precedence: **Buried** (released in the last 14 days), **Stitching** (an open or under-review collision on the current revision), **Assembling** (no head commit or no observed analysis of this revision), **Charging** (an acceptance criterion lacks passing evidence at the head commit, by the review packet's staleness rule), and **Alive** (ready for review). Each card says which rule placed it and why, for example "2 of 5 acceptance criteria passing; missing `fr-003`". Nobody moves a card: dragging one keeps it in place and says what would move it. When a live event moves a card into Alive, it flashes once and the Lab announces "Ready for review"; reduced motion shows only the announcement and an outline. Filters ("Mine", Objective, repository, lane) and swimlanes live in the URL. Lane totals are Project-level only; the board never counts or ranks people. The read model is `GET /v1/projects/{project_id}/board` (contract `board-view`).
+
+Each Intent has a **Specimen** page shaped like a pull request: lane and reason, Objective revision, repository and branch, base and head commits, a "View on GitHub" link for GitHub remotes, and the tabs Overview (summary, assumptions, acceptance checklist with provenance and staleness), Claims (declared beside observed, with scope drift), Stitches, Evidence (a timeline without check logs), and Review packet (generated on demand, never stored, with "Copy Markdown"). A revision selector reads earlier revisions.
+
+### Decisions in the browser
+
+The Lab records exactly two kinds of human decision, with the same authority as `conn app`; every other write stays in `conn app` and the CLI.
+
+- **Collision decisions.** On **Stitches** (`g s`), drag an Open or Under review card onto Under review, Resolved, or Dismissed, or focus a card and press `d`. The review dialog shows both Intents at their exact revisions, the matched subjects, the rule, every proposal with its author and whether an agent wrote it, the latest pair check, and only the decision kinds valid for that column, none preselected. A rationale is required. The decision carries the revisions and state you reviewed; if either Intent or the collision changed meanwhile, Conn records nothing, the dialog shows what changed, and you decide again. Each **Stitch** page shows both sides with their claims, proposals, decision history, pair checks, and the `conn verify-pair` command.
+- **Your own Charter.** On **Blueprints** (`g w`), the assignee of a pending Charter can accept or reject it after reading the immutable snapshot and what acceptance activates. Nobody can decide another Human's Charter, from any client.
+
+Browser decisions pass the exact `Origin` and `X-Conn-CSRF` checks before anything is read or written, and the `resolution.decided` event records the decision surface (`browser` or `cli`) as audit data.
+
+### The Stitch Map and Pulse
+
+The **Stitch Map** (`g m`) draws active Intents clustered by Objective and their collisions as edges: dashed for open, dotted for under review, solid for resolved, faded for dismissed, with a marker for a failing pair check. A subject layer adds the matched subjects; focusing an Intent shows it and its neighbours; selecting a node or edge opens its page. A keyboard list and a table view show the same items, and a banner says when the graph leaves items out. **Pulse** (`g p`) charts every Project-insights measure for 7, 30, or 90 days with a table beside each chart, and shows "Not enough data yet" below five samples. It contains no person.
+
+Keyboard: `Ctrl K` or `⌘ K` searches the Lab, `g` then `o`, `b`, `s`, `m`, `w`, `p`, `f`, or `a` opens a view, `d` decides the focused stitch, and `?` lists shortcuts.
 
 If GitHub says *"The redirect_uri is not associated with this application"*, the OAuth app's callback URL does not match the Lab's address. The sign-in page, the `conn server` log, and `conn doctor` each show the exact URL to register.
 

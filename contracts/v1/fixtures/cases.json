@@ -2005,6 +2005,41 @@
       }
     },
     {
+      "name": "resolution proposal list names an agent author",
+      "schema": "urn:conn:schema:v1:resolution-proposal-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "proposals": [],
+        "authors": [
+          {
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "adapter_kind": "kiro"
+          }
+        ]
+      }
+    },
+    {
+      "name": "resolution proposal list rejects an unknown author adapter",
+      "schema": "urn:conn:schema:v1:resolution-proposal-list",
+      "valid": false,
+      "at": "/authors/0/adapter_kind",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "collision_id": "019a8f00-0016-7000-8000-000000000016",
+        "proposals": [],
+        "authors": [
+          {
+            "participant_id": "019a8f00-0011-7000-8000-000000000011",
+            "human_id": "019a8f00-0000-7000-8000-00000000000a",
+            "adapter_kind": "browser"
+          }
+        ]
+      }
+    },
+    {
       "name": "resolution proposal list rejects a decision authority field",
       "schema": "urn:conn:schema:v1:resolution-proposal-list",
       "valid": false,
@@ -4842,6 +4877,563 @@
       "valid": false,
       "at": "/as_of_event",
       "document": { "as_of_event": 0 }
+    },
+    {
+      "name": "board view accepts every lane in display order",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": true,
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "assembling",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000001",
+                "intent_revision": 3,
+                "status": "active",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": ["019a8f00-0009-7000-8000-000000000001"],
+                "acceptance": {
+                  "required": 5,
+                  "passing": 2,
+                  "missing_keys": ["fr-003", "fr-004", "fr-005"]
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "open_collision",
+                  "facts_markdown": "Collides with Refund flow on contract:PaymentGateway (open).",
+                  "next_step": "Record a human decision on the open stitch to move this card on."
+                }
+              }
+            ]
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "buried",
+            "count": 0,
+            "cards": []
+          }
+        ],
+        "omitted": 0
+      }
+    },
+    {
+      "name": "board view accepts a released card and an Objective without acceptance criteria",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": true,
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "assembling",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000002",
+                "intent_revision": 3,
+                "status": "active",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": [],
+                "acceptance": {
+                  "required": 0,
+                  "passing": 0,
+                  "missing_keys": []
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "no_acceptance_criteria",
+                  "facts_markdown": "The Objective revision has no acceptance criteria, so the proof rule was skipped."
+                }
+              }
+            ]
+          },
+          {
+            "lane": "buried",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000001",
+                "intent_revision": 3,
+                "status": "released",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": [],
+                "acceptance": {
+                  "required": 5,
+                  "passing": 2,
+                  "missing_keys": ["fr-003", "fr-004", "fr-005"]
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "released_recently",
+                  "facts_markdown": "Released 2 days ago."
+                },
+                "released_at": "2026-11-26T09:00:00Z"
+              }
+            ]
+          }
+        ],
+        "omitted": 0
+      }
+    },
+    {
+      "name": "board view rejects lanes out of display order",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": false,
+      "at": "/lanes/0/lane",
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "buried",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "buried",
+            "count": 0,
+            "cards": []
+          }
+        ],
+        "omitted": 0
+      }
+    },
+    {
+      "name": "board view rejects a missing lane",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": false,
+      "at": "/lanes",
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "assembling",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000001",
+                "intent_revision": 3,
+                "status": "active",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": ["019a8f00-0009-7000-8000-000000000001"],
+                "acceptance": {
+                  "required": 5,
+                  "passing": 2,
+                  "missing_keys": ["fr-003", "fr-004", "fr-005"]
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "open_collision",
+                  "facts_markdown": "Collides with Refund flow on contract:PaymentGateway (open).",
+                  "next_step": "Record a human decision on the open stitch to move this card on."
+                }
+              }
+            ]
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 0,
+            "cards": []
+          }
+        ],
+        "omitted": 0
+      }
+    },
+    {
+      "name": "board view rejects a card reason with an unknown rule",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": false,
+      "at": "/lanes/1/cards/0/reason/rule",
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "assembling",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000001",
+                "intent_revision": 3,
+                "status": "active",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": ["019a8f00-0009-7000-8000-000000000001"],
+                "acceptance": {
+                  "required": 5,
+                  "passing": 2,
+                  "missing_keys": ["fr-003", "fr-004", "fr-005"]
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "moved_by_hand",
+                  "facts_markdown": "Someone dragged it."
+                }
+              }
+            ]
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "buried",
+            "count": 0,
+            "cards": []
+          }
+        ],
+        "omitted": 0
+      }
+    },
+    {
+      "name": "board view rejects per-person totals",
+      "schema": "urn:conn:schema:v1:board-view",
+      "valid": false,
+      "at": "",
+      "document": {
+        "board_version": 1,
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "as_of_event": 1284,
+        "window_days": 14,
+        "lanes": [
+          {
+            "lane": "assembling",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "stitching",
+            "count": 1,
+            "cards": [
+              {
+                "intent_id": "019a8f00-0005-7000-8000-000000000001",
+                "intent_revision": 3,
+                "status": "active",
+                "summary_line": "Retry failed payments",
+                "owner_human_id": "019a8f00-0000-7000-8000-00000000000a",
+                "objective_id": "019a8f00-0002-7000-8000-000000000001",
+                "objective_revision": 2,
+                "repository_id": "019a8f00-0007-7000-8000-000000000001",
+                "branch_ref": "feat/retries",
+                "base_revision_ref": "a1b2c3d",
+                "head_revision_ref": "c3d4e5f",
+                "open_collision_ids": ["019a8f00-0009-7000-8000-000000000001"],
+                "acceptance": {
+                  "required": 5,
+                  "passing": 2,
+                  "missing_keys": ["fr-003", "fr-004", "fr-005"]
+                },
+                "latest_evidence_at": "2026-11-27T10:00:00Z",
+                "evidence_stale": false,
+                "reason": {
+                  "rule": "open_collision",
+                  "facts_markdown": "Collides with Refund flow on contract:PaymentGateway (open).",
+                  "next_step": "Record a human decision on the open stitch to move this card on."
+                }
+              }
+            ]
+          },
+          {
+            "lane": "charging",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "alive",
+            "count": 0,
+            "cards": []
+          },
+          {
+            "lane": "buried",
+            "count": 0,
+            "cards": []
+          }
+        ],
+        "omitted": 0,
+        "owner_counts": {
+          "019a8f00-0000-7000-8000-00000000000a": 1
+        }
+      }
+    },
+    {
+      "name": "resolution decision input accepts a decision without a precondition",
+      "schema": "urn:conn:schema:v1:resolution-decision-input",
+      "valid": true,
+      "document": {
+        "kind": "false_positive",
+        "binding": false,
+        "rationale_markdown": "The consumer pins the old behavior."
+      }
+    },
+    {
+      "name": "resolution decision input accepts the expected revisions and state the human reviewed",
+      "schema": "urn:conn:schema:v1:resolution-decision-input",
+      "valid": true,
+      "document": {
+        "kind": "sequencing",
+        "binding": false,
+        "rationale_markdown": "Payments ships first; refunds rebase on it.",
+        "expected_left_intent_revision": 3,
+        "expected_right_intent_revision": 5,
+        "expected_state": "open"
+      }
+    },
+    {
+      "name": "resolution decision input rejects a partial precondition",
+      "schema": "urn:conn:schema:v1:resolution-decision-input",
+      "valid": false,
+      "at": "",
+      "document": {
+        "kind": "sequencing",
+        "binding": false,
+        "rationale_markdown": "Payments ships first; refunds rebase on it.",
+        "expected_left_intent_revision": 3,
+        "expected_right_intent_revision": 5
+      }
+    },
+    {
+      "name": "resolution decision input rejects an unknown expected state",
+      "schema": "urn:conn:schema:v1:resolution-decision-input",
+      "valid": false,
+      "at": "/expected_state",
+      "document": {
+        "kind": "sequencing",
+        "binding": false,
+        "rationale_markdown": "Payments ships first; refunds rebase on it.",
+        "expected_left_intent_revision": 3,
+        "expected_right_intent_revision": 5,
+        "expected_state": "closed"
+      }
+    },
+    {
+      "name": "resolution decision input rejects a non-binding contract agreement",
+      "schema": "urn:conn:schema:v1:resolution-decision-input",
+      "valid": false,
+      "at": "/binding",
+      "document": {
+        "kind": "contract_agreement",
+        "binding": false,
+        "rationale_markdown": "Payments ships first; refunds rebase on it.",
+        "expected_left_intent_revision": 3,
+        "expected_right_intent_revision": 5,
+        "expected_state": "open"
+      }
+    },
+    {
+      "name": "event envelope accepts a resolution decision recorded from the browser",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 12,
+        "event_id": "019a8f00-0006-7000-8000-000000000012",
+        "event_type": "resolution.decided",
+        "entity_type": "resolution_decision",
+        "entity_id": "019a8f00-000a-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-28T12:00:00Z",
+        "payload": {
+          "decision_surface": "browser"
+        }
+      }
+    },
+    {
+      "name": "event envelope accepts a resolution decision recorded before decision surfaces",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 12,
+        "event_id": "019a8f00-0006-7000-8000-000000000012",
+        "event_type": "resolution.decided",
+        "entity_type": "resolution_decision",
+        "entity_id": "019a8f00-000a-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-28T12:00:00Z",
+        "payload": {}
+      }
+    },
+    {
+      "name": "event envelope rejects an unknown decision surface",
+      "schema": "urn:conn:schema:v1:event-envelope",
+      "valid": false,
+      "at": "/payload/decision_surface",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "event_sequence": 12,
+        "event_id": "019a8f00-0006-7000-8000-000000000012",
+        "event_type": "resolution.decided",
+        "entity_type": "resolution_decision",
+        "entity_id": "019a8f00-000a-7000-8000-000000000001",
+        "actor_human_id": "019a8f00-0000-7000-8000-00000000000a",
+        "occurred_at": "2026-11-28T12:00:00Z",
+        "payload": {
+          "decision_surface": "kiro"
+        }
+      }
+    },
+    {
+      "name": "collision list accepts recent stale collisions",
+      "schema": "urn:conn:schema:v1:collision-list",
+      "valid": true,
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "state": "stale",
+        "collisions": [
+          {
+            "collision_id": "019a8f00-0016-7000-8000-000000000016",
+            "project_id": "019a8f00-0001-7000-8000-000000000001",
+            "left_intent_id": "019a8f00-0012-7000-8000-000000000012",
+            "left_intent_revision": 1,
+            "right_intent_id": "019a8f00-0013-7000-8000-000000000013",
+            "right_intent_revision": 1,
+            "rule_id": "shared_declared_invariant",
+            "severity": "amber",
+            "confidence": 1,
+            "state": "stale",
+            "matching_claim_refs": [
+              "019a8f00-0014-7000-8000-000000000014",
+              "019a8f00-0015-7000-8000-000000000015"
+            ],
+            "matched_subjects": ["invariant:checkout:one-charge-per-attempt"],
+            "explanation_markdown": "Both active intents affect the same checkout invariant.",
+            "created_at": "2026-11-22T09:05:00Z",
+            "superseded_at": "2026-11-27T10:00:00Z"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "name": "collision list rejects an unknown state",
+      "schema": "urn:conn:schema:v1:collision-list",
+      "valid": false,
+      "at": "/state",
+      "document": {
+        "project_id": "019a8f00-0001-7000-8000-000000000001",
+        "state": "archived",
+        "collisions": [],
+        "truncated": false
+      }
     }
   ]
 }

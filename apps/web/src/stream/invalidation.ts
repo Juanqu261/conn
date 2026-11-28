@@ -10,29 +10,60 @@ export interface Invalidation {
   projects: boolean;
 }
 
+/** Everything an Intent's lane, card, or Specimen page reads. */
+const INTENT_VIEWS: ProjectQueryKind[] = ["board", "intent", "review"];
+
 export function invalidationFor(eventType: string): Invalidation {
   if (eventType === "project.created" || eventType === "project.member_added") {
-    return { project: ["members", "radar"], projects: true };
+    return { project: ["members", "radar", "status"], projects: true };
   }
   if (eventType.startsWith("intent.") || eventType === "claims.observed") {
-    return { project: ["intents", "radar"], projects: false };
+    return {
+      project: ["intents", "radar", ...INTENT_VIEWS, "collision", "collisions"],
+      projects: false,
+    };
   }
-  if (
-    eventType.startsWith("collision.") ||
-    eventType.startsWith("resolution.") ||
-    eventType.startsWith("objective.") ||
-    eventType.startsWith("blueprint.") ||
-    eventType.startsWith("charter.") ||
-    eventType === "combination.checked" ||
-    eventType === "evidence.attached" ||
-    eventType === "repository.connected"
-  ) {
+  if (eventType.startsWith("collision.") || eventType.startsWith("resolution.")) {
+    return {
+      project: ["radar", ...INTENT_VIEWS, "collision", "collisions", "insights"],
+      projects: false,
+    };
+  }
+  if (eventType === "evidence.attached") {
+    return { project: ["radar", ...INTENT_VIEWS, "evidence", "insights"], projects: false };
+  }
+  if (eventType === "combination.checked") {
+    return { project: ["radar", "collision", "collisions", "review", "insights"], projects: false };
+  }
+  if (eventType.startsWith("objective.")) {
+    return { project: ["radar", "board", "review", "status", "plans"], projects: false };
+  }
+  if (eventType.startsWith("blueprint.") || eventType.startsWith("charter.")) {
+    return { project: ["radar", "status", "plans", "review"], projects: false };
+  }
+  if (eventType === "repository.connected") {
     return { project: ["radar"], projects: false };
   }
-  // CI credentials and unknown future events change nothing the Lab shows;
-  // a full refresh is cheap insurance for an unknown type.
+  // CI credentials change nothing the Lab shows.
   if (eventType.startsWith("ci_credential.")) {
     return { project: [], projects: false };
   }
-  return { project: ["radar", "intents", "members"], projects: false };
+  // A full refresh is cheap insurance for an unknown future event type.
+  return {
+    project: [
+      "radar",
+      "intents",
+      "members",
+      "board",
+      "intent",
+      "evidence",
+      "review",
+      "collision",
+      "collisions",
+      "status",
+      "plans",
+      "insights",
+    ],
+    projects: false,
+  };
 }

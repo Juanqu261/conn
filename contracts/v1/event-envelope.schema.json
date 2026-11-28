@@ -224,7 +224,7 @@
       "then": {
         "properties": {
           "entity_type": { "const": "resolution_decision" },
-          "payload": { "$ref": "#/$defs/emptyPayload" }
+          "payload": { "$ref": "#/$defs/decisionPayload" }
         }
       }
     },
@@ -283,6 +283,14 @@
     "emptyPayload": {
       "type": "object",
       "additionalProperties": false
+    },
+    "decisionPayload": {
+      "description": "The surface the deciding human used: cli for the CLI and conn app, browser for Conn Lab. Audit data that grants no authority. Events recorded before Conn Lab decisions omit it.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decision_surface": { "enum": ["cli", "browser"] }
+      }
     },
     "memberAddedPayload": {
       "type": "object",

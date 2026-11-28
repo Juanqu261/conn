@@ -154,3 +154,52 @@ export const TombstoneIcon = (props: IconProps) => (
     <path d="M6 21V10a6 6 0 0 1 12 0v11M4 21h16M12 9v6M9.5 11.5h5" />
   </Icon>
 );
+
+export const SlabIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="3" y="4" width="5" height="16" rx="1.5" />
+    <rect x="9.5" y="4" width="5" height="11" rx="1.5" />
+    <rect x="16" y="4" width="5" height="7" rx="1.5" />
+  </Icon>
+);
+
+export const MapIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="6" cy="7" r="2.5" />
+    <circle cx="18" cy="6" r="2.5" />
+    <circle cx="12" cy="18" r="2.5" />
+    <path d="M8.3 8.2 10.6 16M15.7 7.4 13.3 16M8.5 6.8h7" strokeDasharray="2 2" />
+  </Icon>
+);
+
+export const BlueprintIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M9 9v12M15 15h6" />
+  </Icon>
+);
+
+export const PulseIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M2 12h4l2.5-6 4 12 2.5-6H22" />
+  </Icon>
+);
+
+export const GripIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth={3} />
+  </Icon>
+);
+
+export const CopyIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+  </Icon>
+);
+
+export const ExternalIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  </Icon>
+);
